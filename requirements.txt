@@ -1,0 +1,10 @@
+flask
+flask-cors
+yfinance
+pandas
+numpy
+google-generativeai
+python-dotenv
+python-dateutil
+requests
+

@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaG - 投资分析系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root { --bg-dark: #0f172a; --card-bg: #1e293b; --text-primary: #f8fafc; --accent: #3b82f6; }
+        body { background-color: var(--bg-dark); color: var(--text-primary); font-family: 'Inter', sans-serif; }
+        .card { background-color: var(--card-bg); border: 1px solid #334155; color: white; }
+        .btn-primary { background-color: var(--accent); border: none; }
+        .metric-value { font-size: 1.8rem; font-weight: 700; }
+        .metric-label { color: #94a3b8; font-size: 0.85rem; }
+        #loading { display: none; }
+        .markdown-body h1 { color: #e2e8f0; margin-top: 1.5rem; font-size: 1.3rem; }
+        .markdown-body h2 { color: #e2e8f0; margin-top: 1.2rem; font-size: 1.1rem; }
+        .markdown-body h3 { color: #e2e8f0; margin-top: 1rem; font-size: 1rem; }
+        .markdown-body strong { color: #60a5fa; }
+        .risk-high { color: #ef4444; }
+        .risk-med { color: #f59e0b; }
+        .risk-low { color: #10b981; }
+        .text-report-section { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #334155; }
+        .text-report-section:last-child { border-bottom: none; }
+        .text-report-label { color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .text-report-value { color: #f8fafc; font-weight: 500; }
+        .text-report-title { color: #60a5fa; font-size: 1.1rem; font-weight: 600; margin-bottom: 0.8rem; }
+        .ai-summary { color: #cbd5e1; line-height: 1.8; font-size: 0.95rem; }
+        .ai-summary h2 { color: #60a5fa; font-size: 1.2rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.8rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+        .ai-summary h3 { color: #94a3b8; font-size: 1rem; font-weight: 600; margin-top: 1.2rem; margin-bottom: 0.6rem; }
+        .ai-summary strong { color: #f8fafc; font-weight: 600; }
+        .ai-summary ul, .ai-summary ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .ai-summary li { margin-bottom: 0.4rem; }
+        .ai-summary hr { border: none; border-top: 1px solid #334155; margin: 1.5rem 0; }
+        .ai-summary p { margin-bottom: 0.8rem; }
+    </style>
+</head>
+<body>
+
+<div class="container py-5">
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6">
+            <h2 class="fw-bold"><span class="text-primary">Alpha</span>G 智能投研</h2>
+            <p class="mb-0" style="color: #94a3b8;">Powered by Gemini and G=B+M Investment Model</p>
+        </div>
+        <div class="col-md-6">
+            <div class="mb-2">
+                <small style="color: #94a3b8; font-size: 0.8rem;">选择您的投资风格</small>
+            </div>
+            <div class="input-group input-group-lg">
+                <select class="form-select" id="styleSelect" style="min-width: 180px; background-color: #334155; color: white; border-color: #475569;">
+                    <option value="quality">Quality (质量)</option>
+                    <option value="value">Value (价值)</option>
+                    <option value="growth">Growth (成长)</option>
+                    <option value="momentum">Momentum (趋势)</option>
+                </select>
+                <input type="text" id="tickerInput" class="form-control" placeholder="输入股票代码，支持美股港股A股" style="background-color: #0f172a; color: #f8fafc; border-color: #475569;">
+                <style>
+                    #tickerInput::placeholder {
+                        color: #64748b !important;
+                        opacity: 1;
+                        font-size: 0.85rem !important;
+                    }
+                </style>
+                <button class="btn btn-primary px-4" onclick="startAnalysis()">分析</button>
+            </div>
+            <small id="styleDescription" class="mt-2 d-block" style="font-size: 0.85rem; min-height: 20px; color: #94a3b8;">
+                <span id="styleDescText"></span>
+            </small>
+        </div>
+    </div>
+
+    <!-- 市场预警区域 -->
+    <div id="warningsSection" class="row mb-4" style="display: none;">
+        <div class="col-12">
+            <div class="card p-3" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-left: 4px solid #ef4444;">
+                <h5 class="mb-3" style="color: #ef4444;">市场预警</h5>
+                <div id="warningsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 投资理念说明 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card p-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #3b82f6;">
+                <h4 class="mb-3" style="color: #60a5fa;">AlphaG 投资理念</h4>
+                <div style="color: #cbd5e1; line-height: 1.8;">
+                    <p class="mb-2"><strong style="color: #f8fafc;">核心模型：G = B + M</strong></p>
+                    <p class="mb-3">我们采用"投资+投机模型"，将股票价格(G)解构为基本面(B)与市场情绪(M)的叠加。价格 = 基本面价值 + 情绪溢价/折价。通过量化分析基本面数据和市场情绪指标，识别价格与内在价值的偏离，寻找投资机会。</p>
+                    
+                    <p class="mb-2"><strong style="color: #f8fafc;">五大支柱投资框架</strong></p>
+                    <ul class="mb-3" style="padding-left: 1.5rem;">
+                        <li><strong>怀疑主义</strong>：始终质疑，寻找不买入的理由，避免确认偏误</li>
+                        <li><strong>事前验尸</strong>：假设投资失败，提前识别风险点</li>
+                        <li><strong>严格风控</strong>：基于硬数据计算风险评分，设置仓位上限和止损</li>
+                        <li><strong>风格纪律</strong>：严格遵守投资风格原则，不偏离策略</li>
+                        <li><strong>量化决策</strong>：用数据说话，减少情绪干扰</li>
+                    </ul>
+                    
+                    <p class="mb-0"><strong style="color: #f8fafc;">投资风格</strong>：系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制。Quality(质量)关注财务稳健，Value(价值)寻找低估，Growth(成长)追求增长，Momentum(趋势)跟随动量。所有分析建议都严格遵循所选风格的原则。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 text-muted">正在连接 Gemini 进行深度推演...</p>
+    </div>
+
+    <div id="dashboard" style="display: none;">
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card p-3 h-100">
+                    <div class="metric-label">当前价格 (G)</div>
+                    <div class="metric-value" id="val_price">--</div>
+                    <small class="text-muted" id="val_range">52w Range</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 h-100">
+                    <div class="metric-label">市场情绪（M）</div>
+                    <div class="metric-value" id="val_sentiment">--</div>
+                    <small class="text-muted" id="val_sentiment_desc">0-10分，越高越乐观</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 h-100">
+                    <div class="metric-label">综合风控等级</div>
+                    <div class="metric-value" id="val_risk_level">--</div>
+                    <small class="text-danger" id="val_risk_score">Score: --</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 h-100 border-primary">
+                    <div class="metric-label text-primary">建议仓位</div>
+                    <div class="metric-value text-primary" id="val_position">--%</div>
+                    <small class="text-muted">基于模型限制</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-lg-5">
+                <div class="card p-3 mb-3">
+                    <div class="mb-3">
+                        <h5 class="card-title mb-0">近12月价格趋势</h5>
+                    </div>
+                    <canvas id="priceChart" height="200"></canvas>
+                    <div class="mt-2 text-center">
+                        <small id="chartDateRange" style="color: #94a3b8; font-weight: 400;"></small>
+                    </div>
+                </div>
+                
+                <div class="card p-3">
+                    <h5 class="card-title mb-3">风险警示</h5>
+                    <ul id="riskList" class="list-group list-group-flush bg-transparent">
+                        </ul>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card" style="display: flex; flex-direction: column;">
+                    <div class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">AI投资分析</h5>
+                        <span class="badge bg-primary">AI Generated</span>
+                    </div>
+                    <div class="card-body overflow-auto" style="max-height: 550px;">
+                        <div id="aiReport" class="markdown-body text-light" style="font-size: 0.9rem;">
+                            </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文字版数据报告 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-transparent border-bottom border-secondary">
+                        <h5 class="mb-0">完整分析报告</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="textReport" class="text-light" style="line-height: 1.8; font-size: 0.95rem;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let chartInstance = null;
+
+    // 风格说明映射
+    const styleDescriptions = {
+        'quality': 'Quality (质量): 关注财务稳健、盈利能力强、债务水平低的优质公司，适合长期持有，最大仓位20%',
+        'value': 'Value (价值): 寻找被市场低估的股票，关注低PE、低PEG，追求安全边际，最大仓位10%',
+        'growth': 'Growth (成长): 追求高营收增长和盈利增长的公司，容忍较高估值，最大仓位15%',
+        'momentum': 'Momentum (趋势): 跟随市场趋势和价格动量，快进快出，风险较高，最大仓位5%'
+    };
+
+    // 更新风格说明函数
+    function updateStyleDescription() {
+        const selectedStyle = document.getElementById('styleSelect').value;
+        document.getElementById('styleDescText').textContent = styleDescriptions[selectedStyle] || styleDescriptions['quality'];
+    }
+
+    // 页面加载时初始化风格说明
+    document.addEventListener('DOMContentLoaded', function() {
+        updateStyleDescription();
+    });
+
+    // 监听风格选择变化
+    document.getElementById('styleSelect').addEventListener('change', updateStyleDescription);
+
+    async function startAnalysis() {
+        const ticker = document.getElementById('tickerInput').value;
+        const style = document.getElementById('styleSelect').value;
+        
+        if (!ticker) return alert("请输入代码");
+
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('dashboard').style.display = 'none';
+
+        try {
+            // 创建带超时的fetch请求
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+            
+            const res = await fetch('http://127.0.0.1:5001/api/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ticker, style }),
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // 先读取响应文本（响应体只能读取一次）
+            const responseText = await res.text();
+            
+            // 检查响应状态
+            if (!res.ok) {
+                // 尝试解析为JSON
+                try {
+                    const errorJson = JSON.parse(responseText);
+                    throw new Error(errorJson.error || `服务器错误: ${res.status}`);
+                } catch (parseError) {
+                    // 如果不是JSON，使用原始文本
+                    throw new Error(`服务器错误 (${res.status}): ${responseText.substring(0, 200)}`);
+                }
+            }
+            
+            // 解析JSON响应
+            let json;
+            try {
+                json = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('JSON解析错误:', parseError);
+                throw new Error('服务器返回的数据格式错误，请稍后重试');
+            }
+            
+            if (json.success) {
+                renderDashboard(json);
+            } else {
+                // 显示详细的错误信息
+                const errorMsg = json.error || '未知错误';
+                console.error('分析失败:', errorMsg);
+                alert('分析失败\n\n' + errorMsg);
+            }
+        } catch (e) {
+            console.error('请求错误详情:', e);
+            let errorMsg = '网络连接错误';
+            
+            if (e.name === 'AbortError') {
+                errorMsg = '请求超时（超过60秒）\n\n可能原因：\n1. 网络连接较慢\n2. 数据源响应延迟\n3. 股票代码可能不存在或无法获取数据\n\n建议：\n- 检查网络连接\n- 稍后重试\n- 尝试其他股票代码（如AAPL、TSLA等）';
+            } else if (e.name === 'TypeError' && e.message.includes('fetch')) {
+                errorMsg = '无法连接到服务器\n\n请检查：\n1. 服务器是否正在运行（http://127.0.0.1:5001）\n2. 网络连接是否正常\n3. 防火墙是否阻止了连接';
+            } else if (e.message) {
+                errorMsg = e.message;
+            }
+            
+            alert('请求失败\n\n' + errorMsg + '\n\n提示：\n- 如果持续失败，请检查浏览器控制台（F12）查看详细错误\n- 可以尝试刷新页面后重试\n- 确保输入的股票代码格式正确');
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+
+    function renderDashboard(data) {
+        const d = data.data;
+        const r = data.risk;
+
+        // Fill Metrics
+        document.getElementById('val_price').innerText = `$${d.price.toFixed(2)}`;
+        document.getElementById('val_range').innerText = `Low: ${d.week52_low.toFixed(2)} - High: ${d.week52_high.toFixed(2)}`;
+        
+        // 显示市场情绪评分
+        const sentiment = d.market_sentiment !== undefined ? d.market_sentiment : 5.0;
+        console.log('市场情绪评分:', sentiment, '原始数据market_sentiment:', d.market_sentiment);
+        const sentimentEl = document.getElementById('val_sentiment');
+        if (sentimentEl) {
+            sentimentEl.innerText = sentiment.toFixed(1);
+            // 根据分数设置颜色
+            if (sentiment >= 7) {
+                sentimentEl.className = 'metric-value text-warning'; // 乐观（黄色）
+            } else if (sentiment >= 4) {
+                sentimentEl.className = 'metric-value text-success'; // 中性（绿色）
+            } else {
+                sentimentEl.className = 'metric-value text-danger'; // 悲观（红色）
+            }
+        }
+        
+        // 更新描述，包含期权市场信息
+        let sentimentDesc = '';
+        const optionsData = d.options_data || {};
+        
+        if (sentiment >= 8) {
+            sentimentDesc = '极度乐观（可能过热）';
+        } else if (sentiment >= 6) {
+            sentimentDesc = '乐观';
+        } else if (sentiment >= 4) {
+            sentimentDesc = '中性';
+        } else if (sentiment >= 2) {
+            sentimentDesc = '悲观';
+        } else {
+            sentimentDesc = '极度悲观';
+        }
+        
+        // 添加期权市场信息
+        if (optionsData.vix !== null && optionsData.vix !== undefined) {
+            const vix = optionsData.vix.toFixed(1);
+            const vixChange = optionsData.vix_change ? optionsData.vix_change.toFixed(1) : '0.0';
+            const vixTrend = parseFloat(vixChange) > 0 ? '↑' : parseFloat(vixChange) < 0 ? '↓' : '→';
+            sentimentDesc += ` | VIX: ${vix} ${vixTrend}`;
+            
+            // 如果VIX很高或快速上升，添加警告
+            if (optionsData.vix > 30 || (optionsData.vix_change && optionsData.vix_change > 10)) {
+            }
+        }
+        
+        if (optionsData.put_call_ratio !== null && optionsData.put_call_ratio !== undefined) {
+            sentimentDesc += ` | P/C: ${optionsData.put_call_ratio.toFixed(2)}`;
+        }
+        
+        const descEl = document.getElementById('val_sentiment_desc');
+        if (descEl) {
+            descEl.innerText = sentimentDesc;
+        }
+        
+        // 显示市场预警
+        renderWarnings(d);
+        
+        const riskEl = document.getElementById('val_risk_level');
+        riskEl.innerText = r.level;
+        riskEl.className = `metric-value ${r.score >= 6 ? 'risk-high' : r.score >= 4 ? 'risk-med' : 'risk-low'}`;
+        document.getElementById('val_risk_score').innerText = `Score: ${r.score}/10`;
+        
+        document.getElementById('val_position').innerText = `${r.suggested_position}%`;
+
+        // Render Text Report
+        renderTextReport(d, r, data.report);
+
+        // Fill Risk Flags
+        const list = document.getElementById('riskList');
+        list.innerHTML = '';
+        if (r.flags.length === 0) {
+            list.innerHTML = '<li class="list-group-item bg-transparent text-success">硬逻辑检测通过，无明显结构性风险。</li>';
+        } else {
+            r.flags.forEach(flag => {
+                list.innerHTML += `<li class="list-group-item bg-transparent text-danger">[警告] ${flag}</li>`;
+            });
+        }
+
+        // Render AI Report
+        document.getElementById('aiReport').innerHTML = marked.parse(data.report);
+
+        // Render Chart
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        
+        // 计算时间段并显示日期范围
+        const dateCount = d.history_dates.length;
+        const startDate = d.history_dates[0];
+        const endDate = d.history_dates[dateCount - 1];
+        
+        // 更新日期范围显示
+        document.getElementById('chartDateRange').textContent = `${startDate} 至 ${endDate}`;
+        
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: d.history_dates,
+                datasets: [{
+                    label: 'Price',
+                    data: d.history_prices,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        document.getElementById('dashboard').style.display = 'block';
+    }
+
+    function renderTextReport(data, risk, aiReport) {
+        const styleNames = {
+            'quality': '质量 (Quality)',
+            'value': '价值 (Value)',
+            'growth': '成长 (Growth)',
+            'momentum': '趋势 (Momentum)'
+        };
+        
+        const currentStyle = document.getElementById('styleSelect').value;
+        const styleName = styleNames[currentStyle] || '质量 (Quality)';
+        
+        // 计算投资评级
+        const getRating = () => {
+            if (risk.score >= 6) return { text: '观望', class: 'text-warning' };
+            if (risk.score >= 4) return { text: '中性', class: 'text-warning' };
+            if (risk.score >= 2) return { text: '增持', class: 'text-success' };
+            return { text: '买入', class: 'text-success' };
+        };
+        const rating = getRating();
+        
+        // 获取当前日期
+        const reportDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        // 计算价格位置
+        const pricePosition = ((data.price - data.week52_low) / (data.week52_high - data.week52_low) * 100).toFixed(1);
+        
+        let html = `
+            <!-- 报告标题 -->
+            <div class="text-report-section" style="border-bottom: 2px solid #3b82f6; padding-bottom: 1.5rem;">
+                <div style="text-align: center; margin-bottom: 1rem;">
+                    <h3 style="color: #60a5fa; font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem;">${data.name} (${data.symbol}) 投资研究报告</h3>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">报告日期：${reportDate}</p>
+                </div>
+                <div class="row" style="margin-top: 1.5rem;">
+                    <div class="col-md-3 text-center mb-3">
+                        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.3rem;">投资评级</div>
+                        <div class="${rating.class}" style="font-size: 1.5rem; font-weight: 700;">${rating.text}</div>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.3rem;">目标价格</div>
+                        <div style="color: ${risk.suggested_position === 0 ? '#ef4444' : '#60a5fa'}; font-size: 1.3rem; font-weight: 600;">\$${risk.suggested_position === 0 ? data.price.toFixed(2) : (data.target_price || data.week52_high).toFixed(2)}</div>
+                        ${risk.suggested_position === 0 ? '<small style="color: #ef4444;">不建议买入</small>' : ''}
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.3rem;">当前价格</div>
+                        <div style="color: #f8fafc; font-size: 1.3rem; font-weight: 600;">$${data.price.toFixed(2)}</div>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.3rem;">建议仓位</div>
+                        <div style="color: #3b82f6; font-size: 1.3rem; font-weight: 600;">${risk.suggested_position}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 核心观点 -->
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">一、核心观点</div>
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
+                    <p><strong style="color: #f8fafc;">投资风格：</strong>${styleName}。${styleName === '质量 (Quality)' ? '本报告基于质量投资风格，重点关注公司财务稳健性、盈利能力和长期竞争优势。' : styleName === '价值 (Value)' ? '本报告基于价值投资风格，重点关注估值水平和安全边际。' : styleName === '成长 (Growth)' ? '本报告基于成长投资风格，重点关注营收增长和盈利增长潜力。' : '本报告基于趋势投资风格，重点关注价格动量和市场趋势。'}</p>
+                    <p><strong style="color: #f8fafc;">核心结论：</strong>基于G=B+M模型分析，当前价格位于52周区间的${pricePosition}%位置。基本面数据显示营收增长率为${(data.growth * 100).toFixed(2)}%，利润率为${(data.margin * 100).toFixed(2)}%。估值方面，市盈率为${data.pe ? data.pe.toFixed(2) : 'N/A'}，${data.pe && data.pe > 30 ? '估值偏高' : data.pe && data.pe > 15 ? '估值合理' : '估值偏低'}。综合风险评分为${risk.score}/10，风险等级为${risk.level}。</p>
+                    <p><strong style="color: #f8fafc;">投资建议：</strong>${rating.text}。建议仓位上限为${risk.suggested_position}%。${risk.suggested_position === 0 ? '当前风险过高，不建议建仓，建议观望。' : risk.score >= 4 ? '建议分批建仓，控制风险。' : '可考虑一次性建仓，但需严格遵守仓位上限。'}</p>
+                </div>
+            </div>
+
+            <!-- 公司概况 -->
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">二、公司概况</div>
+                <div class="row" style="margin-top: 1rem;">
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">股票代码</div>
+                        <div class="text-report-value">${data.symbol}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">公司全称</div>
+                        <div class="text-report-value">${data.name}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">所属行业</div>
+                        <div class="text-report-value">${data.sector}</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">细分领域</div>
+                        <div class="text-report-value">${data.industry}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 财务分析 -->
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">三、财务分析 (B - 基本面)</div>
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem; margin-bottom: 1rem;">
+                    <p>基于最新财务数据，我们对公司基本面进行如下分析：</p>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">营收增长率 (YoY)</div>
+                        <div class="text-report-value ${data.growth < 0 ? 'text-danger' : data.growth > 0.2 ? 'text-success' : ''}" style="font-size: 1.1rem;">${(data.growth * 100).toFixed(2)}%</div>
+                        <small style="color: #64748b;">${data.growth > 0.2 ? '增长强劲' : data.growth > 0 ? '稳定增长' : data.growth < 0 ? '负增长，需关注' : '数据不足'}</small>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">净利润率</div>
+                        <div class="text-report-value ${data.margin < 0.05 ? 'text-warning' : 'text-success'}" style="font-size: 1.1rem;">${(data.margin * 100).toFixed(2)}%</div>
+                        <small style="color: #64748b;">${data.margin > 0.15 ? '盈利能力优秀' : data.margin > 0.1 ? '盈利能力良好' : data.margin > 0.05 ? '盈利能力一般' : '盈利能力较弱'}</small>
+                    </div>
+                </div>
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
+                    <p><strong style="color: #f8fafc;">财务健康度评估：</strong>${data.growth > 0.1 && data.margin > 0.1 ? '公司财务表现稳健，营收增长和盈利能力均处于良好水平，基本面支撑较强。' : data.growth < 0 || data.margin < 0.05 ? '公司财务表现存在一定压力，需密切关注后续财务数据变化。' : '公司财务表现基本稳定，但增长动力和盈利能力有待进一步提升。'}</p>
+                </div>
+            </div>
+
+            <!-- 估值分析 -->
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">四、估值分析 (M - 市场情绪)</div>
+                <div class="row" style="margin-top: 1rem;">
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">当前价格 (G)</div>
+                        <div class="text-report-value" style="font-size: 1.1rem;">$${data.price.toFixed(2)}</div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">52周价格区间</div>
+                        <div class="text-report-value" style="font-size: 0.95rem;">$${data.week52_low.toFixed(2)} - $${data.week52_high.toFixed(2)}</div>
+                        <small style="color: #64748b;">当前位于${pricePosition}%分位</small>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">技术趋势</div>
+                        <div class="text-report-value" style="font-size: 0.95rem;">${data.price > data.ma50 && data.ma50 > data.ma200 ? '多头排列' : data.price < data.ma200 ? '空头趋势' : '震荡整理'}</div>
+                        <small style="color: #64748b;">MA50: $${data.ma50 ? data.ma50.toFixed(2) : 'N/A'} | MA200: $${data.ma200 ? data.ma200.toFixed(2) : 'N/A'}</small>
+                    </div>
+                    ${data.options_data && data.options_data.vix !== null ? `
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">VIX恐慌指数</div>
+                        <div class="text-report-value ${data.options_data.vix > 30 ? 'text-danger' : data.options_data.vix > 20 ? 'text-warning' : 'text-success'}" style="font-size: 1.1rem;">${data.options_data.vix.toFixed(2)}</div>
+                        <small style="color: #64748b;">${data.options_data.vix_change ? (data.options_data.vix_change > 0 ? '↑' : '↓') + Math.abs(data.options_data.vix_change).toFixed(1) + '%' : ''} ${data.options_data.vix > 30 ? '高波动风险' : data.options_data.vix > 20 ? '中等波动' : '低波动'}</small>
+                    </div>
+                    ` : ''}
+                    ${data.options_data && data.options_data.put_call_ratio !== null ? `
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">Put/Call比率</div>
+                        <div class="text-report-value ${data.options_data.put_call_ratio > 1.2 ? 'text-danger' : data.options_data.put_call_ratio > 1.0 ? 'text-warning' : 'text-success'}" style="font-size: 1.1rem;">${data.options_data.put_call_ratio.toFixed(2)}</div>
+                        <small style="color: #64748b;">${data.options_data.put_call_ratio > 1.2 ? '看跌情绪强（负Gamma风险）' : data.options_data.put_call_ratio > 1.0 ? '略偏看跌' : data.options_data.put_call_ratio < 0.8 ? '看涨情绪' : '中性'}</small>
+                    </div>
+                    ` : ''}
+                </div>
+                ${data.macro_data ? `
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #334155;">
+                    <div class="text-report-title" style="font-size: 1.1rem; margin-bottom: 0.8rem;">宏观经济环境</div>
+                    <div class="row">
+                        ${data.macro_data.treasury_10y !== null ? `
+                        <div class="col-md-3 mb-3">
+                            <div class="text-report-label">10年美债收益率</div>
+                            <div class="text-report-value ${data.macro_data.treasury_10y > 4.5 ? 'text-danger' : data.macro_data.treasury_10y > 3.5 ? 'text-warning' : 'text-success'}" style="font-size: 1rem;">${data.macro_data.treasury_10y.toFixed(2)}%</div>
+                            <small style="color: #64748b;">${data.macro_data.treasury_10y_change ? (data.macro_data.treasury_10y_change > 0 ? '↑' : '↓') + Math.abs(data.macro_data.treasury_10y_change).toFixed(2) + '%' : ''} ${data.macro_data.treasury_10y > 4.5 ? '流动性收紧' : data.macro_data.treasury_10y < 2.5 ? '流动性宽松' : '正常'}</small>
+                        </div>
+                        ` : ''}
+                        ${data.macro_data.dxy !== null ? `
+                        <div class="col-md-3 mb-3">
+                            <div class="text-report-label">美元指数</div>
+                            <div class="text-report-value ${data.macro_data.dxy > 105 ? 'text-warning' : data.macro_data.dxy < 95 ? 'text-success' : ''}" style="font-size: 1rem;">${data.macro_data.dxy.toFixed(2)}</div>
+                            <small style="color: #64748b;">${data.macro_data.dxy_change ? (data.macro_data.dxy_change > 0 ? '↑' : '↓') + Math.abs(data.macro_data.dxy_change).toFixed(2) + '%' : ''} ${data.macro_data.dxy > 105 ? '强势美元' : data.macro_data.dxy < 95 ? '弱势美元' : '正常'}</small>
+                        </div>
+                        ` : ''}
+                        ${data.macro_data.gold !== null ? `
+                        <div class="col-md-3 mb-3">
+                            <div class="text-report-label">黄金价格</div>
+                            <div class="text-report-value" style="font-size: 1rem;">$${data.macro_data.gold.toFixed(2)}</div>
+                            <small style="color: #64748b;">${data.macro_data.gold_change ? (data.macro_data.gold_change > 0 ? '↑' : '↓') + Math.abs(data.macro_data.gold_change).toFixed(2) + '%' : ''} ${data.macro_data.gold_change > 2 ? '避险情绪' : data.macro_data.gold_change < -2 ? '风险偏好' : '中性'}</small>
+                        </div>
+                        ` : ''}
+                        ${data.macro_data.oil !== null ? `
+                        <div class="col-md-3 mb-3">
+                            <div class="text-report-label">原油价格</div>
+                            <div class="text-report-value" style="font-size: 1rem;">$${data.macro_data.oil.toFixed(2)}</div>
+                            <small style="color: #64748b;">${data.macro_data.oil_change ? (data.macro_data.oil_change > 0 ? '↑' : '↓') + Math.abs(data.macro_data.oil_change).toFixed(2) + '%' : ''} ${data.macro_data.oil_change > 5 ? '通胀担忧' : data.macro_data.oil_change < -5 ? '需求疲软' : '正常'}</small>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+                ${data.volume_anomaly && data.volume_anomaly.is_anomaly ? `
+                <div style="margin-top: 1rem; padding: 0.8rem; background-color: #1e293b; border-left: 3px solid #f59e0b; border-radius: 4px;">
+                    <strong style="color: #f59e0b;">成交量异常：</strong>
+                    <span style="color: #cbd5e1;">最近5天平均成交量是过去30天平均的 ${data.volume_anomaly.ratio.toFixed(2)} 倍。${data.volume_anomaly.ratio > 2 ? '成交量异常放大，可能存在重大消息或资金异动。' : '成交量异常萎缩，市场关注度下降。'}</span>
+                </div>
+                ` : ''}
+                ${data.earnings_dates && data.earnings_dates.length > 0 ? `
+                <div style="margin-top: 1rem; padding: 0.8rem; background-color: #1e293b; border-left: 3px solid #3b82f6; border-radius: 4px;">
+                    <strong style="color: #3b82f6;">财报日期提醒：</strong>
+                    <span style="color: #cbd5e1;">预计财报日期：${data.earnings_dates.join(', ')}。财报发布前后通常伴随较大波动，建议提前调整仓位。</span>
+                </div>
+                ` : ''}
+                ${data.macro_data && (data.macro_data.fed_meetings && data.macro_data.fed_meetings.length > 0 || data.macro_data.cpi_releases && data.macro_data.cpi_releases.length > 0) ? `
+                <div style="margin-top: 1rem; padding: 0.8rem; background-color: #1e293b; border-left: 3px solid #8b5cf6; border-radius: 4px;">
+                    <strong style="color: #8b5cf6;">重要经济事件提醒：</strong>
+                    <div style="color: #cbd5e1; margin-top: 0.5rem;">
+                        ${data.macro_data.fed_meetings && data.macro_data.fed_meetings.length > 0 ? `
+                        <div style="margin-bottom: 0.3rem;">
+                            <strong>美联储利率决议：</strong>
+                            ${data.macro_data.fed_meetings.map(m => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}
+                        </div>
+                        ` : ''}
+                        ${data.macro_data.cpi_releases && data.macro_data.cpi_releases.length > 0 ? `
+                        <div>
+                            <strong>CPI数据发布：</strong>
+                            ${data.macro_data.cpi_releases.map(c => `${c.date} (${c.days_until}天后，发布${c.data_month}数据)`).join('、')}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+                ${data.macro_data && data.macro_data.geopolitical_risk !== null ? `
+                <div style="margin-top: 1rem; padding: 0.8rem; background-color: #1e293b; border-left: 3px solid ${data.macro_data.geopolitical_risk >= 7 ? '#ef4444' : data.macro_data.geopolitical_risk >= 5 ? '#f59e0b' : '#10b981'}; border-radius: 4px;">
+                    <strong style="color: ${data.macro_data.geopolitical_risk >= 7 ? '#ef4444' : data.macro_data.geopolitical_risk >= 5 ? '#f59e0b' : '#10b981'};">地缘政治风险指数：</strong>
+                    <span style="color: #cbd5e1; font-size: 1.1rem; font-weight: 600; margin-left: 0.5rem;">${data.macro_data.geopolitical_risk}/10</span>
+                    <span style="color: #94a3b8; margin-left: 0.5rem;">
+                        ${data.macro_data.geopolitical_risk >= 7 ? '高风险 - 地缘政治紧张局势加剧，市场避险情绪上升' : 
+                          data.macro_data.geopolitical_risk >= 5 ? '中等风险 - 需关注地缘政治动态' : 
+                          '低风险 - 地缘政治环境相对稳定'}
+                    </span>
+                </div>
+                ` : ''}
+                </div>
+                <div class="row" style="margin-top: 1rem;">
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">市盈率 (PE)</div>
+                        <div class="text-report-value ${data.pe && data.pe > 30 ? 'text-warning' : data.pe && data.pe > 15 ? 'text-success' : 'text-success'}" style="font-size: 1.1rem;">${data.pe ? data.pe.toFixed(2) : 'N/A'}</div>
+                        <small style="color: #64748b;">${data.pe && data.pe > 30 ? '估值偏高' : data.pe && data.pe > 15 ? '估值合理' : data.pe && data.pe > 0 ? '估值偏低' : '数据不足'}</small>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">预期市盈率 (Forward PE)</div>
+                        <div class="text-report-value" style="font-size: 1.1rem;">${data.forward_pe ? data.forward_pe.toFixed(2) : 'N/A'}</div>
+                        <small style="color: #64748b;">${data.forward_pe && data.forward_pe > 0 ? '预期估值' : '数据不足'}</small>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="text-report-label">PEG 比率</div>
+                        <div class="text-report-value" style="font-size: 1.1rem;">${data.peg ? data.peg.toFixed(2) : 'N/A'}</div>
+                        <small style="color: #64748b;">${data.peg && data.peg < 1 ? '估值合理' : data.peg && data.peg > 0 ? '估值偏高' : '数据不足'}</small>
+                    </div>
+                </div>
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
+                    <p><strong style="color: #f8fafc;">估值结论：</strong>${data.pe && data.pe > 30 ? '当前估值水平偏高，市场情绪较为乐观，需警惕估值泡沫风险。' : data.pe && data.pe > 15 ? '当前估值水平处于合理区间，市场情绪相对稳定。' : data.pe && data.pe > 0 ? '当前估值水平偏低，可能存在价值投资机会。' : '估值数据不足，建议结合其他指标综合判断。'}</p>
+                    ${data.options_data && (data.options_data.vix > 30 || (data.options_data.vix_change && data.options_data.vix_change > 10) || (data.options_data.put_call_ratio && data.options_data.put_call_ratio > 1.2)) ? `
+                    <p style="color: #fca5a5; margin-top: 0.5rem;"><strong>期权市场风险提示：</strong>
+                    ${data.options_data.vix > 30 ? `VIX指数处于高位(${data.options_data.vix.toFixed(1)})，市场波动加剧，存在Vanna crush和负Gamma风险。` : ''}
+                    ${data.options_data.vix_change && data.options_data.vix_change > 10 ? `VIX快速上升(${data.options_data.vix_change.toFixed(1)}%)，恐慌情绪加剧，可能引发连锁下跌。` : ''}
+                    ${data.options_data.put_call_ratio && data.options_data.put_call_ratio > 1.2 ? `Put/Call比率偏高(${data.options_data.put_call_ratio.toFixed(2)})，看跌情绪强烈，做市商可能面临负Gamma压力，需警惕市场加速下跌风险。` : ''}
+                    </p>
+                    ` : ''}
+                </div>
+            </div>
+
+            <!-- 风险提示 -->
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">五、风险提示</div>
+                <div class="row" style="margin-top: 1rem;">
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">综合风险评分</div>
+                        <div class="text-report-value ${risk.score >= 6 ? 'text-danger' : risk.score >= 4 ? 'text-warning' : 'text-success'}" style="font-size: 1.3rem; font-weight: 700;">${risk.score}/10</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">风险等级</div>
+                        <div class="text-report-value ${risk.score >= 6 ? 'text-danger' : risk.score >= 4 ? 'text-warning' : 'text-success'}" style="font-size: 1.1rem;">${risk.level}</div>
+                    </div>
+                </div>
+                ${risk.flags.length > 0 ? `
+                    <div style="margin-top: 1rem;">
+                        <p style="color: #cbd5e1; margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">主要风险因素：</strong></p>
+                        <ul style="color: #cbd5e1; line-height: 1.8; padding-left: 1.5rem;">
+                            ${risk.flags.map(flag => `<li style="margin-bottom: 0.5rem;">${flag}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : '<div style="margin-top: 1rem; color: #10b981;"><p>经系统评估，当前无明显结构性风险，硬逻辑检测通过。</p></div>'}
+            </div>
+
+            <!-- 投资建议 -->
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">六、投资建议</div>
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
+                    <p><strong style="color: #f8fafc;">投资评级：</strong><span class="${rating.class}" style="font-size: 1.1rem; font-weight: 600;">${rating.text}</span></p>
+                    <p><strong style="color: #f8fafc;">目标价格：</strong>${risk.suggested_position === 0 ? `\$${data.price.toFixed(2)}（风险过高，不建议买入，无目标价格。当前价格仅供参考。）` : `\$${(data.target_price || data.week52_high).toFixed(2)}（基于PE估值、增长率和技术面综合计算）`}</p>
+                    <p><strong style="color: #f8fafc;">建议仓位：</strong><span style="color: #3b82f6; font-size: 1.1rem; font-weight: 600;">${risk.suggested_position}%</span>（基于${styleName}风格和风险评分）</p>
+                    ${risk.suggested_position === 0 ? 
+                        `<p><strong style="color: #f8fafc;">建仓策略：</strong>当前风险评分过高（${risk.score}/10），不建议建仓。建议继续观望，等待风险降低或寻找其他投资机会。</p>` :
+                        `<p><strong style="color: #f8fafc;">建仓策略：</strong>${risk.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
+                        <p><strong style="color: #f8fafc;">止损建议：</strong>建议设置止损价格为当前价格的85%（约\$${(data.price * 0.85).toFixed(2)}），严格执行止损纪律。</p>`
+                    }
+                    <p><strong style="color: #f8fafc;">持有周期：</strong>根据${styleName}风格，建议持有${styleName === '质量 (Quality)' ? '长期（1-3年）' : styleName === '价值 (Value)' ? '中期（6-12个月）' : styleName === '成长 (Growth)' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
+                </div>
+            </div>
+
+            <!-- 风险提示 -->
+            <div class="text-report-section" style="border-top: 2px solid #ef4444; padding-top: 1.5rem; margin-top: 2rem;">
+                <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 1rem; border-radius: 4px;">
+                    <h5 style="color: #ef4444; font-size: 1rem; font-weight: 600; margin-bottom: 0.8rem;">重要风险提示</h5>
+                    <div style="color: #cbd5e1; line-height: 1.8; font-size: 0.9rem;">
+                        <p style="margin-bottom: 0.5rem;"><strong style="color: #f8fafc;">免责声明：</strong>本报告所载信息、数据及分析结果仅供参考，不构成任何投资建议。投资决策应基于您自身的独立判断，并充分考虑您的投资目标、财务状况和风险承受能力。</p>
+                        <p style="margin-bottom: 0.5rem;"><strong style="color: #f8fafc;">投资风险：</strong>股票投资存在市场风险、信用风险、流动性风险等多种风险。过往业绩不代表未来表现，投资可能产生本金损失。请谨慎投资，理性决策。</p>
+                        <p style="margin-bottom: 0.5rem;"><strong style="color: #f8fafc;">数据来源：</strong>本报告数据来源于公开市场信息，可能存在数据延迟、不完整或错误的情况。系统分析结果基于历史数据和量化模型，不能保证准确性或完整性。</p>
+                        <p style="margin-bottom: 0;"><strong style="color: #f8fafc;">AI分析说明：</strong>AI生成的分析报告基于算法模型和历史数据，仅供参考，不应作为唯一投资依据。投资前请咨询专业投资顾问，并充分了解相关风险。</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('textReport').innerHTML = html;
+    }
+    // 渲染市场预警
+    function renderWarnings(data) {
+        const warnings = data.market_warnings || [];
+        const warningsSection = document.getElementById('warningsSection');
+        const warningsList = document.getElementById('warningsList');
+        
+        if (warnings.length === 0) {
+            warningsSection.style.display = 'none';
+            return;
+        }
+        
+        warningsSection.style.display = 'block';
+        warningsList.innerHTML = '';
+        
+        warnings.forEach((warning, index) => {
+            const levelColors = {
+                'high': { bg: '#7f1d1d', border: '#ef4444', text: '#fca5a5' },
+                'medium': { bg: '#78350f', border: '#f59e0b', text: '#fcd34d' },
+                'low': { bg: '#1e3a2f', border: '#10b981', text: '#6ee7b7' }
+            };
+            
+            const colors = levelColors[warning.level] || levelColors['low'];
+            const urgencyLabels = {
+                'immediate': '[紧急]',
+                'soon': '[近期]',
+                'monitor': '[监控]'
+            };
+            
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'mb-2 p-2 rounded';
+            warningDiv.style.cssText = `
+                background-color: ${colors.bg};
+                border-left: 3px solid ${colors.border};
+                color: ${colors.text};
+                margin-bottom: 0.5rem;
+            `;
+            
+            warningDiv.innerHTML = `
+                <div style="display: flex; align-items: start;">
+                    <span style="font-size: 0.85rem; margin-right: 0.5rem; font-weight: 600; opacity: 0.9;">${urgencyLabels[warning.urgency] || '[监控]'}</span>
+                    <div style="flex: 1;">
+                        <strong style="color: ${colors.border};">${warning.message}</strong>
+                        ${warning.event_date ? `<div style="font-size: 0.85rem; margin-top: 0.2rem; opacity: 0.9;">事件日期: ${warning.event_date}</div>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            warningsList.appendChild(warningDiv);
+        });
+    }
+    </script>
+</body>
+</html>
+
