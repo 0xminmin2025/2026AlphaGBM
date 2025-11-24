@@ -107,7 +107,7 @@ def analyze():
 
 if __name__ == '__main__':
     print("启动投资分析系统...")
-    print("服务器地址: http://127.0.0.1:5001")
-    print("注意: 端口5000被Apple AirPlay占用，已改用5001端口")
-    app.run(debug=True, port=5001, host='0.0.0.0', threaded=True)
+    print("服务器地址: http://127.0.0.1:5002")
+    print("注意: 端口5000被Apple AirPlay占用，已改用5002端口")
+    app.run(debug=True, port=5002, host='0.0.0.0', threaded=True)
 
