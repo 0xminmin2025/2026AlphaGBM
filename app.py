@@ -1,5 +1,24 @@
 from flask import Flask, render_template, request, jsonify
+from datetime import datetime
 from flask_cors import CORS
+import pandas as pd
+import logging
+import os
+
+# 配置日志
+log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'app.log')
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 from analysis_engine import get_market_data, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price
 from ai_service import get_gemini_analysis
 
@@ -16,7 +35,7 @@ def analyze():
     ticker = req_data.get('ticker', '').upper()
     style = req_data.get('style', 'quality')
     
-    print(f"收到分析请求: {ticker}, 风格: {style}")
+    logger.info(f"收到分析请求: {ticker}, 风格: {style}, 请求IP: {request.remote_addr}")
 
     # 1. 获取硬数据
     from analysis_engine import normalize_ticker
