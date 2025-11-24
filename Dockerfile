@@ -1,6 +1,12 @@
 # 使用官方 Python 3.9 镜像作为基础镜像
 FROM python:3.9-slim
 
+# 设置时区为北京时间
+RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo 'Asia/Shanghai' > /etc/timezone
+
+# 设置环境变量指定时区
+ENV TZ=Asia/Shanghai
+
 # 设置工作目录
 WORKDIR /app
 
