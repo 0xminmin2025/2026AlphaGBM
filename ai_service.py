@@ -50,8 +50,9 @@ def get_fallback_analysis(ticker, style, data, risk_result):
         target_price = data['price']  # 风险过高，不建议买入，无目标价格
     else:
         # 基于52周区间和当前价格计算
-        week52_high = data.get('week52_high') or data['price'] * 1.2
-        target_price = week52_high * 0.9 if price_position < 0.5 else week52_high * 1.1
+        # week52_high = data.get('week52_high') or data['price'] * 1.2
+        # target_price = week52_high * 0.9 if price_position < 0.5 else week52_high * 1.1
+        target_price = data['target_price']
     
     stop_loss = data['price'] * 0.85  # 15%止损
     
@@ -73,7 +74,7 @@ def get_fallback_analysis(ticker, style, data, risk_result):
 
 ### G=B+M 模型分析
 
-**G (价格)**: 当前价格 ${data['price']:.2f}，位于52周区间 ${data['week52_low']:.2f} - ${data['week52_high']:.2f} 的 {price_position*100:.1f}% 位置。
+**G (价格)**: 当前价格 {data['currency_symbol']}{data['price']:.2f}，位于52周区间 {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f} 的 {price_position*100:.1f}% 位置。
 
 **B (基本面)**: 
 - 营收增长率: {data['growth']*100:.2f}%
@@ -140,9 +141,9 @@ def get_fallback_analysis(ticker, style, data, risk_result):
         analysis += '适合建仓\n'
     
     analysis += f"""
-**目标价格**: ${target_price:.2f} {'（风险过高，不建议买入，无目标价格）' if risk_result['suggested_position'] == 0 else '(基于技术面和估值分析)'}
+**目标价格**: {data['currency_symbol']}{target_price:.2f} {'（风险过高，不建议买入，无目标价格）' if risk_result['suggested_position'] == 0 else '(基于技术面和估值分析)'}
 
-**止损价格**: ${stop_loss:.2f} (建议止损幅度: 15%)
+**止损价格**: {data['currency_symbol']}{stop_loss:.2f} (建议止损幅度: 15%)
 
 **建议仓位**: {risk_result['suggested_position']}%
 
@@ -163,7 +164,7 @@ def get_fallback_analysis(ticker, style, data, risk_result):
 ### 注意事项
 
 1. 严格遵守仓位限制，不要超过{risk_result['suggested_position']}%
-2. 设置止损价格 ${stop_loss:.2f}，严格执行止损纪律
+2. 设置止损价格 {data['currency_symbol']}{stop_loss:.2f}，严格执行止损纪律
 3. 定期复查基本面数据，如营收增长转负或利润率大幅下降，考虑减仓
 4. 关注市场情绪变化，如PE倍数异常升高，警惕估值泡沫
 """
@@ -211,7 +212,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 ### 1. 上下文数据
 
-- **当前价格 (G)**: ${data['price']:.2f} (52周区间: ${data['week52_low']:.2f} - ${data['week52_high']:.2f})
+- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: ${data['week52_low']:.2f} - ${data['week52_high']:.2f})
 - **基本面 (B)**: 营收增长 {data['growth']:.1%}, 利润率 {data['margin']:.1%}
     - **情绪/估值 (M)**: PE {pe_value}, PEG {peg_value}
 - **技术面**: 50日均线 ${data['ma50']:.2f}, 200日均线 ${data['ma200']:.2f}

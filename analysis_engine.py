@@ -183,9 +183,39 @@ def get_market_data(ticker):
             market_cap = float(market_cap) if market_cap else 0
         except (ValueError, TypeError):
             market_cap = 0
+
+        # 货币代码 → 货币符号映射
+        currency_map = {
+            'USD': '$',
+            'CNY': '¥',
+            'HKD': 'HK$',
+            'EUR': '€',
+            'GBP': '£',
+            'JPY': '¥',
+            'KRW': '₩',
+            'INR': '₹',
+            'AUD': 'A$',
+            'CAD': 'C$',
+            'SGD': 'S$',
+            'TWD': 'NT$',
+        }
         
+        # 根据normalized_ticker后缀判断货币代码
+        if normalized_ticker.endswith('.HK'):
+            currency_code = 'HKD'
+        elif normalized_ticker.endswith('.SS'):
+            currency_code = 'CNY'
+        elif normalized_ticker.endswith('.SZ'):
+            currency_code = 'CNY'
+        else:
+            # 默认美股
+            currency_code = 'USD'
+        
+        currency_symbol = currency_map.get(currency_code, '$')  # 未映射的保持原代码
+
         data = {
             "symbol": normalized_ticker,
+            "currency_symbol": currency_symbol,
             "original_symbol": ticker,
             "name": info.get('longName') or info.get('shortName') or info.get('name') or normalized_ticker,
             "sector": info.get('sector', 'Unknown'),
