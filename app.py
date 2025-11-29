@@ -19,7 +19,7 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-from analysis_engine import get_market_data, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price
+from analysis_engine import get_market_data, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price, calculate_atr_stop_loss
 from ai_service import get_gemini_analysis
 
 app = Flask(__name__)
@@ -87,6 +87,41 @@ def analyze():
         import traceback
         traceback.print_exc()
         market_data['target_price'] = market_data['price']  # 使用当前价格作为默认值
+    
+    # 4.5. 计算动态止损价格（基于ATR）
+    try:
+        import yfinance as yf
+        from analysis_engine import normalize_ticker
+        # 重新获取历史数据用于ATR止损计算（只获取最近30天即可）
+        normalized_ticker = normalize_ticker(ticker)
+        stock = yf.Ticker(normalized_ticker)
+        hist = stock.history(period="1mo", timeout=10)  # 获取最近1个月的数据
+        
+        if not hist.empty and len(hist) >= 15:
+            # 使用ATR动态止损
+            stop_loss_price = calculate_atr_stop_loss(
+                buy_price=market_data['price'],
+                hist_data=hist,
+                atr_period=14,
+                atr_multiplier=2.5,
+                min_stop_loss_pct=0.05,
+                beta=market_data.get('beta')
+            )
+            market_data['stop_loss_price'] = stop_loss_price
+            market_data['stop_loss_method'] = 'ATR动态止损'
+        else:
+            # 如果无法计算ATR，使用固定止损
+            stop_loss_price = market_data['price'] * 0.85
+            market_data['stop_loss_price'] = stop_loss_price
+            market_data['stop_loss_method'] = '固定15%止损（数据不足）'
+    except Exception as e:
+        print(f"计算止损价格时发生异常: {e}")
+        import traceback
+        traceback.print_exc()
+        # 使用固定止损作为默认值
+        stop_loss_price = market_data['price'] * 0.85
+        market_data['stop_loss_price'] = stop_loss_price
+        market_data['stop_loss_method'] = '固定15%止损（计算失败）'
 
     # 5. 调用 Gemini AI (这可能需要几秒钟)
     try:

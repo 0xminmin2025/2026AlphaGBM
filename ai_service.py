@@ -10,6 +10,9 @@ except ImportError:
 
 load_dotenv()
 
+# 导入ATR止损计算函数
+from analysis_engine import calculate_atr_stop_loss
+
 
 # 配置 Gemini
 api_key = os.getenv("GOOGLE_API_KEY")
@@ -54,7 +57,16 @@ def get_fallback_analysis(ticker, style, data, risk_result):
         # target_price = week52_high * 0.9 if price_position < 0.5 else week52_high * 1.1
         target_price = data['target_price']
     
-    stop_loss = data['price'] * 0.85  # 15%止损
+    # 使用动态止损价格（如果已计算），否则使用固定止损
+    if 'stop_loss_price' in data and data['stop_loss_price']:
+        stop_loss = data['stop_loss_price']
+        stop_loss_method = data.get('stop_loss_method', '动态止损')
+        stop_loss_pct = ((data['price'] - stop_loss) / data['price']) * 100
+    else:
+        # 回退到固定止损
+        stop_loss = data['price'] * 0.85  # 15%止损
+        stop_loss_method = '固定15%止损'
+        stop_loss_pct = 15.0
     
     # 先计算PE和PEG的值
     pe_value = f"{data['pe']:.2f}" if data['pe'] and data['pe'] > 0 else "N/A"
@@ -143,7 +155,7 @@ def get_fallback_analysis(ticker, style, data, risk_result):
     analysis += f"""
 **目标价格**: {data['currency_symbol']}{target_price:.2f} {'（风险过高，不建议买入，无目标价格）' if risk_result['suggested_position'] == 0 else '(基于技术面和估值分析)'}
 
-**止损价格**: {data['currency_symbol']}{stop_loss:.2f} (建议止损幅度: 15%)
+**止损价格**: {data['currency_symbol']}{stop_loss:.2f} ({stop_loss_method}，止损幅度: {stop_loss_pct:.1f}%)
 
 **建议仓位**: {risk_result['suggested_position']}%
 
@@ -164,7 +176,7 @@ def get_fallback_analysis(ticker, style, data, risk_result):
 ### 注意事项
 
 1. 严格遵守仓位限制，不要超过{risk_result['suggested_position']}%
-2. 设置止损价格 {data['currency_symbol']}{stop_loss:.2f}，严格执行止损纪律
+2. 设置止损价格 {data['currency_symbol']}{stop_loss:.2f}（{stop_loss_method}，止损幅度{stop_loss_pct:.1f}%），严格执行止损纪律
 3. 定期复查基本面数据，如营收增长转负或利润率大幅下降，考虑减仓
 4. 关注市场情绪变化，如PE倍数异常升高，警惕估值泡沫
 """
@@ -197,6 +209,16 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     # 先计算PE和PEG的值用于prompt
     pe_value = f"{data['pe']:.2f}" if data['pe'] and data['pe'] > 0 else "N/A"
     peg_value = f"{data['peg']:.2f}" if data['peg'] and data['peg'] > 0 else "N/A"
+    
+    # 计算止损价格信息（如果未计算则使用固定止损）
+    if 'stop_loss_price' in data and data['stop_loss_price']:
+        stop_loss_price = data['stop_loss_price']
+        stop_loss_method = data.get('stop_loss_method', 'ATR动态止损')
+        stop_loss_pct = ((data['price'] - stop_loss_price) / data['price']) * 100
+    else:
+        stop_loss_price = data['price'] * 0.85
+        stop_loss_method = '固定15%止损'
+        stop_loss_pct = 15.0
     
     # 构建 Prompt (提示词工程)
     prompt = f"""
@@ -362,7 +384,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 * **目标价格**: 必须给出具体的买入目标价格和卖出目标价格（基于技术面、估值和{style_names.get(style, style)}风格的要求）。
 
-* **止损价格**: 必须给出具体的止损价格（基于技术面或估值容忍度），并说明止损理由。
+* **止损价格**: 系统已计算止损价格为 {data['currency_symbol']}{stop_loss_price:.2f}（{stop_loss_method}，止损幅度{stop_loss_pct:.1f}%）。请在分析中说明这个止损价格的合理性，并解释为什么使用这种止损方法。
 
 * **建仓策略**: 详细说明如何建仓（一次性还是分批，分批的话分几批，每批多少，时间间隔）。
 

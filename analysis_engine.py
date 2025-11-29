@@ -212,7 +212,20 @@ def get_market_data(ticker):
             currency_code = 'USD'
         
         currency_symbol = currency_map.get(currency_code, '$')  # 未映射的保持原代码
-
+        
+        # 计算ATR（用于动态止损）
+        atr_value = None
+        beta = None
+        if not hist.empty and len(hist) >= 15:  # 至少需要15天数据计算ATR
+            atr_value = calculate_atr(hist, period=14)
+            # 尝试获取Beta值（用于调整ATR倍数）
+            try:
+                beta = info.get('beta')
+                if beta:
+                    beta = float(beta)
+            except (ValueError, TypeError):
+                beta = None
+        
         data = {
             "symbol": normalized_ticker,
             "currency_symbol": currency_symbol,
@@ -234,7 +247,9 @@ def get_market_data(ticker):
             "history_dates": history_dates,
             "history_prices": [float(p) for p in history_prices],
             "volume_anomaly": volume_anomaly,
-            "earnings_dates": earnings_dates[:2] if earnings_dates else []  # 只保留最近2个财报日期
+            "earnings_dates": earnings_dates[:2] if earnings_dates else [],  # 只保留最近2个财报日期
+            "atr": atr_value,  # ATR值，用于动态止损
+            "beta": beta  # Beta值，用于调整ATR倍数
         }
         return data
     except Exception as e:
@@ -1117,6 +1132,131 @@ def get_options_market_data(ticker):
     return options_data
 
 
+def calculate_atr(hist_data, period=14):
+    """
+    计算平均真实波幅（Average True Range, ATR）
+    
+    参数:
+        hist_data: DataFrame，包含High, Low, Close列
+        period: 计算ATR的周期（通常为14天）
+    
+    返回:
+        ATR值（标量），如果数据不足则返回None
+    """
+    try:
+        if hist_data.empty or len(hist_data) < period + 1:
+            return None
+        
+        # 确保有High, Low, Close列
+        if not all(col in hist_data.columns for col in ['High', 'Low', 'Close']):
+            return None
+        
+        # 计算True Range的三个组成部分
+        high_low = hist_data['High'] - hist_data['Low']
+        high_close_prev = abs(hist_data['High'] - hist_data['Close'].shift(1))
+        low_close_prev = abs(hist_data['Low'] - hist_data['Close'].shift(1))
+        
+        # True Range = max(high-low, high-close_prev, low-close_prev)
+        true_range = pd.concat([high_low, high_close_prev, low_close_prev], axis=1).max(axis=1)
+        
+        # ATR = True Range的移动平均
+        atr = true_range.rolling(window=period).mean()
+        
+        # 返回最新的ATR值
+        if not atr.empty and not pd.isna(atr.iloc[-1]):
+            return float(atr.iloc[-1])
+        else:
+            return None
+    except Exception as e:
+        print(f"计算ATR时出错: {e}")
+        return None
+
+
+def calculate_dynamic_peg_threshold(treasury_10y, base_peg_threshold=1.0):
+    """
+    根据10年美债收益率动态调整PEG阈值
+    
+    逻辑:
+    - 美债收益率高 -> 资金成本高 -> 对成长股要求更严格 -> PEG阈值降低
+    - 美债收益率低 -> 资金成本低 -> 对成长股容忍度提高 -> PEG阈值提高
+    
+    参数:
+        treasury_10y: 当前10年期美债收益率（百分比，如4.5表示4.5%），如果为None则返回基础阈值
+        base_peg_threshold: 基准PEG阈值（通常为1.0）
+    
+    返回:
+        调整后的PEG阈值
+    """
+    if treasury_10y is None:
+        return base_peg_threshold
+    
+    # 基准利率假设为3.0%（历史平均）
+    base_rate = 3.0
+    
+    # 计算利率偏离度
+    rate_deviation = treasury_10y - base_rate
+    
+    # 调整系数：每1%的利率偏离，PEG阈值调整0.15
+    # 利率上升1% -> PEG阈值降低0.15（更严格）
+    # 利率下降1% -> PEG阈值提高0.15（更宽松）
+    adjustment_factor = 1.0 - (rate_deviation * 0.15)
+    
+    # 限制调整范围：PEG阈值在0.5-2.0之间
+    dynamic_peg_threshold = max(0.5, min(2.0, base_peg_threshold * adjustment_factor))
+    
+    return dynamic_peg_threshold
+
+
+def calculate_atr_stop_loss(buy_price, hist_data, atr_period=14, atr_multiplier=2.5, min_stop_loss_pct=0.05, beta=None):
+    """
+    基于ATR计算动态止损价格
+    
+    参数:
+        buy_price: 买入时的价格
+        hist_data: DataFrame，包含High, Low, Close列
+        atr_period: 计算ATR的周期（通常为14天）
+        atr_multiplier: ATR的倍数（通常为2.0-3.0，波动率高的股票用更大倍数）
+        min_stop_loss_pct: 最小止损幅度（如0.05表示5%，作为兜底）
+        beta: 股票的Beta值（可选，如果提供则用于调整ATR倍数）
+    
+    返回:
+        止损价格
+    """
+    # 根据Beta调整ATR倍数（如果提供）
+    if beta is not None:
+        if beta > 1.5:
+            # 高Beta股票，使用更大的倍数（更宽止损）
+            atr_multiplier = atr_multiplier * 1.2
+        elif beta > 1.2:
+            atr_multiplier = atr_multiplier * 1.1
+        elif beta < 0.8:
+            # 低Beta股票，使用更小的倍数（更窄止损）
+            atr_multiplier = atr_multiplier * 0.8
+        elif beta < 1.0:
+            atr_multiplier = atr_multiplier * 0.9
+        
+        # 限制倍数范围（1.5-4.0）
+        atr_multiplier = max(1.5, min(4.0, atr_multiplier))
+    
+    # 计算ATR
+    atr = calculate_atr(hist_data, atr_period)
+    
+    if atr is None or atr <= 0:
+        # 如果无法计算ATR，使用最小止损幅度
+        stop_loss_price = buy_price * (1 - min_stop_loss_pct)
+    else:
+        # 基于ATR计算止损价格
+        atr_stop_loss_price = buy_price - (atr * atr_multiplier)
+        
+        # 硬止损价格（最小止损幅度）
+        hard_stop_loss_price = buy_price * (1 - min_stop_loss_pct)
+        
+        # 取两者中更保守的（止损价格更低）
+        stop_loss_price = min(atr_stop_loss_price, hard_stop_loss_price)
+    
+    return stop_loss_price
+
+
 def calculate_market_sentiment(data):
     """
     计算市场情绪评分 (M维度)
@@ -1162,16 +1302,25 @@ def calculate_market_sentiment(data):
         # 如果没有PE数据，使用中性分
         sentiment_score = 5.0 * 0.3
     
-    # 2. PEG情绪调整 (权重15%)
+    # 2. PEG情绪调整 (权重15%) - 使用动态阈值
     if data['peg'] and data['peg'] > 0:
-        if data['peg'] < 0.5:
+        # 获取10年美债收益率，用于动态调整PEG阈值
+        treasury_10y = macro_data.get('treasury_10y')
+        dynamic_peg_threshold = calculate_dynamic_peg_threshold(treasury_10y, base_peg_threshold=1.0)
+        
+        # 使用动态阈值计算PEG情绪分数
+        if data['peg'] < dynamic_peg_threshold * 0.7:
             peg_sentiment = 8.0  # PEG很低，增长预期高，情绪乐观
-        elif data['peg'] < 1.0:
+        elif data['peg'] < dynamic_peg_threshold:
             peg_sentiment = 6.0  # PEG合理，增长匹配估值
-        elif data['peg'] < 1.5:
+        elif data['peg'] < dynamic_peg_threshold * 1.3:
             peg_sentiment = 5.0  # PEG略高，中性
         else:
             peg_sentiment = 3.0  # PEG过高，增长不匹配，情绪悲观
+        
+        # 存储动态PEG阈值供后续使用
+        data['dynamic_peg_threshold'] = dynamic_peg_threshold
+        
         sentiment_score += peg_sentiment * 0.15
     else:
         # 如果没有PEG数据，使用中性分
