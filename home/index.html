@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaG - 基于 Gemini AI 的智能股票分析</title>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Phosphor Icons (for icons) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background-color: #030712;
+            /* Slate 950 */
+            color: #f8fafc;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, #a78bfa, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(34, 211, 238, 0.5);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px -10px rgba(34, 211, 238, 0.2);
+        }
+
+        .hero-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(3, 7, 18, 0) 70%);
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* QR Code Scanner Effect Removed */
+
+        /* Beta Badge Pulse */
+        .beta-pulse {
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% {
+                box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(34, 211, 238, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Content Data
+        const content = {
+            zh: {
+                nav: {
+                    features: "功能特性",
+                    model: "核心模型",
+                    styles: "投资风格",
+                    download: "关注我们",
+                    lang: "EN"
+                },
+                hero: {
+                    badge: "由 Gemini AI 驱动",
+                    title: "以 AI 重构",
+                    titleHighlight: "市场逻辑",
+                    subtitle: "基于自研 G=B+M 投机模型与五大支柱框架。我们不预测未来，我们只计算概率。智能识别全市场标的，提供机构级风控建议。",
+                    cta_primary: "立即体验 (内测版)",
+                    cta_secondary: "了解模型",
+                    limit_notice: "⚠️ 当前每位用户每日限额 2 次",
+                    demo_card: {
+                        ticker: "AAPL (苹果公司)",
+                        style_label: "策略风格",
+                        style_val: "质量策略",
+                        risk_label: "风险评分",
+                        risk_val: "2.5 / 10 (低风险)",
+                        g_label: "G-价格",
+                        g_val: "高位",
+                        b_label: "B-基本面",
+                        b_val: "强劲",
+                        m_label: "M-情绪",
+                        m_val: "中性",
+                        ai_verdict: "AI 分析结论：基本面 (B) 支撑强劲，虽然价格 (G) 处于高位，但市场情绪 (M) 稳定。建议仓位",
+                        ai_pos: "18%"
+                    }
+                },
+                model: {
+                    title: "G = B + M",
+                    desc: "将混沌的市场波动解构为极简的数学逻辑",
+                    g: { title: "G (价格引力)", desc: "价格偏离度与技术形态" },
+                    b: { title: "B (基本面支撑)", desc: "营收、利润与估值锚点" },
+                    m: { title: "M (市场情绪)", desc: "恐慌指数与宏观因子" }
+                },
+                features: {
+                    title: "全维度智能分析",
+                    items: [
+                        { icon: "Brain", title: "AI 深度决策", desc: "集成 Google Gemini AI，自动生成包含风格判定、五大支柱检查的深度研报。" },
+                        { icon: "ShieldWarning", title: "风险量化系统", desc: "0-10 分动态风险评级，结合 VIX 与 Put/Call 比率，精准识别危险信号。" },
+                        { icon: "ChartLineUp", title: "智能仓位管理", desc: "拒绝盲目博弈。根据风险等级动态计算最优仓位，严格执行资金管理。" },
+                        { icon: "GlobeHemisphereWest", title: "全市场覆盖", desc: "无缝支持美股、港股、A股代码自动识别，打破市场信息壁垒。" }
+                    ]
+                },
+                styles: {
+                    title: "四种投资风格",
+                    desc: "系统自动适配您的交易性格",
+                    cards: [
+                        { name: "质量策略", color: "text-emerald-400", desc: "护城河深、财务稳健。适合长期持有。" },
+                        { name: "价值策略", color: "text-blue-400", desc: "低估值、安全边际。寻找错杀机会。" },
+                        { name: "成长策略", color: "text-purple-400", desc: "高营收增速。容忍高估值换取成长。" },
+                        { name: "趋势策略", color: "text-orange-400", desc: "价格动量驱动。快进快出跟随趋势。" }
+                    ]
+                },
+                cta: {
+                    title: "加入 AlphaG 社区",
+                    desc: "获取内测资格、最新模型更新及深度投资策略。",
+                    scan_text: "扫码关注公众号体验"
+                },
+                footer: {
+                    disclaimer: "免责声明：本系统仅供学习和研究使用，不构成任何投资建议。投资有风险，入市需谨慎。",
+                    copy: "© 2025 AlphaG 智能科技. 保留所有权利."
+                }
+            },
+            en: {
+                nav: {
+                    features: "Features",
+                    model: "The Model",
+                    styles: "Styles",
+                    download: "Follow Us",
+                    lang: "中"
+                },
+                hero: {
+                    badge: "Powered by Gemini AI",
+                    title: "Redefine Markets with",
+                    titleHighlight: "AlphaG",
+                    subtitle: "Based on the proprietary G=B+M Model & 5 Pillars Framework. We don't predict the future; we calculate probabilities.",
+                    cta_primary: "Try Beta Now",
+                    cta_secondary: "Learn More",
+                    limit_notice: "⚠️ Limit: 2 uses per user/day",
+                    demo_card: {
+                        ticker: "AAPL (Apple Inc.)",
+                        style_label: "STYLE",
+                        style_val: "QUALITY",
+                        risk_label: "Risk Score",
+                        risk_val: "2.5 / 10 (Low)",
+                        g_label: "G-Score",
+                        g_val: "High",
+                        b_label: "B-Score",
+                        b_val: "Strong",
+                        m_label: "M-Score",
+                        m_val: "Neutral",
+                        ai_verdict: "AI Verdict: Strong fundamentals (B) justify price (G). Sentiment (M) is neutral. Suggested Position:",
+                        ai_pos: "18%"
+                    }
+                },
+                model: {
+                    title: "G = B + M",
+                    desc: "Deconstructing chaos into mathematical logic",
+                    g: { title: "G (Gravity)", desc: "Price Action & Technicals" },
+                    b: { title: "B (Basis)", desc: "Fundamental Support" },
+                    m: { title: "M (Momentum)", desc: "Sentiment & Macro Factors" }
+                },
+                features: {
+                    title: "Full-Dimension Analysis",
+                    items: [
+                        { icon: "Brain", title: "AI Deep Decision", desc: "Integrated Gemini AI generates deep reports with 5-Pillar checks and strategy analysis." },
+                        { icon: "ShieldWarning", title: "Risk Quant", desc: "0-10 dynamic risk rating based on VIX, Put/Call ratios, and macro indicators." },
+                        { icon: "ChartLineUp", title: "Position Sizing", desc: "Stop blind betting. Get calculated position suggestions based on risk levels." },
+                        { icon: "GlobeHemisphereWest", title: "Global Coverage", desc: "Seamless support for US, HK, and A-Shares. Breaking information barriers." }
+                    ]
+                },
+                styles: {
+                    title: "4 Investment Personas",
+                    desc: "Adapting to your trading personality",
+                    cards: [
+                        { name: "Quality", color: "text-emerald-400", desc: "Wide moat, strong financials. Long-term." },
+                        { name: "Value", color: "text-blue-400", desc: "Undervalued, safety margin. Mid-term." },
+                        { name: "Growth", color: "text-purple-400", desc: "High revenue growth. High risk tolerance." },
+                        { name: "Momentum", color: "text-orange-400", desc: "Price action driven. Short-term trading." }
+                    ]
+                },
+                cta: {
+                    title: "Join AlphaG Community",
+                    desc: "Get Beta access, model updates, and deep strategies.",
+                    scan_text: "Scan to Follow"
+                },
+                footer: {
+                    disclaimer: "Disclaimer: This system is for educational purposes only and does not constitute investment advice.",
+                    copy: "© 2025 AlphaG Intelligence. All Rights Reserved."
+                }
+            }
+        };
+
+        const App = () => {
+            const [lang, setLang] = useState('zh');
+            const t = content[lang];
+
+            const toggleLang = () => setLang(lang === 'zh' ? 'en' : 'zh');
+
+            return (
+                <div className="min-h-screen relative overflow-hidden">
+                    {/* Background Grid */}
+                    <div className="absolute inset-0 z-[-1]" style={{
+                        backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)',
+                        backgroundSize: '40px 40px'
+                    }}></div>
+
+                    {/* Hero Glow */}
+                    <div className="hero-glow"></div>
+
+                    {/* Navbar */}
+                    <nav className="fixed w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex items-center justify-between h-16">
+                                <div className="flex items-center gap-2">
+                                    <i className="ph ph-chart-polar text-cyan-400 text-2xl"></i>
+                                    <span className="font-bold text-xl tracking-tight">Alpha<span className="text-cyan-400">G</span></span>
+                                </div>
+                                <div className="hidden md:block">
+                                    <div className="ml-10 flex items-baseline space-x-8">
+                                        <a href="#model" className="hover:text-cyan-400 transition-colors text-sm">{t.nav.model}</a>
+                                        <a href="#features" className="hover:text-cyan-400 transition-colors text-sm">{t.nav.features}</a>
+                                        <a href="#styles" className="hover:text-cyan-400 transition-colors text-sm">{t.nav.styles}</a>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
+                                        {t.nav.lang}
+                                    </button>
+                                    <a href="#contact" className="bg-slate-100 text-slate-900 px-4 py-2 rounded-full text-sm font-semibold hover:bg-cyan-400 hover:text-slate-900 transition-colors">
+                                        {t.nav.download}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Hero Section */}
+                    <main className="pt-32 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+                        <div className="text-center">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-cyan-400 text-xs font-medium mb-6">
+                                <i className="ph ph-sparkle-fill"></i>
+                                {t.hero.badge}
+                            </div>
+                            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
+                                {t.hero.title} <br className="hidden md:block" />
+                                <span className="gradient-text">{t.hero.titleHighlight}</span>
+                            </h1>
+                            <p className="mt-4 max-w-2xl mx-auto text-xl text-slate-400">
+                                {t.hero.subtitle}
+                            </p>
+
+                            {/* CTA Area */}
+                            <div className="mt-10 flex flex-col items-center">
+                                <div className="flex gap-4">
+                                    <a href="#contact" className="beta-pulse px-8 py-3 rounded-lg bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)]">
+                                        {t.hero.cta_primary}
+                                    </a>
+                                    <a href="#model" className="px-8 py-3 rounded-lg border border-slate-700 hover:border-slate-500 hover:bg-slate-800 transition-all">
+                                        {t.hero.cta_secondary}
+                                    </a>
+                                </div>
+                                <div className="mt-4 text-xs text-yellow-500/80 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
+                                    {t.hero.limit_notice}
+                                </div>
+                            </div>
+
+                            {/* Abstract Intelligence Card (Mockup) */}
+                            <div className="mt-20 mx-auto max-w-lg relative">
+                                {/* Decorative elements */}
+                                <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 to-purple-600 rounded-2xl blur opacity-20"></div>
+                                <div className="relative bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
+                                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-800/50">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
+                                                <i className="ph ph-apple-logo text-white text-xl"></i>
+                                            </div>
+                                            <div className="text-left">
+                                                <div className="text-white font-bold text-sm sm:text-base">{t.hero.demo_card.ticker}</div>
+                                            </div>
+                                        </div>
+                                        <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
+                                            {t.hero.demo_card.style_val}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        {/* Score Visualizations */}
+                                        <div className="flex justify-between items-end">
+                                            <div className="text-sm text-slate-400">{t.hero.demo_card.risk_label}</div>
+                                            <div className="text-xl font-bold text-emerald-400">{t.hero.demo_card.risk_val}</div>
+                                        </div>
+                                        <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-emerald-500 w-[25%]"></div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-2 mt-4">
+                                            <div className="bg-slate-800/50 p-3 rounded-lg text-center">
+                                                <div className="text-xs text-slate-500 mb-1">{t.hero.demo_card.g_label}</div>
+                                                <div className="text-cyan-400 font-bold text-sm">{t.hero.demo_card.g_val}</div>
+                                            </div>
+                                            <div className="bg-slate-800/50 p-3 rounded-lg text-center">
+                                                <div className="text-xs text-slate-500 mb-1">{t.hero.demo_card.b_label}</div>
+                                                <div className="text-purple-400 font-bold text-sm">{t.hero.demo_card.b_val}</div>
+                                            </div>
+                                            <div className="bg-slate-800/50 p-3 rounded-lg text-center">
+                                                <div className="text-xs text-slate-500 mb-1">{t.hero.demo_card.m_label}</div>
+                                                <div className="text-yellow-400 font-bold text-sm">{t.hero.demo_card.m_val}</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 p-3 bg-cyan-500/5 border border-cyan-500/10 rounded-lg flex gap-3 items-start">
+                                            <i className="ph ph-sparkle text-cyan-400 mt-0.5"></i>
+                                            <p className="text-xs text-slate-300 text-left leading-relaxed">
+                                                {t.hero.demo_card.ai_verdict} <span className="text-white font-bold">{t.hero.demo_card.ai_pos}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    {/* Model Section */}
+                    <section id="model" className="py-20 relative">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-center mb-16">
+                                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">{t.model.title}</h2>
+                                <p className="text-slate-400">{t.model.desc}</p>
+                            </div>
+
+                            <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-4 font-mono text-center">
+                                {/* G Block */}
+                                <div className="p-6 rounded-2xl glass-card w-full md:w-1/4 border-t-4 border-cyan-500">
+                                    <div className="text-4xl font-bold mb-2 text-cyan-400">G</div>
+                                    <div className="text-lg font-semibold mb-1">{t.model.g.title}</div>
+                                    <div className="text-sm text-slate-400">{t.model.g.desc}</div>
+                                </div>
+
+                                <div className="text-4xl font-bold text-slate-600">=</div>
+
+                                {/* B Block */}
+                                <div className="p-6 rounded-2xl glass-card w-full md:w-1/4 border-t-4 border-emerald-500">
+                                    <div className="text-4xl font-bold mb-2 text-emerald-400">B</div>
+                                    <div className="text-lg font-semibold mb-1">{t.model.b.title}</div>
+                                    <div className="text-sm text-slate-400">{t.model.b.desc}</div>
+                                </div>
+
+                                <div className="text-4xl font-bold text-slate-600">+</div>
+
+                                {/* M Block */}
+                                <div className="p-6 rounded-2xl glass-card w-full md:w-1/4 border-t-4 border-purple-500">
+                                    <div className="text-4xl font-bold mb-2 text-purple-400">M</div>
+                                    <div className="text-lg font-semibold mb-1">{t.model.m.title}</div>
+                                    <div className="text-sm text-slate-400">{t.model.m.desc}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Styles Section */}
+                    <section id="styles" className="py-20 bg-slate-900/30">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-center mb-16">
+                                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">{t.styles.title}</h2>
+                                <p className="text-slate-400">{t.styles.desc}</p>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                {t.styles.cards.map((style, index) => (
+                                    <div key={index} className="glass-card p-6 rounded-xl relative overflow-hidden group">
+                                        <div className={`absolute top-0 left-0 w-1 h-full ${style.color.replace('text', 'bg')}`}></div>
+                                        <h3 className={`text-xl font-bold mb-2 ${style.color}`}>{style.name}</h3>
+                                        <p className="text-slate-400 text-sm leading-relaxed">
+                                            {style.desc}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Features Section */}
+                    <section id="features" className="py-20">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-center mb-16">
+                                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">{t.features.title}</h2>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {t.features.items.map((feature, idx) => (
+                                    <div key={idx} className="flex gap-4 p-6 glass-card rounded-xl">
+                                        <div className="flex-shrink-0">
+                                            <i className={`ph ph-${feature.icon.toLowerCase().replace('warning', '-warning').replace('up', '-up').replace('west', '-west')} text-3xl text-cyan-400`}></i>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
+                                            <p className="text-slate-400 text-sm leading-relaxed">{feature.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* QR Code / Contact Section */}
+                    <section id="contact" className="py-20 relative overflow-hidden">
+                        {/* Background glow for this section */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 blur-[100px] rounded-full pointer-events-none"></div>
+
+                        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                            <div className="glass-card rounded-2xl p-8 md:p-12 text-center border border-slate-700/50 shadow-2xl">
+                                <h2 className="text-3xl font-bold mb-4">{t.cta.title}</h2>
+                                <p className="text-slate-400 mb-8 max-w-xl mx-auto">{t.cta.desc}</p>
+
+                                <div className="flex flex-col items-center justify-center">
+                                    <div className="relative group cursor-pointer">
+                                        {/* QR Code Placeholder Box */}
+                                        <div className="w-48 h-48 bg-white rounded-xl flex items-center justify-center overflow-hidden border-4 border-white shadow-lg relative">
+                                            {/* Replace the src below with your actual QR Code image */}
+                                            <img
+                                                src="./WeChat-QR-Code.jpg"
+                                                alt="WeChat QR Code"
+                                                className="w-full h-full object-cover"
+                                            />
+
+                                        </div>
+                                        <div className="mt-4 flex items-center justify-center gap-2 text-cyan-400 font-semibold text-sm">
+                                            <i className="ph ph-qr-code"></i>
+                                            {t.cta.scan_text}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Footer */}
+                    <footer className="border-t border-slate-800 bg-slate-950 py-12">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                            <div className="flex items-center justify-center gap-2 mb-8">
+                                <i className="ph ph-chart-polar text-cyan-400 text-2xl"></i>
+                                <span className="font-bold text-xl tracking-tight">Alpha<span className="text-cyan-400">G</span></span>
+                            </div>
+                            <p className="text-slate-600 text-xs max-w-2xl mx-auto mb-4">
+                                {t.footer.disclaimer}
+                            </p>
+                            <p className="text-slate-700 text-sm">
+                                {t.footer.copy}
+                            </p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
