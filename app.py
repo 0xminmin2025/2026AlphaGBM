@@ -34,15 +34,17 @@ def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '').upper()
     style = req_data.get('style', 'quality')
+    onlyHistoryData = req_data.get('onlyHistoryData', False)
+    startDate = req_data.get('startDate', None)
     
-    logger.info(f"收到分析请求: {ticker}, 风格: {style}, 请求IP: {request.remote_addr}")
+    logger.info(f"收到分析请求: {ticker}, 风格: {style}, onlyHistoryData: {onlyHistoryData}, 请求IP: {request.remote_addr}")
 
     # 1. 获取硬数据
     from analysis_engine import normalize_ticker
     normalized_ticker = normalize_ticker(ticker)
     
     try:
-        market_data = get_market_data(ticker)
+        market_data = get_market_data(ticker, onlyHistoryData, startDate)
     except Exception as e:
         print(f"获取数据时发生异常: {e}")
         import traceback
@@ -58,6 +60,10 @@ def analyze():
             error_msg += f'\n已尝试标准化为: {normalized_ticker}'
         error_msg += '\n\n可能的原因：\n1. 股票代码不存在\n2. 网络连接问题\n3. 数据源暂时不可用\n\n请尝试：\n- 港股代码：2525 或 2525.HK\n- 美股代码：AAPL\n- A股代码：600519'
         return jsonify({'success': False, 'error': error_msg}), 400
+
+    if onlyHistoryData:
+        return jsonify({'success': True, 'data': market_data})
+
 
     # 2. 计算硬逻辑
     try:

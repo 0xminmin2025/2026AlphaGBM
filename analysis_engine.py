@@ -34,7 +34,7 @@ def normalize_ticker(ticker):
     return ticker
 
 
-def get_market_data(ticker):
+def get_market_data(ticker, onlyHistoryData=False, startDate=None):
     """获取 Yahoo Finance 数据并清洗"""
     try:
         # 标准化股票代码
@@ -42,6 +42,31 @@ def get_market_data(ticker):
         print(f"原始代码: {ticker}, 标准化后: {normalized_ticker}")
         
         stock = yf.Ticker(normalized_ticker)
+
+        if onlyHistoryData :
+            try:
+                if startDate:
+                    hist = stock.history(start=startDate, timeout=30)
+                else:
+                    hist = stock.history(period="1y", timeout=30)
+            except Exception as e:
+                print(f"获取历史数据失败: {e}")
+                hist = pd.DataFrame()
+
+            if not hist.empty :
+                history_dates = hist.index.strftime('%Y-%m-%d').tolist()
+                history_prices = hist['Close'].tolist()
+            else:
+                # 如果没有历史数据，至少提供一个当前价格点
+                from datetime import datetime
+                history_dates = [datetime.now().strftime('%Y-%m-%d')]
+                history_prices = []
+            
+            data = {
+                "history_dates": history_dates,
+                "history_prices": [float(p) for p in history_prices],
+            }
+            return data
         
         # 尝试获取信息，设置超时
         try:
@@ -52,7 +77,10 @@ def get_market_data(ticker):
         
         # 尝试获取历史数据
         try:
-            hist = stock.history(period="1y", timeout=30)
+            if startDate:
+                hist = stock.history(start=startDate, timeout=30)
+            else:
+                hist = stock.history(period="1y", timeout=30)
         except Exception as e:
             print(f"获取历史数据失败: {e}")
             hist = pd.DataFrame()
