@@ -19,17 +19,34 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-from analysis_engine import get_market_data, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price, calculate_atr_stop_loss
+from analysis_engine import get_market_data, get_ticker_price, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price, calculate_atr_stop_loss
 from ai_service import get_gemini_analysis
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-@app.route('/')
+@app.route('/stock/')
 def index():
     return render_template('index.html')
 
-@app.route('/api/analyze', methods=['POST'])
+@app.route('/stock/api/stock-price', methods=['GET'])
+def get_stock_price():
+    """获取单只股票的价格数据"""
+    ticker = request.args.get('ticker', '').upper()
+    
+    if not ticker:
+        return jsonify({'success': False, 'error': '请提供股票代码'}), 400
+    
+    logger.info(f"收到股票价格查询请求: {ticker}, 请求IP: {request.remote_addr}")
+    
+    price = get_ticker_price(ticker)
+    if price is None:
+        return jsonify({'success': False, 'error': f'获取股票 {ticker} 价格失败'}), 400
+    
+    return jsonify({'success': True, 'ticker': ticker, 'price': price,})
+
+
+@app.route('/stock/api/analyze', methods=['POST'])
 def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '').upper()

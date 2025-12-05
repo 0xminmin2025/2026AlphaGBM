@@ -34,6 +34,30 @@ def normalize_ticker(ticker):
     return ticker
 
 
+def get_ticker_price(ticker):
+    """获取股票的当前价格"""
+    try:
+         # 标准化股票代码
+        normalized_ticker = normalize_ticker(ticker)
+        print(f"原始代码: {ticker}, 标准化后: {normalized_ticker}")
+        
+        stock = yf.Ticker(normalized_ticker)
+
+        # 尝试从info获取
+        info = stock.info
+        if info and len(info) >= 5:
+            # 从info获取价格
+            current_price = (info.get('currentPrice') or 
+                           info.get('regularMarketPrice') or 
+                           info.get('previousClose') or 0)
+            if current_price > 0:
+                return current_price
+    except Exception as e:
+        print(f"从info获取价格失败: {e}")
+    
+    return None
+
+
 def get_market_data(ticker, onlyHistoryData=False, startDate=None):
     """获取 Yahoo Finance 数据并清洗"""
     try:
