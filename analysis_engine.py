@@ -114,8 +114,8 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None):
             # 尝试快速获取
             try:
                 fast_info = stock.fast_info
-                if hasattr(fast_info, 'lastPrice') and fast_info.lastPrice:
-                    current_price = fast_info.lastPrice
+                if hasattr(fast_info, 'last_price') and fast_info.last_price:
+                    current_price = fast_info.last_price
                 elif not hist.empty:
                     current_price = hist['Close'].iloc[-1]
                 else:
@@ -214,7 +214,7 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None):
                 calendar = stock.calendar
                 if calendar is not None and len(calendar) > 0:
                     # 获取最近的财报日期
-                    if 'Earnings Date' in calendar.columns:
+                    if 'Earnings Date' in calendar:
                         earnings_dates = calendar['Earnings Date'].dropna().tolist()
         except:
             pass
