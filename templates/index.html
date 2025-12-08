@@ -393,7 +393,7 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
-                const res = await fetch('/api/analyze', {
+                const res = await fetch('https://alphagbm.com/stock/api/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ticker, style }),
