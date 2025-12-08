@@ -25,11 +25,11 @@ from ai_service import get_gemini_analysis
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-@app.route('/stock/')
+@app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/stock/api/stock-price', methods=['GET'])
+@app.route('/api/stock-price', methods=['GET'])
 def get_stock_price():
     """获取单只股票的价格数据"""
     ticker = request.args.get('ticker', '').upper()
@@ -46,7 +46,7 @@ def get_stock_price():
     return jsonify({'success': True, 'ticker': ticker, 'price': price,})
 
 
-@app.route('/stock/api/analyze', methods=['POST'])
+@app.route('/api/analyze', methods=['POST'])
 def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '').upper()
