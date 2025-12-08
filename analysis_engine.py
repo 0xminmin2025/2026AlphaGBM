@@ -1926,6 +1926,8 @@ def analyze_risk_and_position(style, data):
         risk_flags.append("M: 估值过高且增长不匹配 (PE>60)")
     elif data['pe'] > 40:
         risk_score += 1
+    elif data['pe'] == 0:
+        risk_score += 3
         
     # B (基本面) 检测: 财务健康度
     if data['growth'] < 0:
