@@ -220,8 +220,46 @@ def get_gemini_analysis(ticker, style, data, risk_result):
         stop_loss_method = '固定15%止损'
         stop_loss_pct = 15.0
     
+    # 检查是否为ETF或基金
+    is_fund = data.get('is_etf_or_fund', False)
+    fund_type = data.get('fund_type', None)
+    
     # 构建 Prompt (提示词工程)
-    prompt = f"""
+    if is_fund and fund_type == 'ETF':
+        # ETF专用分析框架
+        prompt = f"""
+你是一位精通"胡猛投机模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
+
+### ⚠️ 重要提示：这是ETF（交易所交易基金）
+
+**产品类型**: ETF (交易所交易基金)
+**ETF特点**: 
+- ETF是跟踪特定指数或资产组合的交易所交易基金
+- ETF不涉及公司财务指标（如营收、利润、PE等），这些指标对ETF不适用
+- ETF的分析重点在于：跟踪标的指数的表现、流动性、管理费率、跟踪误差、技术面表现
+- 杠杆ETF（如3x、UltraPro等）具有高波动性和高风险，需要特别注意
+
+### 重要：投资风格与原则
+
+**当前投资风格**: {style_names.get(style, style)}
+**风格核心原则**: {style_principles.get(style, '')}
+**仓位限制**: 根据{style_names.get(style, style)}风格，建议最大仓位为{risk_result['suggested_position']}%
+
+你必须严格按照以上投资风格和原则进行分析，所有建议必须符合该风格的特征。**特别注意：不要使用公司财务指标（营收、利润、PE等）来分析ETF，这些指标对ETF不适用。**
+
+### 1. 上下文数据
+
+- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
+{('**注意：这是ETF，不适用公司财务指标**' if is_fund and fund_type == 'ETF' else f"- **基本面 (B)**: 营收增长 {data['growth']:.1%}, 利润率 {data['margin']:.1%}")}
+{('' if is_fund and fund_type == 'ETF' else f"    - **情绪/估值 (M)**: PE {pe_value}, PEG {peg_value}")}
+- **技术面**: 50日均线 {data['currency_symbol']}{data['ma50']:.2f}, 200日均线 {data['currency_symbol']}{data['ma200']:.2f}
+{(f"- **Beta值**: {data.get('beta', 'N/A')} (波动率指标)" if is_fund and fund_type == 'ETF' and data.get('beta') else '')}
+- **系统风控评分**: {risk_result['score']}/10 (等级: {risk_result['level']})
+- **主要风险点**: {', '.join(risk_result['flags']) if risk_result['flags'] else '无明显风险'}
+"""
+    else:
+        # 普通股票分析框架
+        prompt = f"""
 你是一位精通"胡猛投机模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
 
 ### 重要：投资风格与原则
@@ -234,10 +272,10 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 ### 1. 上下文数据
 
-- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: ${data['week52_low']:.2f} - ${data['week52_high']:.2f})
+- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
 - **基本面 (B)**: 营收增长 {data['growth']:.1%}, 利润率 {data['margin']:.1%}
     - **情绪/估值 (M)**: PE {pe_value}, PEG {peg_value}
-- **技术面**: 50日均线 ${data['ma50']:.2f}, 200日均线 ${data['ma200']:.2f}
+- **技术面**: 50日均线 {data['currency_symbol']}{data['ma50']:.2f}, 200日均线 {data['currency_symbol']}{data['ma200']:.2f}
 - **系统风控评分**: {risk_result['score']}/10 (等级: {risk_result['level']})
 - **主要风险点**: {', '.join(risk_result['flags']) if risk_result['flags'] else '无明显风险'}
 """
@@ -291,11 +329,26 @@ def get_gemini_analysis(ticker, style, data, risk_result):
         meetings_text = ', '.join([m['date'] + ' (' + str(m['days_until']) + '天后' + ('，含点阵图' if m.get('has_dot_plot') else '') + ')' for m in fed_meetings])
         prompt += f"- **美联储利率决议**: {meetings_text}\n"
     
-    # 添加CPI数据发布
+    # 添加美国CPI数据发布
     cpi_releases = macro_data.get('cpi_releases', [])
-    if cpi_releases and len(cpi_releases) > 0:
-        cpi_text = ', '.join([c['date'] + ' (' + str(c['days_until']) + '天后，发布' + c['data_month'] + '数据)' for c in cpi_releases])
-        prompt += f"- **CPI数据发布**: {cpi_text}\n"
+    us_cpi = [c for c in cpi_releases if c.get('country') == 'US']
+    if us_cpi and len(us_cpi) > 0:
+        cpi_text = ', '.join([c['date'] + ' (' + str(c['days_until']) + '天后，发布' + c['data_month'] + '数据)' for c in us_cpi])
+        prompt += f"- **美国CPI数据发布**: {cpi_text}\n"
+    
+    # 添加中国经济事件
+    china_events = macro_data.get('china_events', [])
+    if china_events and len(china_events) > 0:
+        # 只显示未来30天内的重要事件
+        upcoming_china_events = [e for e in china_events if e.get('days_until', 999) <= 30]
+        if upcoming_china_events:
+            events_text = ', '.join([
+                e['type'] + ': ' + e['date'] + ' (' + str(e['days_until']) + '天后' + 
+                (', ' + e.get('data_month', '') if e.get('data_month') else '') +
+                (', ' + e.get('quarter', '') if e.get('quarter') else '') + ')'
+                for e in upcoming_china_events[:5]  # 只显示前5个
+            ])
+            prompt += f"- **中国经济事件**: {events_text}\n"
     
     # 添加期权到期日
     options_expirations = macro_data.get('options_expirations', [])
@@ -309,6 +362,77 @@ def get_gemini_analysis(ticker, style, data, risk_result):
         risk_level = '⚠️ 高风险' if geopolitical_risk >= 7 else '中等风险' if geopolitical_risk >= 5 else '低风险'
         prompt += f"- **地缘政治风险指数**: {geopolitical_risk}/10 {risk_level}\n"
     
+    # 添加中国市场特有情绪数据（如果是A股或港股）
+    symbol = data.get('symbol', '')
+    is_cn_market = symbol.endswith('.SS') or symbol.endswith('.SZ')
+    is_hk_market = symbol.endswith('.HK')
+    
+    if is_cn_market or is_hk_market:
+        china_sentiment = data.get('china_sentiment', {})
+        china_policy = data.get('china_policy', {})
+        china_adjustments = data.get('china_sentiment_adjustments', [])
+        
+        if china_sentiment or china_policy:
+            prompt += f"\n### 🇨🇳 中国市场特有情绪面 (China Specific Sentiment) - 权重最高！\n"
+            prompt += f"**注意：对于A股/港股，政策面权重 > 基本面权重，这是中国市场的核心特征。**\n\n"
+            
+            # 1. 最新政策与舆情
+            latest_news = china_sentiment.get('latest_news', [])
+            if latest_news:
+                prompt += f"**1. 最新政策与舆情**:\n"
+                for news in latest_news[:5]:
+                    if isinstance(news, dict):
+                        title = news.get('title', news.get('title', str(news)))
+                        date = news.get('date', '')
+                        prompt += f"  - {date}: {title}\n"
+                    else:
+                        prompt += f"  - {news}\n"
+                prompt += f"  *请分析：这些新闻中是否包含明显的政策利好（如\"国家队入场\"、\"降准降息\"、\"行业扶持\"）或监管利空？*\n\n"
+            
+            # 2. 主力资金流向
+            main_inflow = china_sentiment.get('main_net_inflow', 0)
+            retail_inflow = china_sentiment.get('retail_net_inflow', 0)
+            if main_inflow != 0:
+                prompt += f"**2. 主力资金流向**: 主力净流入 {main_inflow:,.0f} 元"
+                if retail_inflow != 0:
+                    prompt += f"，散户净流入 {retail_inflow:,.0f} 元"
+                prompt += f"\n"
+                prompt += f"  *请分析：主力资金是在吸筹还是出货？这与当前股价涨跌是否背离？*\n"
+                prompt += f"  - 主力大幅净流入（>1亿）通常是强力买入信号\n"
+                prompt += f"  - 主力大幅净流出（<-1亿）通常是危险信号\n\n"
+            
+            # 3. 龙虎榜数据
+            dragon_tiger = china_sentiment.get('dragon_tiger_list')
+            if dragon_tiger:
+                prompt += f"**3. 龙虎榜数据**: {dragon_tiger.get('date', '最近')}上榜\n"
+                prompt += f"  - 上榜理由: {dragon_tiger.get('reason', 'N/A')}\n"
+                prompt += f"  - 买入额: {dragon_tiger.get('buy_amount', 0):,.0f} 元\n"
+                prompt += f"  - 卖出额: {dragon_tiger.get('sell_amount', 0):,.0f} 元\n"
+                prompt += f"  *请分析：游资是在炒作还是出货？*\n\n"
+            
+            # 4. 宏观政策风向
+            important_news = china_policy.get('important_news', [])
+            market_impact = china_policy.get('market_impact', 'neutral')
+            if important_news:
+                prompt += f"**4. 宏观政策风向** ({'利好' if market_impact == 'positive' else '利空' if market_impact == 'negative' else '中性'}):\n"
+                for news in important_news[:5]:
+                    title = news.get('title', '')
+                    keywords = news.get('keywords', [])
+                    prompt += f"  - {title}"
+                    if keywords:
+                        prompt += f" [关键词: {', '.join(keywords)}]"
+                    prompt += f"\n"
+                prompt += f"  *请分析：政策面整体是偏紧还是偏松？这对该股票的影响是什么？*\n"
+                prompt += f"  - 如果出现\"国务院印发\"、\"央行宣布\"级别新闻，政策权重应高于P/E估值\n"
+                prompt += f"  - 关键词触发器：\"印发\"、\"规划\"、\"立案调查\"等会直接影响市场情绪\n\n"
+            
+            # 5. 中国市场情绪评分调整
+            if china_adjustments:
+                prompt += f"**5. 中国市场情绪评分调整**:\n"
+                for adj in china_adjustments:
+                    prompt += f"  - {adj}\n"
+                prompt += f"\n"
+    
     # 继续构建提示词的分析任务部分
     prompt += """
 
@@ -318,11 +442,17 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 明确说明当前使用的投资风格({style_names.get(style, style)})及其核心原则，解释为什么选择这个风格来分析该股票。
 
+**⚠️ 重要提示**：本分析报告必须包含完整的买入和卖出策略。卖出策略是风险控制的核心，不能省略或模糊表述。
+
 **第二部分：G=B+M 深度解构**
 
-* **B (基本面)**: 当前处于行业周期的哪个阶段（复苏/过热/滞胀/衰退）？数据支撑是什么？是否符合{style_names.get(style, style)}风格的要求？
+${'* **B (基本面)**: 对于ETF，不适用公司财务指标（营收、利润、PE等）。请分析：' if is_fund and fund_type == 'ETF' else '* **B (基本面)**: 当前处于行业周期的哪个阶段（复苏/过热/滞胀/衰退）？数据支撑是什么？是否符合' + style_names.get(style, style) + '风格的要求？'}
+${'  - ETF跟踪的标的指数是什么？指数的构成和权重如何？' if is_fund and fund_type == 'ETF' else ''}
+${'  - ETF的跟踪误差如何？管理费率是多少（如果数据中有）？' if is_fund and fund_type == 'ETF' else ''}
+${'  - 如果是杠杆ETF（如3x、UltraPro），需要特别说明杠杆倍数和风险（杠杆ETF在震荡市场中会遭受时间衰减）' if is_fund and fund_type == 'ETF' else ''}
+${'  - ETF的流动性如何？日均成交量是否充足？' if is_fund and fund_type == 'ETF' else ''}
 
-* **M (市场情绪)**: 当前价格是否包含了过度的乐观或悲观情绪？PE和PEG是否合理？
+* **M (市场情绪)**: 当前价格是否包含了过度的乐观或悲观情绪？{('对于ETF，主要关注技术面指标（价格位置、均线、52周区间）和跟踪标的指数的市场情绪。' if is_fund and fund_type == 'ETF' else 'PE和PEG是否合理？')}
 """
     
     # 添加期权市场情绪分析
@@ -392,7 +522,46 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 * **仓位管理**: 重申建议仓位{risk_result['suggested_position']}%，并说明仓位管理原则。
 
-**语气要求**: 客观、专业、犀利、不论情面，严格遵守纪律。不要讲废话。所有数字必须具体，不要模糊表述。
+**第五部分：卖出策略（⚠️ 必须包含，这是最重要的风险控制部分）**
+
+**重要提示**：卖出策略是风险控制的核心，必须详细说明。请根据投资风格和个股情况，提供**无风险的卖出策略**，确保投资者能够及时止损和止盈，规避风险。必须包含以下所有内容：
+
+* **止盈策略**: 
+  - 当价格达到目标价格时，如何操作？（一次性卖出 / 分批卖出）
+  - 如果超过目标价格，是否继续持有或逐步减仓？
+  - 根据{style_names.get(style, style)}风格，给出具体的止盈点建议
+
+* **止损策略**: 
+  - 系统已设置止损价格为 {data['currency_symbol']}{stop_loss_price:.2f}（{stop_loss_method}，止损幅度{stop_loss_pct:.1f}%）
+  - 解释这个止损价格的合理性
+  - 是否需要在止损前设置预警点？
+  - 严格执行止损的纪律说明
+
+* **分阶段卖出策略**: 
+  - 如果采用分批建仓，对应的分批卖出策略是什么？
+  - 建议在什么价位分阶段减仓？（例如：达到目标价格的80%/100%/120%分别卖出多少比例）
+  - 根据{style_names.get(style, style)}风格的持有周期，何时应该完全退出？
+
+* **特殊情况卖出**:
+  - 基本面恶化（营收负增长、利润率大幅下降）时如何应对？
+  - 估值过高（PE异常升高）时是否提前卖出？
+  - 市场情绪变化（VIX飙升、市场系统性风险）时如何调整？
+
+* **卖出时机建议**:
+  - 避免在财报发布前卖出（除非有明确风险信号）
+  - 避免在期权到期日附近卖出（市场波动可能影响成交价格）
+  - 根据重要经济事件（美联储会议、CPI发布等）调整卖出时机
+
+* **风险规避原则**:
+  - 严格执行止损，不要因为"再等等"而犹豫
+  - 达到目标价格后，根据投资风格决定是全部卖出还是分批卖出
+  - 如果市场出现系统性风险（VIX>30、地缘政治风险>7），建议提前减仓或全部卖出
+  - 如果基本面恶化（营收转负、利润率大幅下降），立即卖出，不要等待
+  - 如果估值过高（PE超过合理范围50%以上），考虑提前卖出锁定利润
+
+**⚠️ 特别强调**：卖出策略必须具体、可执行，不能使用"根据情况决定"、"灵活调整"等模糊表述。必须给出具体的价格点位、时间节点和操作比例。
+
+**语气要求**: 客观、专业、犀利、不论情面，严格遵守纪律。不要讲废话。所有数字必须具体，不要模糊表述。卖出策略必须清晰可执行，避免模糊的表述。**卖出策略是风险控制的核心，必须详细说明，不能省略。**
 """
 
     try:

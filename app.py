@@ -4,6 +4,7 @@ from flask_cors import CORS
 import pandas as pd
 import logging
 import os
+import json
 
 # 配置日志
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -181,6 +182,45 @@ def analyze():
         'risk': serializable_risk,
         'report': ai_report
     })
+
+
+@app.route('/api/feedback', methods=['POST'])
+def submit_feedback():
+    """接收用户反馈"""
+    try:
+        feedback_data = request.json
+        
+        # 验证必填字段
+        if not feedback_data.get('type'):
+            return jsonify({'success': False, 'error': '请选择反馈类型'}), 400
+        
+        if not feedback_data.get('content'):
+            return jsonify({'success': False, 'error': '请填写反馈内容'}), 400
+        
+        # 添加时间戳和IP地址
+        feedback_data['submitted_at'] = datetime.now().isoformat()
+        feedback_data['ip_address'] = request.remote_addr
+        
+        # 保存到文件
+        feedback_dir = os.path.join(os.path.dirname(__file__), 'feedback')
+        os.makedirs(feedback_dir, exist_ok=True)
+        
+        # 使用日期作为文件名的一部分
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        feedback_file = os.path.join(feedback_dir, f'feedback_{date_str}.jsonl')
+        
+        # 追加到文件（JSONL格式，每行一个JSON对象）
+        with open(feedback_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(feedback_data, ensure_ascii=False) + '\n')
+        
+        logger.info(f"收到用户反馈: 类型={feedback_data.get('type')}, 股票={feedback_data.get('ticker', 'N/A')}, IP={request.remote_addr}")
+        
+        return jsonify({'success': True, 'message': '反馈提交成功'})
+    
+    except Exception as e:
+        logger.error(f"处理反馈时出错: {str(e)}")
+        return jsonify({'success': False, 'error': f'服务器错误: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     print("启动投资分析系统...")
