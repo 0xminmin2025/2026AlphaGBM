@@ -1,5 +1,12 @@
 flask
 flask-cors
+flask-sqlalchemy
+flask-jwt-extended
+werkzeug
+pycryptodome
+pymysql
+cryptography
+flask-mail
 yfinance
 pandas
 numpy

@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, jsonify
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_cors import CORS
-import pandas as pd
-import logging
+import random
+import string
 import os
+import re
+import logging
 
 # 配置日志
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -19,15 +21,373 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    logger.warning("未安装 python-dotenv 模块，无法加载环境变量")
+
+# 尝试导入数据库和JWT相关模块
+try:
+    from flask_sqlalchemy import SQLAlchemy
+except ImportError:
+    SQLAlchemy = None
+    
+try:
+    from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+except ImportError:
+    JWTManager = None
+    create_access_token = None
+    jwt_required = lambda: lambda f: f  # 降级为无操作装饰器
+    get_jwt_identity = None
+
+try:
+    from werkzeug.security import generate_password_hash, check_password_hash
+except ImportError:
+    def generate_password_hash(password):
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest()
+        
+    def check_password_hash(password_hash, password):
+        import hashlib
+        return password_hash == hashlib.sha256(password.encode()).hexdigest()
+
+try:
+    from flask_mail import Mail, Message
+except ImportError:
+    Mail = None
+    Message = None
+
+import pandas as pd
+import urllib.parse
+import smtplib
+
+# 初始化Flask应用
+app = Flask(__name__)
+
+# 配置数据库和JWT
+# MySQL数据库连接配置 - 从环境变量读取
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', '3306')
+DB_NAME = os.getenv('DB_NAME', 'alphag_db')
+
+# 对密码进行URL编码，以处理特殊字符
+encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', '')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.getenv('JWT_EXPIRE_HOURS', '24')))
+
+# 邮件配置 - 从环境变量读取
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', '587'))
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', '')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', ''))
+
+# 初始化扩展
+db = SQLAlchemy(app) if SQLAlchemy else None
+jwt = JWTManager(app) if JWTManager else None
+mail = Mail(app) if Mail else None
+
+# 如果缺少必要依赖，记录警告
+if not SQLAlchemy or not JWTManager:
+    logger.warning("缺少依赖库: flask_sqlalchemy 或 flask_jwt_extended")
+    logger.warning("认证功能将不可用，请安装所需依赖: pip install -r requirements.txt")
+    
+if not Mail:
+    logger.warning("缺少依赖库: flask_mail")
+    logger.warning("邮箱验证码功能将不可用，请安装所需依赖: pip install -r requirements.txt")
+
+# CORS配置
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# 用户模型
+if SQLAlchemy:
+    class User(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        username = db.Column(db.String(80), unique=True, nullable=False)
+        email = db.Column(db.String(120), unique=True, nullable=False)
+        password_hash = db.Column(db.String(200), nullable=False)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        last_login = db.Column(db.DateTime, nullable=True)
+        is_email_verified = db.Column(db.Boolean, default=False)  # 添加邮箱验证状态字段
+        
+        def set_password(self, password):
+            self.password_hash = generate_password_hash(password)
+            
+        def check_password(self, password):
+            return check_password_hash(self.password_hash, password)
+    
+    # 邮箱验证码模型
+    class EmailVerification(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        email = db.Column(db.String(120), nullable=False)
+        verification_code = db.Column(db.String(6), nullable=False)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        expires_at = db.Column(db.DateTime, nullable=False)
+        is_used = db.Column(db.Boolean, default=False)
+
+# 创建数据库表
+if SQLAlchemy:
+    with app.app_context():
+        try:
+            db.create_all()
+            logger.info("数据库表创建成功")
+        except Exception as e:
+            logger.error(f"创建数据库表时出错: {e}")
+
+# 导入其他模块
 from analysis_engine import get_market_data, get_ticker_price, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price, calculate_atr_stop_loss
 from ai_service import get_gemini_analysis
-
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 @app.route('/')
 def index():
     return render_template('index.html')
+    
+def generate_verification_code(length=6):
+    """生成指定长度的数字验证码"""
+    return ''.join(random.choices(string.digits, k=length))
+
+def send_verification_email(recipient_email, code):
+    """使用SMTP发送邮箱验证码"""
+    if not Mail or not mail:
+        logger.error("邮件服务未初始化，无法发送验证码")
+        return False
+    
+    try:
+        # 创建邮件消息对象
+        msg = Message(
+            'AlphaG 邮箱验证', 
+            recipients=[recipient_email],
+            sender=app.config['MAIL_DEFAULT_SENDER']
+        )
+        
+        # 设置邮件正文
+        msg.body = f'''
+您的邮箱验证码是: {code}
+
+请在5分钟内使用此验证码完成注册。
+
+如果您没有发起此请求，请忽略此邮件。
+
+--
+AlphaG投资分析系统
+'''
+        mail.send(msg)
+        logger.info(f"验证码已通过SMTP发送至 {recipient_email}")
+        return True
+    except ConnectionRefusedError as e:
+        logger.error(f"SMTP连接被拒绝: {e}，请检查SMTP服务器地址和端口配置")
+        return False
+    except TimeoutError as e:
+        logger.error(f"SMTP连接超时: {e}")
+        return False
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP认证失败: {e}，请检查邮箱账号和密码配置")
+        return False
+    except smtplib.SMTPServerDisconnected as e:
+        logger.error(f"SMTP服务器断开连接: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"发送验证码失败: {e}")
+        return False
+
+# 用户注册API端点 - 第一步：请求验证码
+@app.route('/api/register/request-code', methods=['POST'])
+def request_verification_code():
+    # 如果缺少必要依赖，返回友好错误
+    if not SQLAlchemy or not Mail:
+        return jsonify({'error': '验证码模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
+        
+    try:
+        data = request.json
+        
+        # 验证输入参数
+        if 'email' not in data:
+            return jsonify({'error': '缺少邮箱参数'}), 400
+        
+        email = data['email'].strip()
+        
+        # 验证邮箱格式
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            return jsonify({'error': '邮箱格式不正确'}), 400
+        
+        # 检查邮箱是否已存在且已验证
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user and existing_user.is_email_verified:
+            return jsonify({'error': '该邮箱已被注册并验证'}), 409
+        
+        # 生成验证码
+        code = generate_verification_code()
+        expires_at = datetime.utcnow() + timedelta(minutes=5)
+        
+        # 删除该邮箱之前的验证码
+        EmailVerification.query.filter_by(email=email).delete()
+        
+        # 保存新验证码
+        verification = EmailVerification(
+            email=email,
+            verification_code=code,
+            expires_at=expires_at
+        )
+        db.session.add(verification)
+        db.session.commit()
+        
+        # 发送验证码邮件
+        if send_verification_email(email, code):
+            return jsonify({
+                'message': '验证码已发送至您的邮箱，请查收',
+                'email': email
+            }), 200
+        else:
+            return jsonify({'error': '发送验证码失败，请稍后重试'}), 500
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"发送验证码请求失败: {e}")
+        return jsonify({'error': '请求处理过程中发生错误'}), 500
+
+# 用户注册API端点 - 第二步：提交验证码和注册信息
+@app.route('/api/register', methods=['POST'])
+def register():
+    # 如果缺少必要依赖，返回友好错误
+    if not SQLAlchemy or not JWTManager:
+        return jsonify({'error': '认证模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
+        
+    try:
+        data = request.json
+        
+        # 验证输入参数
+        required_fields = ['username', 'email', 'password', 'verification_code']
+        if not all(k in data for k in required_fields):
+            return jsonify({'error': '缺少必要参数，请提供用户名、邮箱、密码和验证码'}), 400
+        
+        username = data['username'].strip()
+        email = data['email'].strip()
+        password = data['password']
+        code = data['verification_code'].strip()
+        
+        # 验证用户名格式
+        if len(username) < 3 or len(username) > 20:
+            return jsonify({'error': '用户名长度必须在3-20个字符之间'}), 400
+        
+        # 验证邮箱格式
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            return jsonify({'error': '邮箱格式不正确'}), 400
+        
+        # 验证密码强度
+        if len(password) < 6:
+            return jsonify({'error': '密码长度至少为6个字符'}), 400
+        
+        # 验证验证码
+        verification = EmailVerification.query.filter_by(
+            email=email,
+            verification_code=code,
+            is_used=False
+        ).first()
+        
+        if not verification:
+            return jsonify({'error': '验证码无效或已过期'}), 400
+        
+        if datetime.utcnow() > verification.expires_at:
+            return jsonify({'error': '验证码已过期，请重新获取'}), 400
+        
+        # 检查用户名是否已存在
+        if User.query.filter_by(username=username).first():
+            return jsonify({'error': '用户名已存在'}), 409
+        
+        # 标记验证码为已使用
+        verification.is_used = True
+        
+        # 创建或更新用户
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # 如果用户存在但未验证，则更新信息
+            user.username = username
+            user.set_password(password)
+            user.is_email_verified = True
+        else:
+            # 创建新用户
+            user = User(username=username, email=email, is_email_verified=True)
+            user.set_password(password)
+            db.session.add(user)
+        
+        db.session.commit()
+        
+        logger.info(f"新用户注册成功: {username}")
+        
+        # 创建访问令牌
+        access_token = create_access_token(identity=user.id)
+        
+        return jsonify({
+            'message': '注册成功',
+            'user_id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'access_token': access_token
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"用户注册失败: {e}")
+        return jsonify({'error': '注册过程中发生错误'}), 500
+
+# 用户登录API端点
+@app.route('/api/login', methods=['POST'])
+def login():
+    # 如果缺少必要依赖，返回友好错误
+    if not SQLAlchemy or not JWTManager:
+        return jsonify({'error': '认证模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
+        
+    try:
+        data = request.json
+        
+        # 验证输入参数
+        if not all(k in data for k in ['email', 'password']):
+            return jsonify({'error': '缺少必要参数'}), 400
+        
+        email = data['email'].strip()
+        password = data['password']
+        
+        # 通过邮箱查找用户
+        user = User.query.filter_by(email=email).first()
+        
+        # 验证用户是否存在且密码正确
+        if not user or not user.check_password(password):
+            return jsonify({'error': '邮箱或密码错误'}), 401
+        
+        # 检查邮箱是否已验证
+        if not user.is_email_verified:
+            return jsonify({'error': '邮箱尚未验证，请先验证邮箱'}), 403
+        
+        # 更新最后登录时间
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        
+        logger.info(f"用户登录成功: {user.username} (ID: {user.id})")
+        
+        # 创建访问令牌
+        access_token = create_access_token(identity=user.id)
+        
+        return jsonify({
+            'message': '登录成功',
+            'user_id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'access_token': access_token
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"用户登录失败: {e}")
+        return jsonify({'error': '登录过程中发生错误'}), 500
 
 @app.route('/api/stock-price', methods=['GET'])
 def get_stock_price():
@@ -47,6 +407,7 @@ def get_stock_price():
 
 
 @app.route('/api/analyze', methods=['POST'])
+# @jwt_required()
 def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '').upper()
@@ -54,7 +415,10 @@ def analyze():
     onlyHistoryData = req_data.get('onlyHistoryData', False)
     startDate = req_data.get('startDate', None)
     
-    logger.info(f"收到分析请求: {ticker}, 风格: {style}, onlyHistoryData: {onlyHistoryData}, 请求IP: {request.remote_addr}")
+    # 获取当前用户ID
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    logger.info(f"收到分析请求: {ticker}, 风格: {style}, onlyHistoryData: {onlyHistoryData}, 用户: {user.username if user else '未知'}")
 
     # 1. 获取硬数据
     from analysis_engine import normalize_ticker
