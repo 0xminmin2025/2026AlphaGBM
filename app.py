@@ -325,7 +325,7 @@ def register():
         logger.info(f"新用户注册成功: {username}")
         
         # 创建访问令牌
-        access_token = create_access_token(identity=user.id)
+        access_token = create_access_token(identity=str(user.id))
         
         return jsonify({
             'message': '注册成功',
@@ -375,7 +375,7 @@ def login():
         logger.info(f"用户登录成功: {user.username} (ID: {user.id})")
         
         # 创建访问令牌
-        access_token = create_access_token(identity=user.id)
+        access_token = create_access_token(identity=str(user.id))
         
         return jsonify({
             'message': '登录成功',
@@ -407,7 +407,7 @@ def get_stock_price():
 
 
 @app.route('/api/analyze', methods=['POST'])
-# @jwt_required()
+@jwt_required()
 def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '').upper()
@@ -417,8 +417,13 @@ def analyze():
     
     # 获取当前用户ID
     current_user_id = get_jwt_identity()
-    user = User.query.get(current_user_id)
-    logger.info(f"收到分析请求: {ticker}, 风格: {style}, onlyHistoryData: {onlyHistoryData}, 用户: {user.username if user else '未知'}")
+    # 如果user_id是字符串，尝试转换回整数类型
+    try:
+        current_user_id = int(current_user_id) if current_user_id else None
+    except ValueError:
+        current_user_id = None
+    user = User.query.get(current_user_id) if current_user_id else None
+    logger.info(f"收到分析请求: {ticker}, 风格: {style}, onlyHistoryData: {onlyHistoryData}, 用户: {user.username if user else '未知'}, 用户ID: {current_user_id}")
 
     # 1. 获取硬数据
     from analysis_engine import normalize_ticker
