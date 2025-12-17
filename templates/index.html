@@ -28,6 +28,148 @@
             color: white;
         }
 
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #334155;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 8px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: white;
+            text-decoration: none;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-control {
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+        }
+
+        .form-control:focus {
+            background-color: #0f172a;
+            border-color: var(--accent);
+            color: white;
+            box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+
+        .btn-secondary {
+            background-color: #475569;
+            border: none;
+        }
+
+        .btn-secondary:hover {
+            background-color: #334155;
+        }
+
+        .message {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .message.error {
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+        }
+
+        .message.success {
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid #10b981;
+            color: #6ee7b7;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .modal-content {
+                margin: 25% auto;
+                width: 95%;
+            }
+        }
+
+        /* 按钮通用样式 */
+        .btn-common {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .btn-common:hover {
+            background-color: #2563eb;
+        }
+
+        /* 输入框通用样式 */
+        .input-common {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #334155;
+            background-color: #0f172a;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .input-common:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
         .btn-primary {
             background-color: var(--accent);
             border: none;
@@ -161,31 +303,98 @@
 </head>
 
 <body>
-    <!-- 查询次数限制提示模态框 -->
-    <div id="queryLimitModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-        <div class="bg-[#1E293B] rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-700">
-            <div class="text-center">
-                <h3 class="text-xl font-bold text-red-400 mb-4">查询次数已达上限</h3>
-                <p class="text-gray-300 mb-2">您今日已使用 <span id="usedQueries"
-                        class="font-bold text-yellow-400"></span>/<span id="maxQueries"
-                        class="font-bold text-blue-400"></span> 次查询机会</p>
-                <p class="text-gray-400 mb-6">查询次数将于 <span id="nextResetTime" class="text-green-400"></span> 重置</p>
-                <button onclick="document.getElementById('queryLimitModal').style.display = 'none'"
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition duration-300">
-                    我知道了
-                </button>
+    <!-- 登录模态框 -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>用户登录</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="loginEmail">邮箱</label>
+                        <input type="email" id="loginEmail" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">密码</label>
+                        <input type="password" id="loginPassword" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" onclick="handleLogin()">登录</button>
+                        <span style="margin-left: 10px;">还没有账号？<a href="javascript:void(0)"
+                                onclick="showRegisterModal()">立即注册</a></span>
+                    </div>
+                    <div id="loginMessage" class="message"></div>
+                </form>
             </div>
         </div>
     </div>
 
+    <!-- 注册模态框 -->
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>用户注册</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="registerUsername">用户名</label>
+                        <input type="text" id="registerUsername" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">邮箱</label>
+                        <input type="email" id="registerEmail" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerCode">验证码</label>
+                        <div style="display: flex;">
+                            <input type="text" id="registerCode" required class="form-control"
+                                style="flex: 1; margin-right: 10px;">
+                            <button type="button" class="btn btn-secondary" id="sendCodeBtn"
+                                onclick="requestVerificationCode()">获取验证码</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">密码</label>
+                        <input type="password" id="registerPassword" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" onclick="handleRegister()">注册</button>
+                        <span style="margin-left: 10px;">已有账号？<a href="javascript:void(0)"
+                                onclick="showLoginModal()">立即登录</a></span>
+                    </div>
+                    <div id="registerMessage" class="message"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
     <div class="container py-5">
         <div class="row mb-4 align-items-center">
             <div class="col-md-6">
-                <h2 class="fw-bold"><span class="text-primary">Alpha</span>G 智能投研</h2>
-                <p class="mb-0" style="color: #94a3b8;">Powered by Gemini and G=B+M Investment Model</p>
-                <div id="queryCountDisplay" class="mt-2 text-sm" style="color: #60a5fa;"></div>
+                <div>
+                    <h2 class="fw-bold"><span class="text-primary">Alpha</span>G 智能投研</h2>
+                    <p class="mb-0" style="color: #94a3b8;">Powered by Gemini and G=B+M Investment Model</p>
+                    <div id="queryCountDisplay" class="mt-2 text-sm" style="color: #60a5fa;"></div>
+                </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6 d-flex justify-content-end">
+                <div id="authButtons" class="md:flex items-center gap-2">
+                    <button id="loginBtn" class="btn btn-primary" onclick="showLoginModal()">登录</button>
+                    <div id="userInfo" class="hidden d-flex items-center align-items-center gap-3">
+                        <span id="usernameDisplay" class="text-white font-medium">用户: </span>
+                        <button id="logoutBtn" class="btn btn-secondary px-3 py-1"
+                            onclick="handleLogout()">退出登录</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-md-12">
                 <div class="mb-2">
                     <small style="color: #94a3b8; font-size: 0.8rem;">选择您的投资风格</small>
                 </div>
@@ -343,6 +552,18 @@
     </div>
 
     <script>
+        function updateQueryCountDisplay(queryInfo) {
+            // 查询次数显示函数
+            const displayElement = document.getElementById('queryCountDisplay');
+            if (displayElement && queryInfo) {
+                // 显示"今日已查询: used/max次"
+                displayElement.textContent = `今日已查询: ${queryInfo.used}/${queryInfo.max}次`;
+                displayElement.style.display = 'block';
+            } else if (displayElement) {
+                // 如果没有查询信息，则隐藏显示
+                displayElement.style.display = 'none';
+            }
+        }
         let chartInstance = null;
 
         // 风格说明映射
@@ -373,18 +594,6 @@
 
             if (!ticker) return alert("请输入代码");
 
-            // 检查查询次数限制
-            if (!checkQueryLimit()) {
-                const remaining = getRemainingQueries();
-                const used = MAX_QUERIES_PER_DAY - remaining;
-                showQueryLimitModal(used, MAX_QUERIES_PER_DAY);
-                return;
-            }
-
-            // 增加查询次数
-            incrementQueryCount();
-            updateQueryCountDisplay();
-
             document.getElementById('loading').style.display = 'block';
             document.getElementById('dashboard').style.display = 'none';
 
@@ -393,9 +602,24 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
+                // 获取JWT token
+                const token = localStorage.getItem('token');
+
+                // 检查是否有token，没有则显示登录模态框
+                if (!token) {
+                    clearTimeout(timeoutId);
+                    document.getElementById('loading').style.display = 'none';
+                    alert('请先登录以使用分析功能');
+                    showLoginModal();
+                    return;
+                }
+
                 const res = await fetch('/api/analyze', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` // 添加JWT token认证
+                    },
                     body: JSON.stringify({ ticker, style }),
                     signal: controller.signal
                 });
@@ -407,6 +631,43 @@
 
                 // 检查响应状态
                 if (!res.ok) {
+                    // 特殊处理401未授权错误（token无效或过期）
+                    if (res.status === 401) {
+                        // 清除本地存储的token
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('username');
+                        // 更新登录状态UI
+                        checkLoginStatus();
+                        clearTimeout(timeoutId);
+                        document.getElementById('loading').style.display = 'none';
+                        alert('登录状态已过期，请重新登录');
+                        showLoginModal();
+                        return;
+                    }
+
+                    // 特殊处理429查询次数限制错误
+                    if (res.status === 429) {
+                        clearTimeout(timeoutId);
+                        document.getElementById('loading').style.display = 'none';
+
+                        try {
+                            const errorJson = JSON.parse(responseText);
+                            const errorMsg = errorJson.error || '查询次数已达上限';
+                            const queryInfo = errorJson.query_info;
+
+                            let detailedMsg = errorMsg;
+                            if (queryInfo) {
+                                updateQueryCountDisplay(queryInfo);
+                                detailedMsg += `\n\n已使用: ${queryInfo.used}次\n最大次数: ${queryInfo.max}次\n重置时间: ${queryInfo.reset_time}`;
+                            }
+
+                            alert(detailedMsg);
+                        } catch (parseError) {
+                            alert('查询次数已达上限，请明日再试');
+                        }
+                        return;
+                    }
+
                     // 尝试解析为JSON
                     try {
                         const errorJson = JSON.parse(responseText);
@@ -427,6 +688,12 @@
                 }
 
                 if (json.success) {
+                    // 更新查询次数显示
+                    if (json.query_info) {
+                        updateQueryCountDisplay(json.query_info);
+                    } else {
+                        updateQueryCountDisplay();
+                    }
                     renderDashboard(json);
                 } else {
                     // 显示详细的错误信息
@@ -935,107 +1202,60 @@
             });
         }
 
-        // 查询次数限制常量
-        const QUERY_COUNT_KEY = 'query_count';
-        const QUERY_DATE_KEY = 'query_date';
-        const MAX_QUERIES_PER_DAY = 2; // 每日最大查询次数
+        // 移除了查询次数限制相关代码
+    </script>
 
-        // 获取今日查询次数数据
-        function getQueryCountData() {
-            const today = new Date().toDateString();
-            const savedDate = localStorage.getItem(QUERY_DATE_KEY);
-            const savedCount = localStorage.getItem(QUERY_COUNT_KEY);
-
-            // 如果日期不是今天，重置查询次数
-            if (savedDate !== today) {
-                localStorage.setItem(QUERY_DATE_KEY, today);
-                localStorage.setItem(QUERY_COUNT_KEY, '0');
-                return { count: 0, date: today };
-            }
-
-            return {
-                count: parseInt(savedCount || '0'),
-                date: today
-            };
+    <!-- 用户认证相关脚本 -->
+    <script src="{{ url_for('static', filename='utils.js') }}"></script>
+    <script>
+        // 模态框控制函数
+        function showLoginModal() {
+            document.getElementById('loginModal').style.display = 'block';
         }
 
-        // 检查是否超过查询限制
-        function checkQueryLimit() {
-            const { count } = getQueryCountData();
-            return count < MAX_QUERIES_PER_DAY;
+        function showRegisterModal() {
+            document.getElementById('registerModal').style.display = 'block';
         }
 
-        // 增加查询次数
-        function incrementQueryCount() {
-            const { count } = getQueryCountData();
-            localStorage.setItem(QUERY_COUNT_KEY, (count + 1).toString());
+        function hideModals() {
+            document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('registerModal').style.display = 'none';
         }
 
-        // 获取剩余查询次数
-        function getRemainingQueries() {
-            const { count } = getQueryCountData();
-            return Math.max(0, MAX_QUERIES_PER_DAY - count);
-        }
-
-        // 更新查询次数显示
-        function updateQueryCountDisplay() {
-            const remaining = getRemainingQueries();
-            const used = MAX_QUERIES_PER_DAY - remaining;
-            console.log(`今日已使用查询次数: ${used}/${MAX_QUERIES_PER_DAY}`);
-
-            // 更新查询次数显示元素
-            const queryCountEl = document.getElementById('queryCountDisplay');
-            if (queryCountEl) {
-                queryCountEl.textContent = `今日查询次数: ${used}/${MAX_QUERIES_PER_DAY}`;
-            }
-        }
-
-        // 页面加载时更新查询次数显示并检查是否已达到上限
-        window.addEventListener('DOMContentLoaded', () => {
-            updateQueryCountDisplay();
-
-            // 检查查询次数并记录状态
-            const isWithinLimit = checkQueryLimit();
-            console.log('查询次数状态检查：', { isWithinLimit });
-
-            // 只有在查询次数超过限制时才显示提示模态框
-            if (!isWithinLimit) {
-                const remaining = getRemainingQueries();
-                const used = MAX_QUERIES_PER_DAY - remaining;
-                console.log('显示查询限制模态框：', { used, max: MAX_QUERIES_PER_DAY });
-                showQueryLimitModal(used, MAX_QUERIES_PER_DAY);
-            } else {
-                document.getElementById('queryLimitModal').style.display = 'none';
+        // 关闭按钮事件监听
+        document.querySelectorAll('.modal .close').forEach(closeBtn => {
+            closeBtn.onclick = function () {
+                hideModals();
             }
         });
 
-        // 显示查询次数限制提示模态框
-        function showQueryLimitModal(used, max) {
-            const modal = document.getElementById('queryLimitModal');
-            if (modal) {
-                document.getElementById('usedQueries').textContent = used;
-                document.getElementById('maxQueries').textContent = max;
-                document.getElementById('nextResetTime').textContent = getNextResetTime();
-                modal.style.display = 'block';
-            } else {
-                alert(`您今日已使用完所有${max}次查询机会，请明天再试。`);
+        // 点击模态框外部关闭
+        window.onclick = function (event) {
+            if (event.target.classList.contains('modal')) {
+                hideModals();
             }
         }
 
-        // 获取下次重置时间
-        function getNextResetTime() {
-            const now = new Date();
-            const tomorrow = new Date(now);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            tomorrow.setHours(0, 0, 0, 0);
+        // 页面加载时检查登录状态
+        // document.addEventListener('DOMContentLoaded', function () {
+        // checkLoginStatus();
 
-            const diffMs = tomorrow - now;
-            const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-            return `${diffHrs}小时${diffMins}分钟后`;
-        }
+        // 添加移动端菜单按钮
+        // const authContainer = document.createElement('div');
+        // authContainer.className = 'md:hidden mt-2';
+        // authContainer.id = 'mobileAuthButtons';
+        // authContainer.innerHTML = `
+        //     <button id="mobileLoginBtn" class="btn btn-sm btn-primary me-2" onclick="showLoginModal()">登录</button>
+        //     <button id="mobileRegisterBtn" class="btn btn-sm btn-secondary" onclick="showRegisterModal()">注册</button>
+        //     <div id="mobileUserInfo" class="hidden mt-2">
+        //         <span id="mobileUsernameDisplay" class="text-white mr-2">用户: </span>
+        //         <button id="mobileLogoutBtn" class="btn btn-sm btn-secondary" onclick="handleLogout()">退出登录</button>
+        //     </div>
+        // `;
+        // document.querySelector('.row.mb-4.align-items-center').appendChild(authContainer);
+        // });
     </script>
+    <script src="/static/auth.js"></script>
 </body>
 
 </html>
