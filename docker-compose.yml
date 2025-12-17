@@ -24,7 +24,7 @@ services:
     image: mysql:8.0
     container_name: alphag_mysql
     ports:
-      - "3306:3306"
+      - "3310:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=G7r#pL9!xQ2@zW8$
       - MYSQL_DATABASE=alphag_db
