@@ -148,6 +148,19 @@ if SQLAlchemy:
         # 关联到用户表
         user = db.relationship('User', backref=db.backref('analysis_requests', lazy=True))
     
+    # 用户反馈模型
+    class Feedback(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+        type = db.Column(db.String(50), nullable=False)  # 反馈类型
+        content = db.Column(db.Text, nullable=False)  # 反馈内容
+        ticker = db.Column(db.String(20), nullable=True)  # 相关股票代码（如果有）
+        ip_address = db.Column(db.String(50), nullable=True)  # IP地址
+        submitted_at = db.Column(db.DateTime, default=datetime.now)  # 提交时间
+        
+        # 关联到用户表
+        user = db.relationship('User', backref=db.backref('feedbacks', lazy=True))
+    
     # 每日查询统计模型
     class DailyQueryCount(db.Model):
         id = db.Column(db.Integer, primary_key=True)
@@ -728,6 +741,50 @@ def analyze():
             logger.error(f"保存分析请求记录时出错: {db_error}")
         
         return jsonify({'success': False, 'error': error_msg}), 500
+
+
+@app.route('/api/feedback', methods=['POST'])
+@jwt_required()
+def submit_feedback():
+    """接收用户反馈"""
+    try:
+        # 获取用户信息
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'success': False, 'error': '请先登录后再提交反馈'}), 401
+        user_id = user_info['user_id']
+        
+        feedback_data = request.json
+        
+        # 验证必填字段
+        if not feedback_data.get('type'):
+            return jsonify({'success': False, 'error': '请选择反馈类型'}), 400
+        
+        if not feedback_data.get('content'):
+            return jsonify({'success': False, 'error': '请填写反馈内容'}), 400
+        
+        # 创建反馈记录
+        feedback = Feedback(
+            user_id=user_id,
+            type=feedback_data.get('type'),
+            content=feedback_data.get('content'),
+            ticker=feedback_data.get('ticker'),
+            ip_address=request.remote_addr
+        )
+        
+        # 保存到数据库
+        db.session.add(feedback)
+        db.session.commit()
+        
+        logger.info(f"收到用户反馈: 用户ID={user_id}, 类型={feedback_data.get('type')}, 股票={feedback_data.get('ticker', 'N/A')}")
+        
+        return jsonify({'success': True, 'message': '反馈提交成功'})
+    
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"处理反馈时出错: {str(e)}")
+        return jsonify({'success': False, 'error': f"服务器错误: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     print("启动投资分析系统...")

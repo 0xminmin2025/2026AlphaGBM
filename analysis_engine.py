@@ -5,11 +5,322 @@ import requests
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+# 导入配置参数
+try:
+    from config import *
+except ImportError:
+    # 如果config.py不存在，使用默认值（向后兼容）
+    GROWTH_DISCOUNT_FACTOR = 0.6
+    ATR_MULTIPLIER_BASE = 2.5
+    MIN_DAILY_VOLUME_USD = 5_000_000
+    FIXED_STOP_LOSS_PCT = 0.15
+    PEG_THRESHOLD_BASE = 1.5
+
+
+def check_liquidity(data, currency_symbol='$'):
+    """
+    检查股票流动性，判断是否满足交易要求
+    
+    参数:
+        data: 包含市场数据的字典
+        currency_symbol: 货币符号，用于计算成交额
+    
+    返回:
+        (is_liquid, liquidity_info)
+        is_liquid: 是否满足流动性要求
+        liquidity_info: 流动性信息字典
+    """
+    try:
+        # 获取历史数据中的成交量
+        if 'history_prices' in data and len(data.get('history_prices', [])) > 0:
+            # 从历史数据计算平均成交量
+            # 注意：这里需要实际的历史成交量数据
+            # 如果数据中没有，尝试从其他来源获取
+            pass
+        
+        # 尝试从volume_anomaly获取
+        volume_anomaly = data.get('volume_anomaly')
+        if volume_anomaly and volume_anomaly.get('historical_avg'):
+            # 估算日均成交额（成交量 * 当前价格）
+            avg_volume = volume_anomaly['historical_avg']
+            current_price = data.get('price', 0)
+            
+            if current_price > 0:
+                # 估算日均成交额（美元）
+                estimated_daily_volume_usd = avg_volume * current_price
+                
+                # 检查是否满足最低流动性要求
+                is_liquid = estimated_daily_volume_usd >= MIN_DAILY_VOLUME_USD
+                
+                return is_liquid, {
+                    'estimated_daily_volume_usd': estimated_daily_volume_usd,
+                    'min_required_usd': MIN_DAILY_VOLUME_USD,
+                    'meets_requirement': is_liquid
+                }
+        
+        # 如果无法获取成交量数据，返回默认值（允许交易，但标记为未知）
+        return True, {
+            'estimated_daily_volume_usd': None,
+            'min_required_usd': MIN_DAILY_VOLUME_USD,
+            'meets_requirement': True,
+            'warning': '无法获取成交量数据，流动性检查已跳过'
+        }
+    except Exception as e:
+        print(f"流动性检查出错: {e}")
+        # 出错时默认允许交易
+        return True, {'error': str(e)}
+
+
+def calculate_pe_percentile(current_pe, hist_data=None, ticker=None):
+    """
+    计算PE分位点（历史PE百分位）
+    
+    参数:
+        current_pe: 当前PE值
+        hist_data: 历史数据DataFrame（可选，如果有的话可以计算历史PE）
+        ticker: 股票代码（可选，用于获取历史数据）
+    
+    返回:
+        (pe_percentile, pe_z_score, historical_pe_list)
+        pe_percentile: PE百分位（0-100）
+        pe_z_score: Z分数
+        historical_pe_list: 历史PE列表（如果可用）
+    """
+    # TODO: 实现完整的PE分位点计算
+    # 当前版本：返回默认值，标记为需要改进
+    # 
+    # 完整实现需要：
+    # 1. 获取至少5年的历史财务数据
+    # 2. 计算每个季度/年度的历史PE
+    # 3. 计算当前PE在历史PE中的百分位
+    # 4. 计算Z分数（标准化偏离度）
+    #
+    # 数据来源：
+    # - Yahoo Finance的季度/年度财务数据
+    # - 或使用专业数据源（Alpha Vantage, FMP Cloud等）
+    
+    historical_pe_list = []
+    
+    if hist_data is not None and len(hist_data) > 0:
+        # 如果有历史数据，可以尝试从价格和盈利数据计算历史PE
+        # 但需要盈利数据（EPS），这在yfinance中较难获取
+        pass
+    
+    # 暂时返回默认值
+    if len(historical_pe_list) < PE_MIN_DATA_POINTS:
+        # 数据不足，返回中性值
+        return 50.0, 0.0, []
+    
+    # 计算百分位
+    import numpy as np
+    pe_percentile = (sum(1 for pe in historical_pe_list if pe < current_pe) / len(historical_pe_list)) * 100
+    
+    # 计算Z分数
+    mean_pe = np.mean(historical_pe_list)
+    std_pe = np.std(historical_pe_list)
+    if std_pe > 0:
+        pe_z_score = (current_pe - mean_pe) / std_pe
+    else:
+        pe_z_score = 0.0
+    
+    return pe_percentile, pe_z_score, historical_pe_list
+
+
+def get_pe_sentiment_from_percentile(pe_percentile, pe_z_score):
+    """
+    基于PE分位点计算市场情绪分数
+    
+    参数:
+        pe_percentile: PE百分位（0-100）
+        pe_z_score: Z分数
+    
+    返回:
+        市场情绪分数（0-10）
+    """
+    # 根据PE分位点确定基础情绪分数
+    if pe_percentile < 20:
+        base_sentiment = PE_PERCENTILE_SENTIMENT['very_low'][2]
+    elif pe_percentile < 40:
+        base_sentiment = PE_PERCENTILE_SENTIMENT['low'][2]
+    elif pe_percentile < 60:
+        base_sentiment = PE_PERCENTILE_SENTIMENT['neutral_low'][2]
+    elif pe_percentile < 80:
+        base_sentiment = PE_PERCENTILE_SENTIMENT['neutral_high'][2]
+    elif pe_percentile < 90:
+        base_sentiment = PE_PERCENTILE_SENTIMENT['high'][2]
+    else:
+        base_sentiment = PE_PERCENTILE_SENTIMENT['very_high'][2]
+    
+    # Z分数调整（极端偏离时进一步调整）
+    if abs(pe_z_score) > PE_Z_SCORE_THRESHOLD:
+        if pe_z_score > 0:
+            base_sentiment = min(10.0, base_sentiment + PE_Z_SCORE_ADJUSTMENT)
+        else:
+            base_sentiment = max(0.0, base_sentiment - PE_Z_SCORE_ADJUSTMENT)
+    
+    return base_sentiment
+
+
+def get_dynamic_peg_threshold(macro_data=None):
+    """
+    根据美债收益率动态调整PEG阈值
+    
+    参数:
+        macro_data: 宏观经济数据（包含treasury_10y）
+    
+    返回:
+        动态PEG阈值
+    """
+    base_threshold = PEG_THRESHOLD_BASE  # 默认1.5
+    
+    if macro_data and macro_data.get('treasury_10y'):
+        treasury_yield = macro_data['treasury_10y']
+        
+        # 简化版：高息环境模式
+        # 如果美债收益率>4%，降低PEG阈值20%
+        if treasury_yield >= TREASURY_YIELD_HIGH_THRESHOLD:
+            return base_threshold * HIGH_YIELD_PEG_ADJUSTMENT
+        else:
+            return base_threshold
+    else:
+        return base_threshold
+
+
+def infer_industry_from_name(name, symbol):
+    """
+    根据公司名称和股票代码推断行业信息
+    用于新上市公司或数据源缺失的情况
+    
+    返回: (sector, industry) 元组
+    """
+    if not name:
+        return None, None
+    
+    name_lower = name.lower()
+    symbol_lower = symbol.lower() if symbol else ''
+    
+    # 科技/半导体相关关键词
+    tech_keywords = {
+        'semiconductor': ['芯片', '半导体', 'ic', '集成电路', 'chip', 'semiconductor', 'gpu', 'cpu', 'ai芯片', '图形处理器', 'thread', '线程', '图形', 'graphics', '处理器', 'processor', '算力', '计算'],
+        'software': ['软件', 'software', 'saas', '云计算', 'cloud', '平台', 'platform'],
+        'internet': ['互联网', 'internet', '电商', 'e-commerce', '社交', 'social', '媒体', 'media'],
+        'hardware': ['硬件', 'hardware', '设备', 'equipment', '终端', '终端设备'],
+        'ai_ml': ['人工智能', 'artificial intelligence', 'ai', '机器学习', 'machine learning', 'deep learning', '深度学习'],
+        'gaming': ['游戏', 'game', 'gaming', '娱乐', 'entertainment']
+    }
+    
+    # 医疗相关
+    healthcare_keywords = {
+        'pharmaceutical': ['制药', 'pharmaceutical', '药', 'medicine', '药品'],
+        'biotech': ['生物', 'biotech', 'biotechnology', '生物技术', '生物医药'],
+        'medical_device': ['医疗设备', 'medical device', '医疗器械', '医疗仪器']
+    }
+    
+    # 金融相关
+    finance_keywords = {
+        'bank': ['银行', 'bank', 'banking'],
+        'insurance': ['保险', 'insurance', 'insurer'],
+        'securities': ['证券', 'securities', '券商', 'brokerage']
+    }
+    
+    # 能源相关
+    energy_keywords = {
+        'oil_gas': ['石油', 'oil', '天然气', 'gas', '石化', 'petrochemical'],
+        'new_energy': ['新能源', 'new energy', '光伏', 'solar', '风电', 'wind', '电池', 'battery', '锂电池']
+    }
+    
+    # 消费相关
+    consumer_keywords = {
+        'retail': ['零售', 'retail', '消费', 'consumer'],
+        'food_beverage': ['食品', 'food', '饮料', 'beverage', '餐饮', 'restaurant']
+    }
+    
+    # 检查科技类
+    for sub_ind, keywords in tech_keywords.items():
+        if any(keyword in name_lower for keyword in keywords):
+            if sub_ind == 'semiconductor':
+                return 'Technology', 'Semiconductors'
+            elif sub_ind == 'software':
+                return 'Technology', 'Software'
+            elif sub_ind == 'internet':
+                return 'Technology', 'Internet'
+            elif sub_ind == 'ai_ml':
+                return 'Technology', 'Artificial Intelligence'
+            elif sub_ind == 'gaming':
+                return 'Technology', 'Interactive Media & Services'
+            else:
+                return 'Technology', 'Technology Hardware'
+    
+    # 检查医疗类
+    for sub_ind, keywords in healthcare_keywords.items():
+        if any(keyword in name_lower for keyword in keywords):
+            if sub_ind == 'biotech':
+                return 'Healthcare', 'Biotechnology'
+            elif sub_ind == 'medical_device':
+                return 'Healthcare', 'Medical Devices'
+            else:
+                return 'Healthcare', 'Pharmaceuticals'
+    
+    # 检查金融类
+    for sub_ind, keywords in finance_keywords.items():
+        if any(keyword in name_lower for keyword in keywords):
+            if sub_ind == 'bank':
+                return 'Financial Services', 'Banks'
+            elif sub_ind == 'insurance':
+                return 'Financial Services', 'Insurance'
+            else:
+                return 'Financial Services', 'Capital Markets'
+    
+    # 检查能源类
+    for sub_ind, keywords in energy_keywords.items():
+        if any(keyword in name_lower for keyword in keywords):
+            if sub_ind == 'new_energy':
+                return 'Energy', 'Renewable Energy'
+            else:
+                return 'Energy', 'Oil & Gas'
+    
+    # 检查消费类
+    for sub_ind, keywords in consumer_keywords.items():
+        if any(keyword in name_lower for keyword in keywords):
+            if sub_ind == 'food_beverage':
+                return 'Consumer Defensive', 'Food & Beverages'
+            else:
+                return 'Consumer Cyclical', 'Retail'
+    
+    # A股代码规则推断
+    if symbol_lower.endswith('.ss') or symbol_lower.endswith('.sz'):
+        code = symbol_lower.replace('.ss', '').replace('.sz', '')
+        if code.startswith('688'):
+            # 科创板，通常是科技类，根据名称进一步细分
+            if any(kw in name_lower for kw in ['芯片', '半导体', 'chip', 'gpu', 'cpu', '集成电路', 'ic', 'thread', '线程']):
+                return 'Technology', 'Semiconductors'
+            elif any(kw in name_lower for kw in ['软件', 'software', '云计算', 'cloud', 'saas']):
+                return 'Technology', 'Software'
+            elif any(kw in name_lower for kw in ['人工智能', 'ai', 'machine learning', '机器学习']):
+                return 'Technology', 'Artificial Intelligence'
+            else:
+                return 'Technology', 'Technology'
+        elif code.startswith('300'):
+            # 创业板，可能是科技或医疗
+            if any(kw in name_lower for kw in ['医疗', '生物', 'medical', 'biotech']):
+                return 'Healthcare', 'Healthcare'
+            return 'Technology', 'Technology'
+        elif code.startswith(('600', '601', '603')):
+            # 上交所主板，可能多种行业
+            pass
+        elif code.startswith(('000', '001', '002')):
+            # 深交所主板/中小板
+            pass
+    
+    # 无法推断
+    return None, None
+
 
 def normalize_ticker(ticker):
     """
     标准化股票代码格式
     自动识别市场并添加后缀
+    支持模糊搜索，包括港股前面补0的情况（如02525 -> 2525.HK）
     """
     ticker = ticker.strip().upper()
     
@@ -18,17 +329,41 @@ def normalize_ticker(ticker):
         return ticker
     
     # 判断市场类型
-    # 港股：4-5位数字（港股代码范围通常是0001-9999）
-    if ticker.isdigit() and (len(ticker) == 4 or len(ticker) == 5):
-        # 港股代码通常是4-5位数字，优先识别为港股
-        return f"{ticker}.HK"
-    
-    # A股：6位数字，上海600/601/603/688开头，深圳000/001/002/300开头
-    if ticker.isdigit() and len(ticker) == 6:
-        if ticker.startswith(('600', '601', '603', '688')):
-            return f"{ticker}.SS"  # 上海
-        elif ticker.startswith(('000', '001', '002', '300')):
-            return f"{ticker}.SZ"  # 深圳
+    # 港股：支持4-5位数字，包括前面有0的情况（如02525 -> 2525.HK）
+    if ticker.isdigit():
+        # 去除前导0，得到有效数字
+        ticker_digits = ticker.lstrip('0') or '0'  # 如果全是0，保留一个0
+        original_length = len(ticker)
+        digits_length = len(ticker_digits)
+        
+        # A股优先判断：如果原始是6位或补足到6位后符合A股规则
+        if original_length == 6 or (original_length < 6 and digits_length <= 6):
+            normalized_6 = ticker_digits.zfill(6)
+            if normalized_6.startswith(('600', '601', '603', '688')):
+                return f"{normalized_6}.SS"  # 上海
+            elif normalized_6.startswith(('000', '001', '002', '300')):
+                return f"{normalized_6}.SZ"  # 深圳
+        
+        # 港股判断：如果原始是4-5位，或去0后是1-5位且原始>=4位，识别为港股
+        # 港股代码规则：可以是1-5位数字，但通常显示为4-5位
+        # 如果输入"02525"，应该识别为"02525.HK"（保留前导0）
+        # 如果输入"2525"，应该识别为"02525.HK"（补足到5位，港股标准格式）
+        if original_length >= 4 and digits_length >= 1 and digits_length <= 5:
+            # 如果原始长度已经是4-5位，保留原始格式（包括前导0）
+            # 否则补足到5位（港股标准格式）
+            if original_length == 4:
+                normalized_hk = ticker  # 4位直接使用
+            elif original_length == 5:
+                normalized_hk = ticker  # 5位直接使用
+            else:
+                # 其他情况，补足到5位
+                normalized_hk = ticker_digits.zfill(5)
+            return f"{normalized_hk}.HK"
+        elif original_length < 4 and digits_length >= 1 and digits_length <= 5:
+            # 如果原始长度小于4但去0后是1-5位，可能是港股代码（如"25" -> "00025.HK"）
+            # 但这种情况比较少见，优先尝试作为港股处理
+            normalized_hk = ticker_digits.zfill(5)
+            return f"{normalized_hk}.HK"
     
     # 美股：默认不加后缀，或者已经是标准格式
     return ticker
@@ -278,13 +613,29 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None):
             except (ValueError, TypeError):
                 beta = None
         
+        # 获取公司名称
+        company_name = info.get('longName') or info.get('shortName') or info.get('name') or normalized_ticker
+        
+        # 获取行业信息，如果缺失则尝试推断
+        sector = info.get('sector', 'Unknown')
+        industry = info.get('industry', 'Unknown')
+        
+        # 如果行业信息缺失，尝试根据公司名称推断
+        if sector == 'Unknown' or industry == 'Unknown' or not sector or not industry:
+            inferred_sector, inferred_industry = infer_industry_from_name(company_name, normalized_ticker)
+            if inferred_sector:
+                sector = inferred_sector
+            if inferred_industry:
+                industry = inferred_industry
+        
+        # 构建基础数据
         data = {
             "symbol": normalized_ticker,
             "currency_symbol": currency_symbol,
             "original_symbol": ticker,
-            "name": info.get('longName') or info.get('shortName') or info.get('name') or normalized_ticker,
-            "sector": info.get('sector', 'Unknown'),
-            "industry": info.get('industry', 'Unknown'),
+            "name": company_name,
+            "sector": sector,
+            "industry": industry,
             "price": float(current_price),
             "week52_high": float(week52_high),
             "week52_low": float(week52_low),
@@ -303,6 +654,12 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None):
             "atr": atr_value,  # ATR值，用于动态止损
             "beta": beta  # Beta值，用于调整ATR倍数
         }
+        
+        # 检查是否为ETF或基金
+        is_fund, fund_type = is_etf_or_fund(data)
+        data['is_etf_or_fund'] = is_fund
+        data['fund_type'] = fund_type if is_fund else None
+        
         return data
     except Exception as e:
         import traceback
@@ -354,7 +711,7 @@ def get_fed_meeting_dates():
 
 def get_cpi_release_dates():
     """
-    获取CPI发布日期
+    获取美国CPI发布日期
     CPI通常在每月中旬（10-15日）发布前一个月的数据
     """
     today = datetime.now().date()
@@ -376,10 +733,101 @@ def get_cpi_release_dates():
             cpi_dates.append({
                 'date': cpi_date.strftime('%Y-%m-%d'),
                 'days_until': int(days_until),
-                'data_month': (target_month - relativedelta(months=1)).strftime('%Y年%m月')
+                'data_month': (target_month - relativedelta(months=1)).strftime('%Y年%m月'),
+                'country': 'US'
             })
     
     return cpi_dates[:3]  # 返回最近3个
+
+
+def get_china_economic_events():
+    """
+    获取中国重要经济事件日期
+    包括：央行货币政策会议、CPI/PPI发布、GDP发布、PMI发布
+    """
+    today = datetime.now().date()
+    events = []
+    
+    # 1. 中国央行货币政策会议（通常每季度一次，1/4/7/10月）
+    current_year = today.year
+    pboc_meetings = [
+        datetime(current_year, 1, 20).date(),  # 通常在一月下旬
+        datetime(current_year, 4, 20).date(),  # 通常在四月中旬
+        datetime(current_year, 7, 20).date(),  # 通常在七月中旬
+        datetime(current_year, 10, 20).date(), # 通常在十月中旬
+        datetime(current_year + 1, 1, 20).date()  # 下一年
+    ]
+    
+    for meeting_date in pboc_meetings:
+        days_until = (meeting_date - today).days
+        if 0 <= days_until <= 90:
+            events.append({
+                'date': meeting_date.strftime('%Y-%m-%d'),
+                'days_until': int(days_until),
+                'type': '央行货币政策会议',
+                'country': 'CN'
+            })
+    
+    # 2. 中国CPI/PPI发布（通常在每月9-10日发布上月数据）
+    for i in range(1, 4):
+        target_month = today + relativedelta(months=i)
+        # CPI通常在每月9-10日发布
+        cpi_date = datetime(target_month.year, target_month.month, 10).date()
+        # 如果是周末，调整到下一个工作日
+        while cpi_date.weekday() >= 5:
+            cpi_date += timedelta(days=1)
+        
+        days_until = (cpi_date - today).days
+        if days_until >= 0:
+            events.append({
+                'date': cpi_date.strftime('%Y-%m-%d'),
+                'days_until': int(days_until),
+                'type': 'CPI/PPI发布',
+                'country': 'CN',
+                'data_month': (target_month - relativedelta(months=1)).strftime('%Y年%m月')
+            })
+    
+    # 3. 中国GDP发布（季度数据，通常在季后15-20日发布）
+    # Q1在4月中旬，Q2在7月中旬，Q3在10月中旬，Q4在次年1月中旬
+    gdp_releases = [
+        datetime(current_year, 4, 18).date(),   # Q1数据
+        datetime(current_year, 7, 18).date(),   # Q2数据
+        datetime(current_year, 10, 18).date(),  # Q3数据
+        datetime(current_year + 1, 1, 18).date() # Q4数据
+    ]
+    
+    for gdp_date in gdp_releases:
+        days_until = (gdp_date - today).days
+        if 0 <= days_until <= 90:
+            quarter = 'Q1' if gdp_date.month == 4 else 'Q2' if gdp_date.month == 7 else 'Q3' if gdp_date.month == 10 else 'Q4'
+            events.append({
+                'date': gdp_date.strftime('%Y-%m-%d'),
+                'days_until': int(days_until),
+                'type': 'GDP发布',
+                'country': 'CN',
+                'quarter': quarter
+            })
+    
+    # 4. 中国PMI发布（每月最后一天或次月1日发布上月数据）
+    for i in range(1, 4):
+        target_month = today + relativedelta(months=i)
+        # PMI通常在每月最后一天或次月1日发布
+        pmi_date = datetime(target_month.year, target_month.month, 1).date()
+        # 如果是周末，调整到下一个工作日
+        while pmi_date.weekday() >= 5:
+            pmi_date += timedelta(days=1)
+        
+        days_until = (pmi_date - today).days
+        if days_until >= 0:
+            events.append({
+                'date': pmi_date.strftime('%Y-%m-%d'),
+                'days_until': int(days_until),
+                'type': 'PMI发布',
+                'country': 'CN',
+                'data_month': (target_month - relativedelta(months=1)).strftime('%Y年%m月')
+            })
+    
+    return sorted(events, key=lambda x: x['days_until'])[:10]  # 返回最近10个事件
 
 
 def get_options_expiration_dates():
@@ -586,25 +1034,68 @@ def get_market_warnings(macro_data, options_data, data):
                     'event_date': meeting['date']
                 })
     
-    # 6. CPI发布预警
+    # 6. 美国CPI发布预警
     if macro_data.get('cpi_releases'):
         for cpi in macro_data['cpi_releases']:
-            days_until = cpi['days_until']
+            if cpi.get('country') == 'US':  # 只处理美国CPI
+                days_until = cpi['days_until']
+                if days_until <= 3:
+                    warnings.append({
+                        'level': 'high',
+                        'type': 'event',
+                        'message': f'美国CPI数据将在{cpi["date"]}发布（{days_until}天后，{cpi["data_month"]}数据），市场波动可能加剧',
+                        'urgency': 'immediate',
+                        'event_date': cpi['date'],
+                        'country': 'US'
+                    })
+                elif days_until <= 7:
+                    warnings.append({
+                        'level': 'medium',
+                        'type': 'event',
+                        'message': f'美国CPI数据将在{cpi["date"]}发布（{days_until}天后，{cpi["data_month"]}数据），建议关注',
+                        'urgency': 'soon',
+                        'event_date': cpi['date'],
+                        'country': 'US'
+                    })
+    
+    # 6.5 中国经济事件预警
+    if macro_data.get('china_events'):
+        for event in macro_data['china_events']:
+            days_until = event['days_until']
+            event_type = event.get('type', '经济事件')
+            country = event.get('country', 'CN')
+            
             if days_until <= 3:
+                message = f'中国{event_type}将在{event["date"]}举行/发布（{days_until}天后）'
+                if event.get('data_month'):
+                    message += f'，{event["data_month"]}数据'
+                elif event.get('quarter'):
+                    message += f'，{event["quarter"]}数据'
+                message += '，可能影响A股和港股市场'
+                
                 warnings.append({
                     'level': 'high',
                     'type': 'event',
-                    'message': f'CPI数据将在{cpi["date"]}发布（{days_until}天后，{cpi["data_month"]}数据），市场波动可能加剧',
+                    'message': message,
                     'urgency': 'immediate',
-                    'event_date': cpi['date']
+                    'event_date': event['date'],
+                    'country': country
                 })
             elif days_until <= 7:
+                message = f'中国{event_type}将在{event["date"]}举行/发布（{days_until}天后）'
+                if event.get('data_month'):
+                    message += f'，{event["data_month"]}数据'
+                elif event.get('quarter'):
+                    message += f'，{event["quarter"]}数据'
+                message += '，建议关注'
+                
                 warnings.append({
                     'level': 'medium',
                     'type': 'event',
-                    'message': f'CPI数据将在{cpi["date"]}发布（{days_until}天后，{cpi["data_month"]}数据），建议关注',
+                    'message': message,
                     'urgency': 'soon',
-                    'event_date': cpi['date']
+                    'event_date': event['date'],
+                    'country': country
                 })
     
     # 7. 期权到期日（交割日）预警 - 市场级别风险
@@ -880,7 +1371,9 @@ def get_macro_market_data():
         'oil_change': None,
         'volume_anomaly': None,  # 成交量异常（需要结合个股数据）
         'fed_meetings': [],  # 美联储会议日期
-        'cpi_releases': [],  # CPI发布日期
+        'cpi_releases': [],  # 美国CPI发布日期
+        'china_events': [],  # 中国经济事件（央行会议、CPI/PPI、GDP、PMI）
+        'other_events': [],  # 其他国家的重要经济事件（后续可扩展）
         'options_expirations': [],  # 期权到期日（交割日）
         'geopolitical_risk': None,  # 地缘政治风险指数
     }
@@ -960,6 +1453,12 @@ def get_macro_market_data():
             macro_data['options_expirations'] = get_options_expiration_dates()
         except Exception as e:
             print(f"获取期权到期日失败: {e}")
+        
+        # 8. 获取中国经济事件
+        try:
+            macro_data['china_events'] = get_china_economic_events()
+        except Exception as e:
+            print(f"获取中国经济事件失败: {e}")
             
     except Exception as e:
         print(f"获取宏观经济数据时出错: {e}")
@@ -1259,36 +1758,44 @@ def calculate_dynamic_peg_threshold(treasury_10y, base_peg_threshold=1.0):
     return dynamic_peg_threshold
 
 
-def calculate_atr_stop_loss(buy_price, hist_data, atr_period=14, atr_multiplier=2.5, min_stop_loss_pct=0.05, beta=None):
+def calculate_atr_stop_loss(buy_price, hist_data, atr_period=None, atr_multiplier=None, min_stop_loss_pct=None, beta=None):
     """
     基于ATR计算动态止损价格
     
     参数:
         buy_price: 买入时的价格
         hist_data: DataFrame，包含High, Low, Close列
-        atr_period: 计算ATR的周期（通常为14天）
-        atr_multiplier: ATR的倍数（通常为2.0-3.0，波动率高的股票用更大倍数）
-        min_stop_loss_pct: 最小止损幅度（如0.05表示5%，作为兜底）
+        atr_period: 计算ATR的周期（默认使用配置值）
+        atr_multiplier: ATR的倍数（默认使用配置值）
+        min_stop_loss_pct: 最小止损幅度（默认使用配置值）
         beta: 股票的Beta值（可选，如果提供则用于调整ATR倍数）
     
     返回:
         止损价格
     """
+    # 使用配置默认值
+    if atr_period is None:
+        atr_period = ATR_PERIOD
+    if atr_multiplier is None:
+        atr_multiplier = ATR_MULTIPLIER_BASE
+    if min_stop_loss_pct is None:
+        min_stop_loss_pct = FIXED_STOP_LOSS_PCT
+    
     # 根据Beta调整ATR倍数（如果提供）
     if beta is not None:
-        if beta > 1.5:
+        if beta > BETA_HIGH_THRESHOLD:
             # 高Beta股票，使用更大的倍数（更宽止损）
-            atr_multiplier = atr_multiplier * 1.2
-        elif beta > 1.2:
-            atr_multiplier = atr_multiplier * 1.1
-        elif beta < 0.8:
+            atr_multiplier = atr_multiplier * BETA_HIGH_MULTIPLIER
+        elif beta > BETA_MID_HIGH_THRESHOLD:
+            atr_multiplier = atr_multiplier * BETA_MID_HIGH_MULTIPLIER
+        elif beta < BETA_LOW_THRESHOLD:
             # 低Beta股票，使用更小的倍数（更窄止损）
-            atr_multiplier = atr_multiplier * 0.8
-        elif beta < 1.0:
-            atr_multiplier = atr_multiplier * 0.9
+            atr_multiplier = atr_multiplier * BETA_LOW_MULTIPLIER
+        elif beta < BETA_MID_LOW_THRESHOLD:
+            atr_multiplier = atr_multiplier * BETA_MID_LOW_MULTIPLIER
         
-        # 限制倍数范围（1.5-4.0）
-        atr_multiplier = max(1.5, min(4.0, atr_multiplier))
+        # 限制倍数范围
+        atr_multiplier = max(ATR_MULTIPLIER_MIN, min(ATR_MULTIPLIER_MAX, atr_multiplier))
     
     # 计算ATR
     atr = calculate_atr(hist_data, atr_period)
@@ -1314,8 +1821,48 @@ def calculate_market_sentiment(data):
     计算市场情绪评分 (M维度)
     返回0-10分，分数越高表示市场情绪越乐观
     现在包含期权市场情绪指标（VIX、Put/Call比率等）和宏观经济指标
+    对于A股/港股，还会包含中国市场特有的情绪指标（政策、资金流等）
     """
     sentiment_score = 5.0  # 基准分，中性
+    
+    # 判断市场类型
+    symbol = data.get('symbol', '')
+    is_cn_market = symbol.endswith('.SS') or symbol.endswith('.SZ')
+    is_hk_market = symbol.endswith('.HK')
+    
+    # 获取中国市场特有情绪数据（如果是A股或港股）
+    china_sentiment_data = {}
+    china_policy_data = {}
+    china_sentiment_adjustment = 0.0
+    china_sentiment_adjustments = []
+    
+    if is_cn_market or is_hk_market:
+        try:
+            from china_sentiment import (
+                get_china_stock_sentiment, 
+                get_china_macro_policy_signals,
+                calculate_china_sentiment_score
+            )
+            
+            market_type = 'CN' if is_cn_market else 'HK'
+            china_sentiment_data = get_china_stock_sentiment(symbol, market=market_type)
+            china_policy_data = get_china_macro_policy_signals()
+            
+            # 计算中国市场特有的情绪分数
+            china_score, adjustments = calculate_china_sentiment_score(china_sentiment_data, china_policy_data)
+            china_sentiment_adjustment = china_score - 5.0  # 相对于基准分的调整值
+            china_sentiment_adjustments = adjustments
+            
+            # 存储到data中供AI分析使用
+            data['china_sentiment'] = china_sentiment_data
+            data['china_policy'] = china_policy_data
+            data['china_sentiment_score'] = china_score
+            data['china_sentiment_adjustments'] = adjustments
+            
+        except ImportError:
+            print("警告: china_sentiment模块未找到，中国市场情绪数据将不可用（需要安装akshare: pip install akshare）")
+        except Exception as e:
+            print(f"获取中国市场情绪数据失败: {e}")
     
     # 获取期权市场数据
     options_data = get_options_market_data(data.get('original_symbol', data.get('symbol', '')))
@@ -1609,10 +2156,70 @@ def calculate_market_sentiment(data):
     data['options_data'] = options_data
     data['macro_data'] = macro_data
     
+    # 对于A股/港股，应用中国市场特有的情绪调整
+    # 中国市场：政策>一切，权重更高（40%）
+    if is_cn_market or is_hk_market:
+        if china_sentiment_adjustment != 0:
+            # 中国市场情绪调整权重：40%（政策权重最高）
+            # 混合计算：60%使用传统指标，40%使用中国市场特有指标
+            sentiment_score = sentiment_score * 0.6 + (5.0 + china_sentiment_adjustment) * 0.4
+            data['china_sentiment_weight'] = 0.4
+            data['china_sentiment_used'] = True
+        else:
+            data['china_sentiment_weight'] = 0
+            data['china_sentiment_used'] = False
+    else:
+        data['china_sentiment_weight'] = 0
+        data['china_sentiment_used'] = False
+    
     # 确保分数在0-10范围内
     sentiment_score = max(0, min(10, sentiment_score))
     
     return round(sentiment_score, 1)
+
+
+def is_etf_or_fund(data):
+    """
+    判断是否为ETF或基金
+    返回：是否为ETF/基金，类型（ETF/Fund/Stock）
+    """
+    sector = data.get('sector', '').lower()
+    industry = data.get('industry', '').lower()
+    name = data.get('name', '').lower()
+    symbol = data.get('symbol', '').lower()
+    
+    # 关键词检测（扩展关键词列表）
+    etf_keywords = [
+        'etf', 'exchange traded fund', 'index fund', 'tracker',
+        'proshares', 'ultrapro', 'ultra', 'invesco', 'ishares',
+        'vanguard', 'spdr', 'ark', 'leveraged', 'inverse',
+        '3x', '2x', 'qqq', 'spy', 'dow', 'nasdaq'
+    ]
+    fund_keywords = ['mutual fund', 'fund', 'trust', 'reit', 'reits', 'closed-end']
+    
+    # 检查名称和行业
+    name_sector_industry = f"{name} {sector} {industry} {symbol}"
+    
+    # 检查ETF关键词（优先级更高）
+    if any(keyword in name_sector_industry for keyword in etf_keywords):
+        return True, 'ETF'
+    elif any(keyword in name_sector_industry for keyword in fund_keywords):
+        # REIT是特殊的，也算基金类
+        if 'reit' in name_sector_industry:
+            return True, 'REIT'
+        return True, 'Fund'
+    
+    # 检查symbol后缀（某些ETF有特定后缀）
+    if symbol.endswith(('.x', '.xshg', '.xsz')):  # 某些ETF后缀
+        return True, 'ETF'
+    
+    # 检查行业分类（某些行业通常是ETF）
+    if sector in ['unknown', ''] and industry in ['unknown', '']:
+        # 如果行业信息缺失，且名称中包含常见ETF特征，可能是ETF
+        if any(keyword in name for keyword in ['ultra', 'pro', 'leveraged', 'inverse']):
+            return True, 'ETF'
+    
+    return False, 'Stock'
 
 
 def classify_company(data):
@@ -1620,6 +2227,19 @@ def classify_company(data):
     对公司进行分类
     返回：公司类别、行业特征、成长阶段等
     """
+    # 首先检查是否为ETF或基金
+    is_fund, fund_type = is_etf_or_fund(data)
+    if is_fund:
+        return {
+            'is_etf_or_fund': True,
+            'fund_type': fund_type,
+            'industry_category': 'fund',
+            'growth_stage': 'fund',  # 基金不适用成长阶段
+            'market_cap_category': 'fund',
+            'sector': data.get('sector', 'Fund'),
+            'industry': data.get('industry', 'Fund')
+        }
+    
     sector = data.get('sector', 'Unknown').lower()
     industry = data.get('industry', 'Unknown').lower()
     growth = data.get('growth', 0)
@@ -1665,6 +2285,8 @@ def classify_company(data):
             market_cap_category = 'small_cap'
     
     return {
+        'is_etf_or_fund': False,
+        'fund_type': None,
         'industry_category': industry_category,
         'growth_stage': growth_stage,
         'market_cap_category': market_cap_category,
@@ -1734,6 +2356,26 @@ def calculate_target_price(data, risk_result, style):
     # 对公司进行分类
     company_info = classify_company(data)
     
+    # 如果是ETF或基金，使用不同的估值方法
+    if company_info.get('is_etf_or_fund'):
+        # ETF/基金的估值主要基于技术面和跟踪误差
+        # 使用52周区间和技术指标
+        week52_high = data.get('week52_high', current_price)
+        week52_low = data.get('week52_low', current_price)
+        ma50 = data.get('ma50', current_price)
+        ma200 = data.get('ma200', current_price)
+        
+        # ETF目标价：基于均线和52周区间
+        if current_price > ma50 and ma50 > ma200:
+            # 上升趋势
+            target_price = min(week52_high, current_price * 1.1)
+        else:
+            # 下降或震荡趋势
+            target_price = (week52_high + week52_low) / 2
+        
+        data['target_price_methods'] = ['ETF/基金估值（技术面）']
+        return round(target_price, 2)
+    
     # 获取合理PE（根据公司类别和投资风格）
     reasonable_pe = get_reasonable_pe_by_category(company_info, style)
     
@@ -1741,8 +2383,9 @@ def calculate_target_price(data, risk_result, style):
     methods_used = []
     
     # 方法1: PE/PEG估值法（适用于有盈利的公司）
-    if data.get('pe') and data['pe'] > 0:
-        pe = data['pe']
+    # 如果PE为0或缺失，跳过此方法，使用其他方法
+    pe = data.get('pe', 0)
+    if pe and pe > 0:
         forward_pe = data.get('forward_pe', 0)
         
         if forward_pe and forward_pe > 0:
@@ -1768,12 +2411,16 @@ def calculate_target_price(data, risk_result, style):
         peg = data['peg']
         growth = data['growth']
         
-        # 合理PEG通常在0.8-1.5之间
-        reasonable_peg = 1.0
+        # 获取宏观经济数据以计算动态PEG阈值
+        macro_data = get_macro_market_data()
+        dynamic_peg_threshold = get_dynamic_peg_threshold(macro_data)
+        
+        # 合理PEG（基于动态阈值调整）
+        reasonable_peg = dynamic_peg_threshold
         if company_info['growth_stage'] == 'high_growth':
-            reasonable_peg = 1.2  # 高成长可以容忍更高PEG
+            reasonable_peg = dynamic_peg_threshold * 1.2  # 高成长可以容忍更高PEG
         elif company_info['growth_stage'] == 'declining':
-            reasonable_peg = 0.8  # 衰退公司PEG应该更低
+            reasonable_peg = dynamic_peg_threshold * 0.8  # 衰退公司PEG应该更低
         
         if peg < reasonable_peg:
             # PEG偏低，有上涨空间
@@ -1790,9 +2437,9 @@ def calculate_target_price(data, risk_result, style):
         # 根据成长阶段给予不同的增长溢价
         if company_info['growth_stage'] == 'high_growth':
             # 高成长公司：给予未来1-2年的增长预期
-            growth_multiplier = 1 + growth * 0.6  # 给予60%的增长溢价
+            growth_multiplier = 1 + growth * GROWTH_DISCOUNT_FACTOR
         elif company_info['growth_stage'] == 'growth':
-            growth_multiplier = 1 + growth * 0.4  # 给予40%的增长溢价
+            growth_multiplier = 1 + growth * (GROWTH_DISCOUNT_FACTOR * 0.67)  # 40% = 60% * 0.67
         elif company_info['growth_stage'] == 'stable':
             growth_multiplier = 1 + growth * 0.2  # 给予20%的增长溢价
         else:
@@ -1915,19 +2562,131 @@ def analyze_risk_and_position(style, data):
     """
     基于胡猛模型和五大支柱进行硬逻辑计算
     """
+    # 首先检查流动性（硬性门槛）
+    is_liquid = data.get('is_liquid', True)
+    liquidity_info = data.get('liquidity_check', {})
+    
+    if not is_liquid:
+        # 流动性不足，直接返回高风险，建议仓位为0
+        return {
+            "score": 10,
+            "level": "极高 (流动性不足，禁止交易)",
+            "flags": [data.get('liquidity_warning', '流动性不足，日均成交额低于最低要求')],
+            "suggested_position": 0.0,
+            "liquidity_rejected": True
+        }
+    
+    # 首先检查是否为ETF或基金
+    is_fund, fund_type = is_etf_or_fund(data)
+    if is_fund:
+        # ETF和基金使用不同的风险评估逻辑
+        risk_score = 0
+        risk_flags = []
+        
+        # ETF/基金的风险主要来自：
+        # 1. 价格位置（高位风险）
+        price_position = 0.5
+        if data.get('week52_high') and data.get('week52_low') and data['week52_high'] > data['week52_low']:
+            price_position = (data['price'] - data['week52_low']) / (data['week52_high'] - data['week52_low'])
+        
+        if price_position > 0.8:
+            risk_score += 2
+            risk_flags.append(f"{fund_type}: 价格位于52周高位（{price_position*100:.1f}%），追高风险")
+        elif price_position > 0.6:
+            risk_score += 1
+            risk_flags.append(f"{fund_type}: 价格偏高（{price_position*100:.1f}%）")
+        
+        # 2. 技术面（跌破长期均线）
+        if data['price'] < data['ma200']:
+            risk_score += 1.5
+            risk_flags.append(f"{fund_type}: 价格跌破200日均线，长期趋势转弱")
+        elif data['price'] < data['ma50']:
+            risk_score += 0.5
+        
+        # 3. ETF/基金不适合用PE等指标评估，使用技术面为主
+        # 仓位建议：ETF可以稍微放宽，但也要控制风险
+        base_caps = {
+            'value': 15,    # ETF价值风格可以稍微高一点
+            'growth': 20,   # ETF成长风格
+            'quality': 25,  # ETF质量风格
+            'momentum': 8   # ETF趋势风格
+        }
+        max_cap = base_caps.get(style, 15)
+        
+        # 风险调整
+        adjustment = 1.0
+        if risk_score >= 4:
+            adjustment = 0.0
+        elif risk_score >= 3:
+            adjustment = 0.5
+        elif risk_score >= 2:
+            adjustment = 0.7
+        elif risk_score >= 1:
+            adjustment = 0.85
+        
+        suggested_position = max_cap * adjustment
+        
+        risk_level = "低"
+        if risk_score >= 4:
+            risk_level = "极高 (建议观望)"
+        elif risk_score >= 3:
+            risk_level = "高"
+        elif risk_score >= 2:
+            risk_level = "中"
+        
+        return {
+            "score": risk_score,
+            "level": risk_level,
+            "flags": risk_flags,
+            "suggested_position": round(suggested_position, 1),
+            "is_etf_or_fund": True,
+            "fund_type": fund_type
+        }
+    
     risk_score = 0 # 0-10分，越高风险越大
     risk_flags = []
     
     # --- 1. G=B+M 模型检测 ---
     
     # M (情绪) 检测: 估值过热
-    if data['pe'] > 60 and data['growth'] < 0.3:
-        risk_score += 3
-        risk_flags.append("M: 估值过高且增长不匹配 (PE>60)")
-    elif data['pe'] > 40:
-        risk_score += 1
-    elif data['pe'] == 0:
-        risk_score += 3
+    # 优先使用PE分位点判断（如果可用），否则使用绝对PE值
+    pe = data.get('pe', 0)
+    pe_percentile = data.get('pe_percentile')
+    
+    if pe > 0:
+        # 如果PE分位点可用，使用分位点判断
+        if pe_percentile is not None and pe_percentile > 90:
+            risk_score += 3
+            risk_flags.append(f"M: 估值过热 (PE分位点{pe_percentile:.1f}%，处于历史高位)")
+        elif pe_percentile is not None and pe_percentile > 80:
+            risk_score += 2
+            risk_flags.append(f"M: 估值偏高 (PE分位点{pe_percentile:.1f}%)")
+        # 如果没有分位点数据，回退到绝对PE值
+        elif pe_percentile is None:
+            # 注意：PE为0可能是因为亏损，但不代表公司一定不好（可能是成长期的科技公司）
+            # 需要综合判断营收增长、市值、行业等因素
+            if pe > 60 and data['growth'] < 0.3:
+                risk_score += 3
+                risk_flags.append("M: 估值过高且增长不匹配 (PE>60)")
+            elif pe > 40:
+                risk_score += 1
+    elif pe == 0 or pe is None:
+        # PE为0或缺失，需要综合判断
+        growth = data.get('growth', 0)
+        market_cap = data.get('market_cap', 0)
+        
+        # 如果营收增长良好（>15%）且市值较大（>10亿），可能是成长期公司，风险适中
+        if growth > 0.15 and market_cap > 1e9:
+            risk_score += 1
+            risk_flags.append("M: PE为0（亏损），但营收增长良好，可能处于成长期")
+        # 如果营收负增长或市值很小，风险较高
+        elif growth < 0 or (market_cap > 0 and market_cap < 1e8):
+            risk_score += 2
+            risk_flags.append("M: PE为0（亏损），且基本面较弱")
+        else:
+            # 其他情况，中等风险
+            risk_score += 1.5
+            risk_flags.append("M: PE为0（亏损），需关注盈利转正时间")
         
     # B (基本面) 检测: 财务健康度
     if data['growth'] < 0:
@@ -1944,13 +2703,25 @@ def analyze_risk_and_position(style, data):
     
     # --- 2. 投资风格适配 ---
     
-    # 风格特定的红线
-    if style == 'value' and data['pe'] > 25:
-        risk_score += 2
-        risk_flags.append("风格不符: 价值股 PE > 25")
+    # 风格特定的红线（考虑PE为0的情况）
+    pe = data.get('pe', 0)
+    if style == 'value':
+        if pe > 25:
+            risk_score += 2
+            risk_flags.append("风格不符: 价值股 PE > 25")
+        elif pe == 0 or pe is None:
+            risk_score += 1.5
+            risk_flags.append("风格不符: 价值风格不适合亏损公司（PE=0）")
     if style == 'growth' and data['growth'] < 0.15:
-        risk_score += 2
-        risk_flags.append("风格不符: 成长股增速 < 15%")
+        # 对于成长风格，如果PE为0但营收增长良好，可以容忍
+        if pe == 0 or pe is None:
+            # PE为0但增长良好，符合成长风格的特征，不扣分
+            if data['growth'] < 0.15:
+                risk_score += 2
+                risk_flags.append("风格不符: 成长股增速 < 15%")
+        else:
+            risk_score += 2
+            risk_flags.append("风格不符: 成长股增速 < 15%")
 
     # --- 3. 仓位计算 ---
     
@@ -1981,6 +2752,8 @@ def analyze_risk_and_position(style, data):
         "score": risk_score,
         "level": risk_level,
         "flags": risk_flags,
-        "suggested_position": round(suggested_position, 1)
+        "suggested_position": round(suggested_position, 1),
+        "is_etf_or_fund": False,
+        "fund_type": None
     }
 

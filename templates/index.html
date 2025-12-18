@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlphaG - 投资分析系统</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -299,6 +300,97 @@
         .ai-summary p {
             margin-bottom: 0.8rem;
         }
+
+        /* 投资理念卡片样式 */
+        .philosophy-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .philosophy-header {
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .philosophy-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #60a5fa;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .philosophy-content {
+            padding: 1rem;
+        }
+
+        .philosophy-section {
+            margin-bottom: 1rem;
+        }
+
+        .philosophy-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .philosophy-formula {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin: 0 0.3rem;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        .pillar-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .pillar-item {
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 3px solid #3b82f6;
+            padding: 0.6rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .pillar-item strong {
+            color: #60a5fa;
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .style-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .style-badge {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid #3b82f6;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+        }
+
+        .style-badge strong {
+            color: #60a5fa;
+            margin-right: 0.3rem;
+        }
     </style>
 </head>
 
@@ -436,28 +528,68 @@
         </div>
 
         <!-- 投资理念说明 -->
-        <div class="row mb-4">
+        <div class="row mb-3">
             <div class="col-12">
-                <div class="card p-4"
-                    style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #3b82f6;">
-                    <h4 class="mb-3" style="color: #60a5fa;">AlphaG 投资理念</h4>
-                    <div style="color: #cbd5e1; line-height: 1.8;">
-                        <p class="mb-2"><strong style="color: #f8fafc;">核心模型：G = B + M</strong></p>
-                        <p class="mb-3">我们采用"投资+投机模型"，将股票价格(G)解构为基本面(B)与市场情绪(M)的叠加。价格 = 基本面价值 +
-                            情绪溢价/折价。通过量化分析基本面数据和市场情绪指标，识别价格与内在价值的偏离，寻找投资机会。</p>
+                <div class="philosophy-card">
+                    <div class="philosophy-header" style="cursor: default;">
+                        <div class="philosophy-title">
+                            <span>AlphaG 投资理念</span>
+                        </div>
+                    </div>
+                    <div class="philosophy-content" style="max-height: none; padding: 1rem;">
+                        <!-- 核心模型 -->
+                        <div class="philosophy-section">
+                            <div style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.6;">
+                                <strong style="color: #f8fafc;">核心模型：<span class="philosophy-formula">G = B +
+                                        M</span></strong>。我们将股票价格<span class="philosophy-formula">G</span>解构为基本面<span
+                                    class="philosophy-formula"
+                                    style="background: linear-gradient(135deg, #10b981, #059669);">B</span>与市场情绪<span
+                                    class="philosophy-formula"
+                                    style="background: linear-gradient(135deg, #f59e0b, #d97706);">M</span>的叠加。通过量化分析识别价格与内在价值的偏离，寻找投资机会。
+                            </div>
+                        </div>
 
-                        <p class="mb-2"><strong style="color: #f8fafc;">五大支柱投资框架</strong></p>
-                        <ul class="mb-3" style="padding-left: 1.5rem;">
-                            <li><strong>怀疑主义</strong>：始终质疑，寻找不买入的理由，避免确认偏误</li>
-                            <li><strong>事前验尸</strong>：假设投资失败，提前识别风险点</li>
-                            <li><strong>严格风控</strong>：基于硬数据计算风险评分，设置仓位上限和止损</li>
-                            <li><strong>风格纪律</strong>：严格遵守投资风格原则，不偏离策略</li>
-                            <li><strong>量化决策</strong>：用数据说话，减少情绪干扰</li>
-                        </ul>
+                        <!-- 五大支柱 -->
+                        <div class="philosophy-section">
+                            <strong
+                                style="color: #f8fafc; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">五大支柱投资框架</strong>
+                            <div class="pillar-grid">
+                                <div class="pillar-item">
+                                    <strong>怀疑主义</strong>
+                                    <div style="color: #94a3b8; font-size: 0.85rem;">始终质疑，寻找不买入的理由</div>
+                                </div>
+                                <div class="pillar-item">
+                                    <strong>事前验尸</strong>
+                                    <div style="color: #94a3b8; font-size: 0.85rem;">假设投资失败，提前识别风险点</div>
+                                </div>
+                                <div class="pillar-item">
+                                    <strong>严格风控</strong>
+                                    <div style="color: #94a3b8; font-size: 0.85rem;">硬数据计算，设置仓位上限和止损</div>
+                                </div>
+                                <div class="pillar-item">
+                                    <strong>风格纪律</strong>
+                                    <div style="color: #94a3b8; font-size: 0.85rem;">严格遵守投资风格，不偏离策略</div>
+                                </div>
+                                <div class="pillar-item">
+                                    <strong>量化决策</strong>
+                                    <div style="color: #94a3b8; font-size: 0.85rem;">用数据说话，减少情绪干扰</div>
+                                </div>
+                            </div>
+                        </div>
 
-                        <p class="mb-0"><strong
-                                style="color: #f8fafc;">投资风格</strong>：系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制。Quality(质量)关注财务稳健，Value(价值)寻找低估，Growth(成长)追求增长，Momentum(趋势)跟随动量。所有分析建议都严格遵循所选风格的原则。
-                        </p>
+                        <!-- 投资风格 -->
+                        <div class="philosophy-section">
+                            <strong
+                                style="color: #f8fafc; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">投资风格</strong>
+                            <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
+                                系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制：</div>
+                            <div class="style-badges">
+                                <div class="style-badge"><strong>Quality</strong>质量 - 财务稳健</div>
+                                <div class="style-badge"><strong>Value</strong>价值 - 寻找低估</div>
+                                <div class="style-badge"><strong>Growth</strong>成长 - 追求增长</div>
+                                <div class="style-badge"><strong>Momentum</strong>趋势 - 跟随动量</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -723,6 +855,14 @@
             const d = data.data;
             const r = data.risk;
 
+            // 调试：检查ETF识别
+            console.log('ETF识别调试:', {
+                is_etf_or_fund: d.is_etf_or_fund,
+                fund_type: d.fund_type,
+                name: d.name,
+                symbol: d.symbol
+            });
+
             // Fill Metrics
             document.getElementById('val_price').innerText = `${d['currency_symbol']}${d.price.toFixed(2)}`;
             document.getElementById('val_range').innerText = `Low: ${d['currency_symbol']}${d.week52_low.toFixed(2)} - High: ${d['currency_symbol']}${d.week52_high.toFixed(2)}`;
@@ -910,30 +1050,74 @@
                 </div>
             </div>
 
-            <!-- 公司概况 -->
+            <!-- 公司概况 / ETF概况 -->
             <div class="text-report-section">
-                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">二、公司概况</div>
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">二、${data.is_etf_or_fund ? (data.fund_type === 'ETF' ? 'ETF概况' : data.fund_type === 'REIT' ? 'REIT概况' : '基金概况') : '公司概况'}</div>
                 <div class="row" style="margin-top: 1rem;">
                     <div class="col-md-6 mb-3">
-                        <div class="text-report-label">股票代码</div>
+                        <div class="text-report-label">${data.is_etf_or_fund ? (data.fund_type === 'ETF' ? 'ETF代码' : '基金代码') : '股票代码'}</div>
                         <div class="text-report-value">${data.symbol}</div>
                     </div>
                     <div class="col-md-6 mb-3">
-                        <div class="text-report-label">公司全称</div>
+                        <div class="text-report-label">${data.is_etf_or_fund ? (data.fund_type === 'ETF' ? 'ETF全称' : '基金全称') : '公司全称'}</div>
                         <div class="text-report-value">${data.name}</div>
                     </div>
+                    ${data.is_etf_or_fund ? `
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">产品类型</div>
+                        <div class="text-report-value">
+                            ${data.fund_type === 'ETF' ? '<span style="color: #3b82f6; font-weight: bold;">交易所交易基金 (ETF)</span>' :
+                        data.fund_type === 'REIT' ? '<span style="color: #3b82f6; font-weight: bold;">房地产投资信托 (REIT)</span>' :
+                            '<span style="color: #3b82f6; font-weight: bold;">基金</span>'}
+                        </div>
+                    </div>
+                    ` : `
                     <div class="col-md-6 mb-3">
                         <div class="text-report-label">所属行业</div>
-                        <div class="text-report-value">${data.sector}</div>
+                        <div class="text-report-value">${data.sector !== 'Unknown' ? data.sector : '数据不足'}</div>
                     </div>
                     <div class="col-md-6 mb-3">
                         <div class="text-report-label">细分领域</div>
-                        <div class="text-report-value">${data.industry}</div>
+                        <div class="text-report-value">${data.industry !== 'Unknown' ? data.industry : '数据不足'}</div>
                     </div>
+                    `}
                 </div>
             </div>
 
-            <!-- 财务分析 -->
+            <!-- 财务分析 / ETF分析 -->
+            ${data.is_etf_or_fund ? `
+            <div class="text-report-section">
+                <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">三、${data.fund_type === 'ETF' ? 'ETF分析' : data.fund_type === 'REIT' ? 'REIT分析' : '基金分析'} (${data.fund_type})</div>
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem; margin-bottom: 1rem;">
+                    <p><strong style="color: #3b82f6;">产品类型：</strong>${data.fund_type === 'ETF' ? '交易所交易基金 (ETF)' : data.fund_type === 'REIT' ? '房地产投资信托 (REIT)' : '基金'}</p>
+                    <p>${data.fund_type === 'ETF' ? 'ETF是跟踪特定指数或资产组合的交易所交易基金，不涉及公司财务指标（如营收、利润等）。ETF的分析重点在于跟踪误差、流动性、管理费率和技术面表现。' : data.fund_type === 'REIT' ? 'REIT是房地产投资信托，主要通过持有和经营房地产产生收益。REIT的分析重点在于股息收益率、资产质量、负债率和租金收入。' : '基金的分析重点在于净值表现、管理费率、跟踪误差和流动性。'}</p>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">价格位置</div>
+                        <div class="text-report-value ${pricePosition > 80 ? 'text-warning' : pricePosition < 20 ? 'text-success' : ''}" style="font-size: 1.1rem;">${pricePosition.toFixed(1)}%</div>
+                        <small style="color: #64748b;">位于52周区间${pricePosition > 80 ? '高位，需警惕追高风险' : pricePosition < 20 ? '低位，可能存在机会' : '中位'}</small>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">技术趋势</div>
+                        <div class="text-report-value ${data.price > data.ma50 && data.ma50 > data.ma200 ? 'text-success' : data.price < data.ma200 ? 'text-danger' : 'text-warning'}" style="font-size: 1.1rem;">${data.price > data.ma50 && data.ma50 > data.ma200 ? '上升趋势' : data.price < data.ma200 ? '下降趋势' : '震荡整理'}</div>
+                        <small style="color: #64748b;">MA50: ${data['currency_symbol']}${data.ma50 ? data.ma50.toFixed(2) : 'N/A'} | MA200: ${data['currency_symbol']}${data.ma200 ? data.ma200.toFixed(2) : 'N/A'}</small>
+                    </div>
+                </div>
+                ${data.beta ? `
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">Beta值（波动率指标）</div>
+                        <div class="text-report-value ${Math.abs(data.beta) > 2 ? 'text-warning' : ''}" style="font-size: 1.1rem;">${data.beta.toFixed(2)}</div>
+                        <small style="color: #64748b;">${Math.abs(data.beta) > 2 ? '高波动率产品，风险较高' : Math.abs(data.beta) > 1 ? '波动率高于市场' : '波动率接近或低于市场'}</small>
+                    </div>
+                </div>
+                ` : ''}
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
+                    <p><strong style="color: #f8fafc;">${data.fund_type === 'ETF' ? 'ETF' : data.fund_type === 'REIT' ? 'REIT' : '基金'}评估：</strong>${data.fund_type === 'ETF' ? 'ETF不涉及公司财务指标，主要关注跟踪标的指数的表现、流动性、管理费率和跟踪误差。技术面分析（价格趋势、均线、52周区间）是评估ETF的主要方法。' : data.fund_type === 'REIT' ? 'REIT主要通过房地产租金收入产生收益，关注股息收益率和资产质量。' : '基金评估主要关注净值表现和管理质量。'}</p>
+                </div>
+            </div>
+            ` : `
             <div class="text-report-section">
                 <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">三、财务分析 (B - 基本面)</div>
                 <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem; margin-bottom: 1rem;">
@@ -955,6 +1139,7 @@
                     <p><strong style="color: #f8fafc;">财务健康度评估：</strong>${data.growth > 0.1 && data.margin > 0.1 ? '公司财务表现稳健，营收增长和盈利能力均处于良好水平，基本面支撑较强。' : data.growth < 0 || data.margin < 0.05 ? '公司财务表现存在一定压力，需密切关注后续财务数据变化。' : '公司财务表现基本稳定，但增长动力和盈利能力有待进一步提升。'}</p>
                 </div>
             </div>
+            `}
 
             <!-- 估值分析 -->
             <div class="text-report-section">
@@ -1036,20 +1221,65 @@
                     <span style="color: #cbd5e1;">预计财报日期：${data.earnings_dates.join(', ')}。财报发布前后通常伴随较大波动，建议提前调整仓位。</span>
                 </div>
                 ` : ''}
-                ${data.macro_data && (data.macro_data.fed_meetings && data.macro_data.fed_meetings.length > 0 || data.macro_data.cpi_releases && data.macro_data.cpi_releases.length > 0) ? `
+                ${data.macro_data && (data.macro_data.fed_meetings && data.macro_data.fed_meetings.length > 0 ||
+                    (data.macro_data.cpi_releases && data.macro_data.cpi_releases.filter(c => c.country === 'US').length > 0) ||
+                    (data.macro_data.china_events && data.macro_data.china_events.length > 0)) ? `
                 <div style="margin-top: 1rem; padding: 0.8rem; background-color: #1e293b; border-left: 3px solid #8b5cf6; border-radius: 4px;">
                     <strong style="color: #8b5cf6;">重要经济事件提醒：</strong>
                     <div style="color: #cbd5e1; margin-top: 0.5rem;">
+                        <!-- 美国经济事件 -->
                         ${data.macro_data.fed_meetings && data.macro_data.fed_meetings.length > 0 ? `
-                        <div style="margin-bottom: 0.3rem;">
-                            <strong>美联储利率决议：</strong>
-                            ${data.macro_data.fed_meetings.map(m => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: #3b82f6;">🇺🇸 美国：</strong>
+                            <div style="margin-left: 1rem; margin-top: 0.3rem;">
+                                ${data.macro_data.fed_meetings.length > 0 ? `
+                                <div style="margin-bottom: 0.2rem;">
+                                    <strong>美联储利率决议：</strong>
+                                    ${data.macro_data.fed_meetings.map(m => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}
+                                </div>
+                                ` : ''}
+                                ${data.macro_data.cpi_releases && data.macro_data.cpi_releases.filter(c => c.country === 'US').length > 0 ? `
+                                <div style="margin-bottom: 0.2rem;">
+                                    <strong>CPI数据发布：</strong>
+                                    ${data.macro_data.cpi_releases.filter(c => c.country === 'US').map(c => `${c.date} (${c.days_until}天后，发布${c.data_month}数据)`).join('、')}
+                                </div>
+                                ` : ''}
+                                ${data.macro_data.options_expirations && data.macro_data.options_expirations.length > 0 ? `
+                                <div style="margin-bottom: 0.2rem;">
+                                    <strong>期权到期日：</strong>
+                                    ${data.macro_data.options_expirations.map(e => `${e.date} (${e.days_until}天后${e.is_quadruple_witching ? '，四重到期日' : ''})`).join('、')}
+                                </div>
+                                ` : ''}
+                            </div>
                         </div>
                         ` : ''}
-                        ${data.macro_data.cpi_releases && data.macro_data.cpi_releases.length > 0 ? `
-                        <div>
-                            <strong>CPI数据发布：</strong>
-                            ${data.macro_data.cpi_releases.map(c => `${c.date} (${c.days_until}天后，发布${c.data_month}数据)`).join('、')}
+                        
+                        <!-- 中国经济事件 -->
+                        ${data.macro_data.china_events && data.macro_data.china_events.length > 0 ? `
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: #ef4444;">🇨🇳 中国：</strong>
+                            <div style="margin-left: 1rem; margin-top: 0.3rem;">
+                                ${data.macro_data.china_events.map(e => {
+                        let eventText = `${e.type}：${e.date} (${e.days_until}天后`;
+                        if (e.data_month) eventText += `，${e.data_month}数据`;
+                        if (e.quarter) eventText += `，${e.quarter}数据`;
+                        eventText += ')';
+                        return eventText;
+                    }).join('<br>')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- 其它国家经济事件（如果有） -->
+                        ${data.macro_data.other_events && data.macro_data.other_events.length > 0 ? `
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: #10b981;">🌍 其它国家：</strong>
+                            <div style="margin-left: 1rem; margin-top: 0.3rem;">
+                                ${data.macro_data.other_events.map(e => {
+                        let eventText = `${e.country || '未知'} - ${e.type}：${e.date} (${e.days_until}天后)`;
+                        return eventText;
+                    }).join('<br>')}
+                            </div>
                         </div>
                         ` : ''}
                     </div>
@@ -1129,9 +1359,58 @@
                     ${risk.suggested_position === 0 ?
                     `<p><strong style="color: #f8fafc;">建仓策略：</strong>当前风险评分过高（${risk.score}/10），不建议建仓。建议继续观望，等待风险降低或寻找其他投资机会。</p>` :
                     `<p><strong style="color: #f8fafc;">建仓策略：</strong>${risk.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
-                        <p><strong style="color: #f8fafc;">止损建议：</strong>建议设置止损价格为当前价格的85%（约${data.currency_symbol}${(data.price * 0.85).toFixed(2)}），严格执行止损纪律。</p>`
+                        <p><strong style="color: #f8fafc;">止损建议：</strong>建议设置止损价格为${data.stop_loss_price ? `${data.currency_symbol}${data.stop_loss_price.toFixed(2)}（${data.stop_loss_method || '动态止损'}，止损幅度约${((data.price - data.stop_loss_price) / data.price * 100).toFixed(1)}%）` : `当前价格的85%（约${data.currency_symbol}${(data.price * 0.85).toFixed(2)}）`}，严格执行止损纪律。</p>`
                 }
                     <p><strong style="color: #f8fafc;">持有周期：</strong>根据${styleName}风格，建议持有${styleName === '质量 (Quality)' ? '长期（1-3年）' : styleName === '价值 (Value)' ? '中期（6-12个月）' : styleName === '成长 (Growth)' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
+                    
+                    <!-- 卖出策略 -->
+                    ${risk.suggested_position > 0 ? `
+                    <div style="margin-top: 1.5rem; padding: 1rem; background-color: #1e293b; border-left: 3px solid #f59e0b; border-radius: 4px;">
+                        <strong style="color: #f59e0b; font-size: 1.1rem;">卖出策略（风险控制核心）：</strong>
+                        <div style="margin-top: 0.8rem; line-height: 2;">
+                            <p style="margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">止盈策略：</strong></p>
+                            <ul style="margin-left: 1.5rem; margin-bottom: 0.8rem; color: #cbd5e1;">
+                                <li>当价格达到目标价格${data.currency_symbol}${(data.target_price || data.week52_high).toFixed(2)}时，${styleName === '质量 (Quality)' ? '建议分批卖出（分2-3批，每批间隔1-2周），保留部分仓位长期持有' : styleName === '价值 (Value)' ? '建议一次性卖出或分2批卖出，锁定利润' : styleName === '成长 (Growth)' ? '建议分2批卖出，第一批在目标价格卖出50%，第二批在目标价格120%卖出剩余部分' : '建议在目标价格一次性卖出，快进快出'}。</li>
+                                <li>如果价格超过目标价格20%以上，建议逐步减仓，${styleName === '质量 (Quality)' ? '保留30-50%仓位继续持有' : '全部卖出锁定利润'}。</li>
+                                <li>根据${styleName}风格，${styleName === '质量 (Quality)' ? '可以长期持有优质标的，但达到目标价格后应至少减仓50%' : styleName === '价值 (Value)' ? '达到目标价格后应全部卖出，寻找下一个价值标的' : styleName === '成长 (Growth)' ? '达到目标价格后应分批卖出，避免贪婪' : '达到目标价格后应立即卖出，不要恋战'}。</li>
+                            </ul>
+                            
+                            <p style="margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">止损策略：</strong></p>
+                            <ul style="margin-left: 1.5rem; margin-bottom: 0.8rem; color: #cbd5e1;">
+                                <li>止损价格：${data.stop_loss_price ? `${data.currency_symbol}${data.stop_loss_price.toFixed(2)}（${data.stop_loss_method || '动态止损'}）` : `${data.currency_symbol}${(data.price * 0.85).toFixed(2)}（固定15%止损）`}，止损幅度约${data.stop_loss_price ? ((data.price - data.stop_loss_price) / data.price * 100).toFixed(1) : '15'}%。</li>
+                                <li>建议在止损价格上方5%设置预警点（${data.currency_symbol}${(data.stop_loss_price ? (data.stop_loss_price * 1.05) : (data.price * 0.90)).toFixed(2)}），接近预警点时密切关注。</li>
+                                <li><strong style="color: #ef4444;">严格执行止损纪律，不要因为"再等等"而犹豫。一旦触及止损价格，立即全部卖出。</strong></li>
+                            </ul>
+                            
+                            <p style="margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">分阶段卖出策略：</strong></p>
+                            <ul style="margin-left: 1.5rem; margin-bottom: 0.8rem; color: #cbd5e1;">
+                                <li>如果采用分批建仓，对应的分批卖出策略：${risk.score >= 4 ? '第一批建仓对应第一批卖出（达到目标价格80%时卖出），第二批建仓对应第二批卖出（达到目标价格100%时卖出），第三批建仓对应第三批卖出（达到目标价格120%时卖出）' : '达到目标价格时卖出50%，达到目标价格120%时卖出剩余50%'}。</li>
+                                <li>建议在以下价位分阶段减仓：
+                                    <ul style="margin-left: 1.5rem; margin-top: 0.3rem;">
+                                        <li>目标价格80%：卖出${risk.score >= 4 ? '第一批建仓部分（约33%）' : '30%'}</li>
+                                        <li>目标价格100%：卖出${risk.score >= 4 ? '第二批建仓部分（约33%）' : '50%'}</li>
+                                        <li>目标价格120%：卖出${risk.score >= 4 ? '第三批建仓部分（约34%）' : '剩余20%'}</li>
+                                    </ul>
+                                </li>
+                                <li>根据${styleName}风格的持有周期，${styleName === '质量 (Quality)' ? '持有1-3年后，即使未达到目标价格，也应考虑逐步减仓' : styleName === '价值 (Value)' ? '持有6-12个月后，如果估值已修复，应全部卖出' : styleName === '成长 (Growth)' ? '持有3-6个月后，如果增长放缓，应逐步减仓' : '持有1-3个月后，如果趋势转弱，应立即卖出'}。</li>
+                            </ul>
+                            
+                            <p style="margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">特殊情况卖出：</strong></p>
+                            <ul style="margin-left: 1.5rem; margin-bottom: 0.8rem; color: #cbd5e1;">
+                                <li><strong style="color: #ef4444;">基本面恶化：</strong>如果营收转为负增长或利润率大幅下降（下降超过30%），立即卖出，不要等待。</li>
+                                <li><strong style="color: #ef4444;">估值过高：</strong>如果PE超过合理范围50%以上（当前PE：${data.pe ? data.pe.toFixed(2) : 'N/A'}），考虑提前卖出锁定利润。</li>
+                                <li><strong style="color: #ef4444;">市场系统性风险：</strong>如果VIX>30或地缘政治风险>7，建议提前减仓50%或全部卖出，规避系统性风险。</li>
+                            </ul>
+                            
+                            <p style="margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">卖出时机建议：</strong></p>
+                            <ul style="margin-left: 1.5rem; color: #cbd5e1;">
+                                <li>避免在财报发布前卖出（除非有明确风险信号）。</li>
+                                <li>避免在期权到期日附近卖出（市场波动可能影响成交价格）。</li>
+                                <li>根据重要经济事件（美联储会议、CPI发布、中国央行会议等）调整卖出时机，建议在这些事件前1-2天完成卖出操作。</li>
+                            </ul>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
 
@@ -1256,6 +1535,7 @@
         // });
     </script>
     <script src="/static/auth.js"></script>
+    <script src="/static/feedback.js"></script>
 </body>
 
 </html>
