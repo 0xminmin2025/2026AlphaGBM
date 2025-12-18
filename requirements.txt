@@ -15,4 +15,5 @@ python-dotenv
 python-dateutil
 requests
 akshare
+alpha_vantage
 
