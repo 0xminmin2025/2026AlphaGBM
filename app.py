@@ -769,7 +769,10 @@ def submit_feedback():
             type=feedback_data.get('type'),
             content=feedback_data.get('content'),
             ticker=feedback_data.get('ticker'),
-            ip_address=request.remote_addr
+            # 优先从反向代理头获取真实外网IP，回退到容器内IP
+            ip_address = request.headers.get('X-Forwarded-For', '').split(',')[0].strip() or \
+                         request.headers.get('X-Real-IP') or \
+                         request.remote_addr
         )
         
         # 保存到数据库
