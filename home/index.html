@@ -318,9 +318,7 @@
                 // 从API获取单个股票价格的函数
                 const fetchStockPrice = async (ticker) => {
                     try {
-                        // 移除可能的交易所后缀，API可能不支持完整的股票代码格式
-                        const apiTicker = ticker.split('.')[0].toUpperCase();
-                        const response = await fetch(`/api/stock-price?ticker=${apiTicker}`);
+                        const response = await fetch(`/api/stock-price?ticker=${ticker}`);
                         const data = await response.json();
                         if (data.success) {
                             return data.price;
