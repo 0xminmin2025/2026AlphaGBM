@@ -101,10 +101,11 @@ async function requestVerificationCode() {
     }
 }
 
-// 处理注册函数（简化版，无需验证码）
+// 处理注册函数
 async function handleRegister() {
     const username = document.getElementById('registerUsername').value;
     const email = document.getElementById('registerEmail').value;
+    const code = document.getElementById('registerCode').value;
     const password = document.getElementById('registerPassword').value;
 
     // 表单验证
@@ -115,6 +116,11 @@ async function handleRegister() {
 
     if (!validateEmail(email)) {
         showMessage('registerMessage', '请输入有效的邮箱地址', true);
+        return;
+    }
+
+    if (!validateCode(code)) {
+        showMessage('registerMessage', '验证码应为6位数字', true);
         return;
     }
 
@@ -129,13 +135,13 @@ async function handleRegister() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, email, password })
+            body: JSON.stringify({ username, email, verification_code: code, password })
         });
 
         const data = await response.json();
 
-        if (response.ok && data.success) {
-            showMessage('registerMessage', '注册成功！');
+        if (response.ok) {
+            showMessage('registerMessage', '注册成功！即将跳转到登录页面...');
             // 保存token和用户信息到localStorage
             const user = data.username || username;
             const token = data.access_token || data.token; // 兼容access_token和token字段
@@ -148,7 +154,7 @@ async function handleRegister() {
                 ensureHideModals();
                 // 检查登录状态
                 checkLoginStatus();
-            }, 1000);
+            }, 1500);
         } else {
             showMessage('registerMessage', data.error || '注册失败', true);
         }
@@ -209,11 +215,30 @@ async function handleLogin() {
     }
 }
 
-// 获取查询次数信息（当前系统不限制查询次数，此函数保留但不执行任何操作）
+// 获取查询次数信息
 async function fetchQueryCountInfo() {
-    // 当前系统不限制查询次数，此函数为空实现
-    // 如果将来需要实现查询次数限制，可以在此处添加逻辑
-    return;
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            console.error('未授权访问');
+            return;
+        }
+        const response = await fetch('/api/query_count', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // 调用updateQueryCountDisplay函数更新显示
+            if (window.updateQueryCountDisplay) {
+                window.updateQueryCountDisplay(data);
+            }
+        }
+    } catch (error) {
+        console.error('获取查询次数信息失败:', error);
+    }
 }
 
 // 处理退出登录函数

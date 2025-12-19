@@ -4,15 +4,6 @@ import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-import time
-import logging
-
-# 导入yfinance的异常类
-try:
-    from yfinance.exceptions import YFRateLimitError
-except ImportError:
-    # 如果导入失败，定义一个占位符
-    YFRateLimitError = type('YFRateLimitError', (Exception,), {})
 
 # 导入配置参数
 try:
@@ -338,251 +329,121 @@ def normalize_ticker(ticker):
         return ticker
     
     # 判断市场类型
-    # 港股：支持4-5位数字，包括前面有0的情况（如09988 -> 9988.HK，02525 -> 2525.HK）
+    # 港股：支持4-5位数字，包括前面有0的情况（如02525 -> 2525.HK）
     if ticker.isdigit():
-            # 去除前导0，得到有效数字
-            ticker_digits = ticker.lstrip('0') or '0'  # 如果全是0，保留一个0
-            original_length = len(ticker)
-            digits_length = len(ticker_digits)
-            
-            # 优先判断港股：如果原始是4-5位数字（包括前导0），优先识别为港股
-            # 港股代码规则：yfinance需要去掉前导0，例如09988 -> 9988.HK，02525 -> 2525.HK
-            if original_length == 4 or original_length == 5:
-                # 原始4-5位数字，优先识别为港股（去掉前导0）
-                normalized_hk = ticker_digits
-                return f"{normalized_hk}.HK"
-            
-            # A股判断：如果原始是6位或补足到6位后符合A股规则
-            if original_length == 6 or (original_length < 6 and digits_length <= 6):
-                normalized_6 = ticker_digits.zfill(6)
-                if normalized_6.startswith(('600', '601', '603', '688')):
-                    return f"{normalized_6}.SS"  # 上海
-                elif normalized_6.startswith(('000', '001', '002', '300')):
-                    return f"{normalized_6}.SZ"  # 深圳
-            
-            # 其他情况：如果去0后是1-5位，可能是港股代码
-            if digits_length >= 1 and digits_length <= 5:
-                # 港股：使用去掉前导0的数字（yfinance格式）
-                normalized_hk = ticker_digits
-                return f"{normalized_hk}.HK"
+        # 去除前导0，得到有效数字
+        ticker_digits = ticker.lstrip('0') or '0'  # 如果全是0，保留一个0
+        original_length = len(ticker)
+        digits_length = len(ticker_digits)
+        
+        # A股优先判断：如果原始是6位或补足到6位后符合A股规则
+        if original_length == 6 or (original_length < 6 and digits_length <= 6):
+            normalized_6 = ticker_digits.zfill(6)
+            if normalized_6.startswith(('600', '601', '603', '688')):
+                return f"{normalized_6}.SS"  # 上海
+            elif normalized_6.startswith(('000', '001', '002', '300')):
+                return f"{normalized_6}.SZ"  # 深圳
+        
+        # 港股判断：如果原始是4-5位，或去0后是1-5位且原始>=4位，识别为港股
+        # 港股代码规则：可以是1-5位数字，但通常显示为4-5位
+        # 如果输入"02525"，应该识别为"02525.HK"（保留前导0）
+        # 如果输入"2525"，应该识别为"02525.HK"（补足到5位，港股标准格式）
+        if original_length >= 4 and digits_length >= 1 and digits_length <= 5:
+            # 如果原始长度已经是4-5位，保留原始格式（包括前导0）
+            # 否则补足到5位（港股标准格式）
+            if original_length == 4:
+                normalized_hk = ticker  # 4位直接使用
+            elif original_length == 5:
+                normalized_hk = ticker  # 5位直接使用
+            else:
+                # 其他情况，补足到5位
+                normalized_hk = ticker_digits.zfill(5)
+            return f"{normalized_hk}.HK"
+        elif original_length < 4 and digits_length >= 1 and digits_length <= 5:
+            # 如果原始长度小于4但去0后是1-5位，可能是港股代码（如"25" -> "00025.HK"）
+            # 但这种情况比较少见，优先尝试作为港股处理
+            normalized_hk = ticker_digits.zfill(5)
+            return f"{normalized_hk}.HK"
     
     # 美股：默认不加后缀，或者已经是标准格式
     return ticker
 
 
-def get_ticker_price(ticker, max_retries=3, retry_delay=2):
-    """获取股票的当前价格，带重试机制"""
-    normalized_ticker = normalize_ticker(ticker)
-    print(f"原始代码: {ticker}, 标准化后: {normalized_ticker}")
-    
-    for attempt in range(max_retries):
-        try:
-            stock = yf.Ticker(normalized_ticker)
+def get_ticker_price(ticker):
+    """获取股票的当前价格"""
+    try:
+         # 标准化股票代码
+        normalized_ticker = normalize_ticker(ticker)
+        print(f"原始代码: {ticker}, 标准化后: {normalized_ticker}")
+        
+        stock = yf.Ticker(normalized_ticker)
 
-            # 尝试从info获取
-            info = stock.info
-            if info and len(info) >= 5:
-                # 从info获取价格
-                current_price = (info.get('currentPrice') or 
-                               info.get('regularMarketPrice') or 
-                               info.get('previousClose') or 0)
-                if current_price > 0:
-                    return current_price
-            # 如果成功获取数据，跳出循环
-            break
-            
-        except Exception as e:
-            error_msg = str(e)
-            error_type = type(e).__name__
-            print(f"从info获取价格失败 (尝试 {attempt + 1}/{max_retries}): {error_msg}")
-            
-            # 检查是否是速率限制错误（检查异常类型或消息）
-            is_rate_limit = (isinstance(e, YFRateLimitError) or 
-                           error_type == 'YFRateLimitError' or
-                           "Too Many Requests" in error_msg or 
-                           "Rate limited" in error_msg)
-            
-            # 检查是否是速率限制错误
-            if is_rate_limit and attempt < max_retries - 1:
-                wait_time = retry_delay * (attempt + 1)
-                print(f"遇到速率限制，等待 {wait_time} 秒后重试...")
-                time.sleep(wait_time)
-                continue
-            else:
-                # 其他错误或最后一次尝试失败
-                if attempt == max_retries - 1:
-                    print(f"获取价格失败，已重试 {max_retries} 次")
-                break
+        # 尝试从info获取
+        info = stock.info
+        if info and len(info) >= 5:
+            # 从info获取价格
+            current_price = (info.get('currentPrice') or 
+                           info.get('regularMarketPrice') or 
+                           info.get('previousClose') or 0)
+            if current_price > 0:
+                return current_price
+    except Exception as e:
+        print(f"从info获取价格失败: {e}")
     
     return None
 
 
-def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3, retry_delay=2, use_backup=True):
-    """
-    获取股票市场数据
-    优先使用 Yahoo Finance，失败时自动切换到 Alpha Vantage（如果可用）
-    
-    参数:
-        ticker: 股票代码
-        onlyHistoryData: 是否只获取历史数据
-        startDate: 开始日期
-        max_retries: 最大重试次数
-        retry_delay: 重试延迟（秒）
-        use_backup: 是否在失败时使用备用数据源（Alpha Vantage）
-    """
-    # 临时抑制yfinance的ERROR日志（ETF没有fundamentals数据时会报404，这是正常的）
-    yfinance_logger = logging.getLogger('yfinance')
-    original_level = yfinance_logger.level
-    yfinance_logger.setLevel(logging.CRITICAL)  # 只显示CRITICAL级别的日志
-    
-    normalized_ticker = normalize_ticker(ticker)
-    print(f"原始代码: {ticker}, 标准化后: {normalized_ticker}")
-    
-    yf_failed = False
-    yf_error = None
-    
-    for attempt in range(max_retries):
-        try:
-            stock = yf.Ticker(normalized_ticker)
+def get_market_data(ticker, onlyHistoryData=False, startDate=None):
+    """获取 Yahoo Finance 数据并清洗"""
+    try:
+        # 标准化股票代码
+        normalized_ticker = normalize_ticker(ticker)
+        print(f"原始代码: {ticker}, 标准化后: {normalized_ticker}")
+        
+        stock = yf.Ticker(normalized_ticker)
 
-            if onlyHistoryData:
-                try:
-                    if startDate:
-                        hist = stock.history(start=startDate, timeout=30)
-                    else:
-                        hist = stock.history(period="1y", timeout=30)
-                except Exception as e:
-                    error_msg = str(e)
-                    error_type = type(e).__name__
-                    print(f"获取历史数据失败 (尝试 {attempt + 1}/{max_retries}): {error_msg}")
-                    
-                    # 检查是否是速率限制错误（检查异常类型或消息）
-                    is_rate_limit = (isinstance(e, YFRateLimitError) or 
-                                   error_type == 'YFRateLimitError' or
-                                   "Too Many Requests" in error_msg or 
-                                   "Rate limited" in error_msg)
-                    
-                    if is_rate_limit:
-                        if attempt < max_retries - 1:
-                            wait_time = retry_delay * (attempt + 1)  # 递增等待时间
-                            print(f"遇到速率限制，等待 {wait_time} 秒后重试...")
-                            time.sleep(wait_time)
-                            continue
-                        else:
-                            # 最后一次尝试也失败，标记失败并跳出循环，让备用数据源处理
-                            yf_failed = True
-                            yf_error = e
-                            print(f"Yahoo Finance 所有重试均失败，将尝试备用数据源...")
-                            break
-                    else:
-                        # 非速率限制错误，直接返回空数据
-                        hist = pd.DataFrame()
-
-                if not hist.empty:
-                    history_dates = hist.index.strftime('%Y-%m-%d').tolist()
-                    history_prices = hist['Close'].tolist()
-                else:
-                    from datetime import datetime
-                    history_dates = [datetime.now().strftime('%Y-%m-%d')]
-                    history_prices = []
-                
-                data = {
-                    "history_dates": history_dates,
-                    "history_prices": [float(p) for p in history_prices],
-                }
-                # 恢复yfinance日志级别
-                yfinance_logger.setLevel(original_level)
-                return data
-            
-            # 尝试获取信息，设置超时
-            try:
-                info = stock.info
-            except Exception as e:
-                error_msg = str(e)
-                error_type = type(e).__name__
-                print(f"获取股票信息失败 (尝试 {attempt + 1}/{max_retries}): {error_msg}")
-                
-                # 检查是否是速率限制错误（检查异常类型或消息）
-                is_rate_limit = (isinstance(e, YFRateLimitError) or 
-                               error_type == 'YFRateLimitError' or
-                               "Too Many Requests" in error_msg or 
-                               "Rate limited" in error_msg)
-                
-                if is_rate_limit:
-                    if attempt < max_retries - 1:
-                        wait_time = retry_delay * (attempt + 1)
-                        print(f"遇到速率限制，等待 {wait_time} 秒后重试...")
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        # 最后一次尝试也失败，标记失败并跳出循环，让备用数据源处理
-                        yf_failed = True
-                        yf_error = e
-                        print(f"Yahoo Finance 所有重试均失败，将尝试备用数据源...")
-                        break
-                else:
-                    info = {}
-            
-            # 尝试获取历史数据
+        if onlyHistoryData :
             try:
                 if startDate:
                     hist = stock.history(start=startDate, timeout=30)
                 else:
                     hist = stock.history(period="1y", timeout=30)
             except Exception as e:
-                error_msg = str(e)
-                error_type = type(e).__name__
-                print(f"获取历史数据失败 (尝试 {attempt + 1}/{max_retries}): {error_msg}")
-                
-                # 检查是否是速率限制错误（检查异常类型或消息）
-                is_rate_limit = (isinstance(e, YFRateLimitError) or 
-                               error_type == 'YFRateLimitError' or
-                               "Too Many Requests" in error_msg or 
-                               "Rate limited" in error_msg)
-                
-                if is_rate_limit:
-                    if attempt < max_retries - 1:
-                        wait_time = retry_delay * (attempt + 1)
-                        print(f"遇到速率限制，等待 {wait_time} 秒后重试...")
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        # 最后一次尝试也失败，标记失败并跳出循环，让备用数据源处理
-                        yf_failed = True
-                        yf_error = e
-                        print(f"Yahoo Finance 所有重试均失败，将尝试备用数据源...")
-                        break
-                else:
-                    hist = pd.DataFrame()
-            
-            # 如果成功获取数据，继续处理（不break，继续执行后面的数据处理逻辑）
-            
-        except Exception as e:
-            error_msg = str(e)
-            error_type = type(e).__name__
-            # 检查是否是速率限制错误（检查异常类型或消息）
-            is_rate_limit = (isinstance(e, YFRateLimitError) or 
-                           error_type == 'YFRateLimitError' or
-                           "Too Many Requests" in error_msg or 
-                           "Rate limited" in error_msg)
-            
-            # 如果是速率限制错误且还有重试机会
-            if is_rate_limit and attempt < max_retries - 1:
-                wait_time = retry_delay * (attempt + 1)
-                print(f"遇到速率限制，等待 {wait_time} 秒后重试...")
-                time.sleep(wait_time)
-                continue
+                print(f"获取历史数据失败: {e}")
+                hist = pd.DataFrame()
+
+            if not hist.empty :
+                history_dates = hist.index.strftime('%Y-%m-%d').tolist()
+                history_prices = hist['Close'].tolist()
             else:
-                # 最后一次尝试失败或其他错误，标记失败并跳出循环
-                yf_failed = True
-                yf_error = e
-                if is_rate_limit:
-                    print(f"Yahoo Finance 所有重试均失败，将尝试备用数据源...")
-                else:
-                    print(f"Yahoo Finance 失败: {error_msg}，将尝试备用数据源...")
-                break
+                # 如果没有历史数据，至少提供一个当前价格点
+                from datetime import datetime
+                history_dates = [datetime.now().strftime('%Y-%m-%d')]
+                history_prices = []
+            
+            data = {
+                "history_dates": history_dates,
+                "history_prices": [float(p) for p in history_prices],
+            }
+            return data
         
-        # 如果成功执行到这里，说明数据获取成功，开始处理数据
+        # 尝试获取信息，设置超时
+        try:
+            info = stock.info
+        except Exception as e:
+            print(f"获取股票信息失败: {e}")
+            info = {}
+        
+        # 尝试获取历史数据
+        try:
+            if startDate:
+                hist = stock.history(start=startDate, timeout=30)
+            else:
+                hist = stock.history(period="1y", timeout=30)
+        except Exception as e:
+            print(f"获取历史数据失败: {e}")
+            hist = pd.DataFrame()
+        
         # 如果info为空或数据不足，尝试其他方式获取价格
         if not info or len(info) < 5:
             # 尝试快速获取
@@ -598,8 +459,6 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
                 if not hist.empty:
                     current_price = hist['Close'].iloc[-1]
                 else:
-                    # 恢复yfinance日志级别
-                    yfinance_logger.setLevel(original_level)
                     return None
         else:
             # 从info或hist获取价格
@@ -611,8 +470,6 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
                 current_price = hist['Close'].iloc[-1]
             
             if current_price == 0:
-                # 恢复yfinance日志级别
-                yfinance_logger.setLevel(original_level)
                 return None
 
         # 计算技术指标（如果有足够的历史数据）
@@ -759,56 +616,6 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
         # 获取公司名称
         company_name = info.get('longName') or info.get('shortName') or info.get('name') or normalized_ticker
         
-        # 获取公司业务描述
-        business_summary = info.get('longBusinessSummary') or info.get('businessSummary') or ''
-        
-        # 获取公司最新新闻（最多5条）
-        company_news = []
-        try:
-            news_list = stock.news
-            if news_list and len(news_list) > 0:
-                # 只取最近5条新闻
-                for news_item in news_list[:5]:
-                    if isinstance(news_item, dict):
-                        # yfinance的新闻数据结构是 {'id': ..., 'content': {...}}
-                        # title在content字段中
-                        content = news_item.get('content', {})
-                        if isinstance(content, dict):
-                            news_title = content.get('title') or content.get('headline') or ''
-                            news_publisher = content.get('publisher') or content.get('provider', {}).get('displayName', '') if isinstance(content.get('provider'), dict) else ''
-                            news_time = content.get('pubDate') or content.get('providerPublishTime') or content.get('datetime') or 0
-                            news_link = content.get('canonicalUrl') or content.get('link') or content.get('url') or ''
-                        else:
-                            # 如果没有content字段，直接尝试从news_item获取
-                            news_title = news_item.get('title') or news_item.get('headline') or ''
-                            news_publisher = news_item.get('publisher') or news_item.get('source') or ''
-                            news_time = news_item.get('pubDate') or news_item.get('providerPublishTime') or news_item.get('datetime') or 0
-                            news_link = news_item.get('link') or news_item.get('url') or ''
-                    else:
-                        # 如果是对象，尝试访问属性
-                        news_title = getattr(news_item, 'title', None) or getattr(news_item, 'headline', None) or ''
-                        news_publisher = getattr(news_item, 'publisher', None) or getattr(news_item, 'source', None) or ''
-                        news_time = getattr(news_item, 'pubDate', None) or getattr(news_item, 'providerPublishTime', None) or getattr(news_item, 'datetime', None) or 0
-                        news_link = getattr(news_item, 'link', None) or getattr(news_item, 'url', None) or ''
-                    
-                    if news_title and str(news_title).strip():
-                        company_news.append({
-                            'title': str(news_title).strip(),
-                            'publisher': str(news_publisher).strip() if news_publisher else '',
-                            'time': news_time,
-                            'link': str(news_link).strip() if news_link else ''
-                        })
-        except Exception as e:
-            # 捕获所有新闻获取错误（包括SSL错误、网络错误等），不影响主流程
-            error_msg = str(e)
-            error_type = type(e).__name__
-            # 如果是SSL错误或网络错误，只记录警告，不抛出异常
-            if 'SSL' in error_msg or 'TLS' in error_msg or 'curl' in error_msg.lower() or 'network' in error_msg.lower() or 'SSLError' in error_type:
-                print(f"获取新闻时遇到网络/SSL错误（不影响主流程）: {error_type}")
-            else:
-                print(f"获取公司新闻失败: {error_type}: {error_msg[:100]}")
-            # 不抛出异常，继续执行主流程
-        
         # 获取行业信息，如果缺失则尝试推断
         sector = info.get('sector', 'Unknown')
         industry = info.get('industry', 'Unknown')
@@ -829,8 +636,6 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
             "name": company_name,
             "sector": sector,
             "industry": industry,
-            "business_summary": business_summary,  # 公司业务描述
-            "company_news": company_news,  # 公司最新新闻
             "price": float(current_price),
             "week52_high": float(week52_high),
             "week52_low": float(week52_low),
@@ -855,102 +660,12 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
         data['is_etf_or_fund'] = is_fund
         data['fund_type'] = fund_type if is_fund else None
         
-        # 恢复yfinance日志级别
-        yfinance_logger.setLevel(original_level)
-        
-        # 成功处理完所有数据，返回结果
         return data
-    
-    # 恢复yfinance日志级别（如果提前返回）
-    yfinance_logger.setLevel(original_level)
-    
-    # 如果 Yahoo Finance 失败，尝试使用备用数据源
-    backup_error_detail = None
-    if yf_failed and use_backup:
-        try:
-            from alpha_vantage_data import get_market_data_from_av, is_av_available
-            
-            if is_av_available():
-                print(f"Yahoo Finance 失败，尝试使用 Alpha Vantage 作为备用数据源...")
-                try:
-                    backup_data = get_market_data_from_av(ticker, only_history=onlyHistoryData, start_date=startDate)
-                    if backup_data:
-                        print("✅ 成功从 Alpha Vantage 获取数据")
-                        # 标记数据来源
-                        backup_data['data_source'] = 'Alpha Vantage (备用)'
-                        return backup_data
-                except Exception as backup_error:
-                    error_msg = str(backup_error)
-                    print(f"❌ Alpha Vantage 备用数据源也失败: {error_msg}")
-                    # 保存错误详情，用于后续错误报告
-                    backup_error_detail = error_msg
-                    # 如果 Alpha Vantage 是因为不支持该市场而失败，不抛出错误
-                    if "仅支持美股" not in error_msg and "仅支持" not in error_msg:
-                        # 对于其他错误（如速率限制），保存错误信息
-                        pass
-            else:
-                print("⚠️ Alpha Vantage 不可用（未安装或未配置 API Key）")
-                backup_error_detail = "Alpha Vantage 不可用（未安装或未配置 API Key）"
-        except ImportError:
-            print("⚠️ Alpha Vantage 模块未安装，无法使用备用数据源")
-            backup_error_detail = "Alpha Vantage 模块未安装"
-        except Exception as e:
-            print(f"⚠️ 尝试使用备用数据源时出错: {e}")
-            backup_error_detail = str(e)
-    
-    # 如果所有尝试都失败，抛出异常以便 app.py 能够捕获并返回详细错误
-    if yf_failed:
-        # 构建详细的错误信息
-        error_parts = []
-        if yf_error:
-            error_parts.append(f"Yahoo Finance: {str(yf_error)}")
-        if backup_error_detail:
-            error_parts.append(f"Alpha Vantage (备用): {backup_error_detail}")
-        
-        if error_parts:
-            combined_error = "数据获取失败：\n" + "\n".join(f"- {part}" for part in error_parts)
-            # 检查是否是速率限制错误
-            # 检查错误信息中是否包含速率限制的关键词
-            has_rate_limit = False
-            rate_limit_keywords = ["速率限制", "Too Many Requests", "Rate limited", "API call frequency", 
-                                   "Thank you for using Alpha Vantage", "rate limit", "请求过于频繁"]
-            
-            for keyword in rate_limit_keywords:
-                if keyword in combined_error:
-                    has_rate_limit = True
-                    break
-            
-            if has_rate_limit:
-                # 提供更详细和实用的错误信息
-                error_message = """⚠️ 数据源暂时繁忙
-
-所有数据源（Yahoo Finance 和 Alpha Vantage）当前都遇到速率限制。
-
-速率限制说明：
-• Yahoo Finance：免费 API 有严格的速率限制，可能需要在 15-30 分钟后才能恢复
-• Alpha Vantage 免费版：每分钟限制 5 次请求，每天限制 500 次请求
-
-如果已经等待很久仍然报错，可能的原因：
-1. 今日查询次数已达到上限（特别是 Alpha Vantage 每天 500 次）
-2. IP 地址被暂时限制（Yahoo Finance 可能对频繁请求的 IP 进行临时封禁）
-3. 数据源正在进行维护
-
-建议操作：
-• 等待 30-60 分钟后再试（Yahoo Finance 可能需要更长时间）
-• 如果急需数据，可以尝试使用 VPN 更换 IP 地址
-• 避免在短时间内多次查询
-• 可以尝试查询不同的股票代码（某些代码可能不会触发限制）
-• 如果频繁遇到此问题，建议使用付费的数据源 API
-
-注意：这是免费 API 的正常限制，不是系统错误。"""
-                raise Exception(error_message)
-            else:
-                raise Exception(combined_error)
-        else:
-            raise Exception(f"无法获取股票 {ticker} 的数据：所有数据源均失败")
-    
-    # 如果所有尝试都失败，返回None（正常情况下不应该到达这里）
-    return None
+    except Exception as e:
+        import traceback
+        print(f"Data Error: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return None
 
 
 def get_fed_meeting_dates():
@@ -2834,21 +2549,6 @@ def calculate_target_price(data, risk_result, style):
         # 确保目标价格在合理范围内
         # 最低不低于当前价格的80%，最高不超过当前价格的250%
         target_price = max(current_price * 0.8, min(target_price, current_price * 2.5))
-        
-        # 优化：如果计算出的目标价格远低于当前价格（说明当前价格被高估），
-        # 我们需要调整逻辑，确保目标价格不会不合理地低于当前价格
-        # 如果目标价格低于当前价格的95%，说明估值模型认为当前价格被高估
-        # 在这种情况下，我们应该：
-        # 1. 设置目标价格为当前价格的95-100%，作为"重新评估后的合理价格"
-        # 2. 这样AI在生成报告时会知道当前价格已经达到或超过目标价格，应该考虑止盈
-        if target_price < current_price * 0.95:
-            # 当前价格可能被高估，但为了卖出建议的合理性，我们设置目标价格为当前价格的95%
-            # 这表示"如果价格继续上涨，可以考虑在目标价格（当前价格的95%）附近止盈"
-            # 但实际上，由于当前价格已经超过这个目标价格，AI会建议立即考虑止盈或减仓
-            # 存储原始目标价格（用于说明估值情况）
-            data['original_target_price'] = target_price
-            # 设置新的目标价格为当前价格的95%，作为止盈参考点
-            target_price = current_price * 0.95
     
     # 存储计算方法信息（用于前端显示）
     data['target_price_methods'] = methods_used
@@ -3047,8 +2747,6 @@ def analyze_risk_and_position(style, data):
     elif risk_score >= 2: adjustment = 0.7
     
     suggested_position = max_cap * adjustment
-    
-    # 注意：目标价格在app.py中会在风险计算后计算，所以价格相关的仓位调整会在app.py中进行
     
     return {
         "score": risk_score,

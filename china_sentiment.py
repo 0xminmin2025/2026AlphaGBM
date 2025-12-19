@@ -283,6 +283,3 @@ def get_northbound_funds():
     return northbound_data
 
 
-
-
-

@@ -123,11 +123,4 @@ PUT_CALL_MEDIUM = 1.2      # Put/Call比率高于1.2视为中等风险
 TREASURY_YIELD_VERY_HIGH = 5.0   # 美债收益率高于5.0%视为高风险
 TREASURY_YIELD_HIGH = 4.5        # 美债收益率高于4.5%视为中等风险
 
-# ==================== 数据源配置 ====================
-
-# Alpha Vantage API Key（备用数据源）
-# 从环境变量 ALPHA_VANTAGE_API_KEY 读取，如果没有设置则为空字符串
-# 获取方式：https://www.alphavantage.co/support/#api-key
-
-
 

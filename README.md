@@ -183,21 +183,12 @@ pip install -r requirements.txt
 
 ```env
 GOOGLE_API_KEY=your_gemini_api_key_here
-ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here  # 可选：备用数据源
 ```
 
-获取 API Key：
-
-**Gemini API Key（必需）**：
+获取 Gemini API Key：
 1. 访问 [Google AI Studio](https://makersuite.google.com/app/apikey)
 2. 创建新的 API Key
 3. 将 API Key 复制到 `.env` 文件中
-
-**Alpha Vantage API Key（可选，备用数据源）**：
-1. 访问 [Alpha Vantage](https://www.alphavantage.co/support/#api-key)
-2. 注册免费账户并获取 API Key
-3. 将 API Key 添加到 `.env` 文件中
-4. **注意**：Alpha Vantage 仅支持美股数据，作为 Yahoo Finance 的备用数据源使用
 
 ## ⚙️ 配置说明
 
@@ -452,9 +443,9 @@ AlphaG/
 - **A股**：6位数字自动识别（600/601/603/688开头 → .SS，000/001/002/300开头 → .SZ）
 - 系统会优先识别A股，然后识别港股
 - 如果自动识别失败，可以手动添加后缀：
-- 港股：添加 `.HK`（如：2525.HK）
-- A股上海：添加 `.SS`（如：600519.SS）
-- A股深圳：添加 `.SZ`（如：000001.SZ）
+  - 港股：添加 `.HK`（如：2525.HK）
+  - A股上海：添加 `.SS`（如：600519.SS）
+  - A股深圳：添加 `.SZ`（如：000001.SZ）
 
 ### Q2: Gemini API 报错怎么办？
 
@@ -518,24 +509,6 @@ AlphaG/
 - 卖出时机建议
 
 ## 📝 更新日志
-
-### v1.3.0 (2025-12-18)
-- 🐛 **Bug修复**：
-  - 修复ETF数据获取时的ERROR日志问题（抑制yfinance fundamentals 404错误，ETF没有财报数据是正常的）
-  - 修复港股代码标准化问题：支持09988和9988两种格式输入，自动识别为9988.HK
-  - 修复前端pricePosition.toFixed错误：确保价格位置计算为数字类型
-  - 修复ETF估值显示问题：ETF不显示PE/PEG等不适用指标，改为显示ETF专用说明
-- ✨ **功能增强**：
-  - **ETF完整支持**：优化ETF识别、估值计算和前端显示，正确处理ETF特有属性
-  - **Alpha Vantage备用数据源**：集成Alpha Vantage作为Yahoo Finance的备用数据源（仅支持美股）
-  - **忘记密码功能**：添加密码重置功能，通过邮箱验证码重置密码
-  - **公司概况增强**：AI报告中新增公司业务介绍和最新新闻动态（中文翻译）
-  - **目标价格优化**：ETF使用技术面和52周区间估值，而非PE/PEG估值
-  - **动态仓位调整**：根据当前价格与目标价格的关系，动态调整建议仓位
-- 🔧 **代码优化**：
-  - 优化yfinance日志输出，减少不必要的ERROR日志
-  - 改进错误处理，提供更友好的错误提示
-  - 优化前端代码，修复类型错误
 
 ### v1.2.0 (2025-12)
 - 🎨 **UI优化**：
