@@ -251,7 +251,7 @@ def send_verification_email(recipient_email, code):
         msg.body = f'''
 您的邮箱验证码是: {code}
 
-请在5分钟内使用此验证码完成注册。
+请在5分钟内使用此验证码。
 
 如果您没有发起此请求，请忽略此邮件。
 
@@ -473,6 +473,130 @@ def login():
     except Exception as e:
         logger.error(f"用户登录失败: {e}")
         return jsonify({'error': '登录过程中发生错误'}), 500
+
+
+# 用户忘记密码API端点 - 第一步：请求重置密码验证码
+@app.route('/api/forgot-password/request-code', methods=['POST'])
+def request_password_reset_code():
+    # 如果缺少必要依赖，返回友好错误
+    if not SQLAlchemy or not Mail:
+        return jsonify({'error': '验证码模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
+        
+    try:
+        data = request.json
+        
+        # 验证输入参数
+        if 'email' not in data:
+            return jsonify({'error': '缺少邮箱参数'}), 400
+        
+        email = data['email'].strip()
+        
+        # 验证邮箱格式
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            return jsonify({'error': '邮箱格式不正确'}), 400
+        
+        # 检查邮箱是否已注册
+        existing_user = User.query.filter_by(email=email).first()
+        if not existing_user:
+            return jsonify({'error': '该邮箱未注册，请先注册'}), 404
+        
+        # 生成验证码
+        code = generate_verification_code()
+        expires_at = datetime.now() + timedelta(minutes=5)
+        
+        # 删除该邮箱之前的验证码
+        EmailVerification.query.filter_by(email=email).delete()
+        
+        # 保存新验证码
+        verification = EmailVerification(
+            email=email,
+            verification_code=code,
+            expires_at=expires_at
+        )
+        db.session.add(verification)
+        db.session.commit()
+        
+        # 发送验证码邮件
+        if send_verification_email(email, code):
+            return jsonify({
+                'message': '验证码已发送至您的邮箱，请查收',
+                'email': email
+            }), 200
+        else:
+            return jsonify({'error': '发送验证码失败，请稍后重试'}), 500
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"发送密码重置验证码请求失败: {e}")
+        return jsonify({'error': '请求处理过程中发生错误'}), 500
+
+# 用户忘记密码API端点 - 第二步：验证验证码并重置密码
+@app.route('/api/forgot-password/reset', methods=['POST'])
+def reset_password():
+    # 如果缺少必要依赖，返回友好错误
+    if not SQLAlchemy:
+        return jsonify({'error': '认证模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
+        
+    try:
+        data = request.json
+        
+        # 验证输入参数
+        required_fields = ['email', 'verification_code', 'new_password']
+        if not all(k in data for k in required_fields):
+            return jsonify({'error': '缺少必要参数，请提供邮箱、验证码和新密码'}), 400
+        
+        email = data['email'].strip()
+        code = data['verification_code'].strip()
+        new_password = data['new_password']
+        
+        # 验证邮箱格式
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            return jsonify({'error': '邮箱格式不正确'}), 400
+        
+        # 验证密码强度
+        if len(new_password) < 6:
+            return jsonify({'error': '密码长度至少为6个字符'}), 400
+        
+        # 验证验证码
+        verification = EmailVerification.query.filter_by(
+            email=email,
+            verification_code=code,
+            is_used=False
+        ).first()
+        
+        if not verification:
+            return jsonify({'error': '验证码无效或已过期'}), 400
+        
+        if datetime.now() > verification.expires_at:
+            return jsonify({'error': '验证码已过期，请重新获取'}), 400
+        
+        # 查找用户
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': '用户不存在'}), 404
+        
+        # 标记验证码为已使用
+        verification.is_used = True
+        
+        # 更新用户密码
+        user.set_password(new_password)
+        
+        # 提交更改
+        db.session.commit()
+        
+        logger.info(f"用户密码重置成功: {email}")
+        
+        return jsonify({
+            'message': '密码重置成功，请使用新密码登录'
+        }), 200
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"密码重置失败: {e}")
+        return jsonify({'error': '密码重置过程中发生错误'}), 500
+
 
 # 查询次数限制相关辅助函数
 @app.route('/api/query_count', methods=['GET'])
@@ -796,4 +920,3 @@ if __name__ == '__main__':
         db.create_all()
     print("服务器地址: http://127.0.0.1:5002")
     app.run(debug=True, port=5002, host='0.0.0.0', threaded=True)
-

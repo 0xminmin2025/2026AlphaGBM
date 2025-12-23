@@ -1009,8 +1009,11 @@
             // 获取当前日期
             const reportDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 
-            // 计算价格位置
-            const pricePosition = ((data.price - data.week52_low) / (data.week52_high - data.week52_low) * 100).toFixed(1);
+            // 计算价格位置（保持为数字，在需要显示时再格式化）
+            const week52Range = data.week52_high - data.week52_low;
+            const pricePosition = week52Range > 0 ? ((data.price - data.week52_low) / week52Range * 100) : 50.0;
+            // 确保pricePosition是有效的数字
+            const pricePositionNum = isNaN(pricePosition) || !isFinite(pricePosition) ? 50.0 : Math.max(0, Math.min(100, pricePosition));
 
             let html = `
             <!-- 报告标题 -->
@@ -1045,7 +1048,7 @@
                 <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">一、核心观点</div>
                 <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
                     <p><strong style="color: #f8fafc;">投资风格：</strong>${styleName}。${styleName === '质量 (Quality)' ? '本报告基于质量投资风格，重点关注公司财务稳健性、盈利能力和长期竞争优势。' : styleName === '价值 (Value)' ? '本报告基于价值投资风格，重点关注估值水平和安全边际。' : styleName === '成长 (Growth)' ? '本报告基于成长投资风格，重点关注营收增长和盈利增长潜力。' : '本报告基于趋势投资风格，重点关注价格动量和市场趋势。'}</p>
-                    <p><strong style="color: #f8fafc;">核心结论：</strong>基于G=B+M模型分析，当前价格位于52周区间的${pricePosition}%位置。基本面数据显示营收增长率为${(data.growth * 100).toFixed(2)}%，利润率为${(data.margin * 100).toFixed(2)}%。估值方面，市盈率为${data.pe ? data.pe.toFixed(2) : 'N/A'}，${data.pe && data.pe > 30 ? '估值偏高' : data.pe && data.pe > 15 ? '估值合理' : '估值偏低'}。综合风险评分为${risk.score}/10，风险等级为${risk.level}。</p>
+                    <p><strong style="color: #f8fafc;">核心结论：</strong>基于G=B+M模型分析，当前价格位于52周区间的${pricePositionNum.toFixed(1)}%位置。${data.is_etf_or_fund ? `这是${data.fund_type === 'ETF' ? 'ETF（交易所交易基金）' : data.fund_type === 'REIT' ? 'REIT（房地产投资信托）' : '基金'}，不适用公司财务指标（营收、利润、PE等）。` : `基本面数据显示营收增长率为${(data.growth * 100).toFixed(2)}%，利润率为${(data.margin * 100).toFixed(2)}%。估值方面，市盈率为${data.pe && data.pe > 0 ? data.pe.toFixed(2) : 'N/A'}，${data.pe && data.pe > 0 ? (data.pe > 30 ? '估值偏高' : data.pe > 15 ? '估值合理' : '估值偏低') : '数据不足'}。`}综合风险评分为${risk.score}/10，风险等级为${risk.level}。</p>
                     <p><strong style="color: #f8fafc;">投资建议：</strong>${rating.text}。建议仓位上限为${risk.suggested_position}%。${risk.suggested_position === 0 ? '当前风险过高，不建议建仓，建议观望。' : risk.score >= 4 ? '建议分批建仓，控制风险。' : '可考虑一次性建仓，但需严格遵守仓位上限。'}</p>
                 </div>
             </div>
@@ -1082,6 +1085,32 @@
                     </div>
                     `}
                 </div>
+                ${!data.is_etf_or_fund ? `
+                <!-- 
+                注意：业务介绍和最新动态的详细中文版本会在AI报告的"第二部分：公司概况"中显示
+                这里仅显示原始数据作为参考
+                -->
+                <!-- 最新动态 -->
+                ${data.company_news && Array.isArray(data.company_news) && data.company_news.length > 0 ? `
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #334155;">
+                    <div style="color: #60a5fa; font-weight: 600; font-size: 1rem; margin-bottom: 0.8rem;">最新动态</div>
+                    <div style="color: #cbd5e1; line-height: 1.8; font-size: 0.95rem;">
+                        <ul style="margin: 0; padding-left: 1.5rem;">
+                            ${data.company_news.slice(0, 5).map(news => {
+                                const title = news && news.title ? news.title : '无标题';
+                                const publisher = news && news.publisher ? news.publisher : '';
+                                return `
+                                <li style="margin-bottom: 0.8rem;">
+                                    <strong>${title}</strong>
+                                    ${publisher ? `<span style="color: #64748b; font-size: 0.9rem;"> - ${publisher}</span>` : ''}
+                                </li>
+                            `;
+                            }).join('')}
+                        </ul>
+                    </div>
+                </div>
+                ` : ''}
+                ` : ''}
             </div>
 
             <!-- 财务分析 / ETF分析 -->
@@ -1095,8 +1124,8 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <div class="text-report-label">价格位置</div>
-                        <div class="text-report-value ${pricePosition > 80 ? 'text-warning' : pricePosition < 20 ? 'text-success' : ''}" style="font-size: 1.1rem;">${pricePosition.toFixed(1)}%</div>
-                        <small style="color: #64748b;">位于52周区间${pricePosition > 80 ? '高位，需警惕追高风险' : pricePosition < 20 ? '低位，可能存在机会' : '中位'}</small>
+                        <div class="text-report-value ${pricePositionNum > 80 ? 'text-warning' : pricePositionNum < 20 ? 'text-success' : ''}" style="font-size: 1.1rem;">${pricePositionNum.toFixed(1)}%</div>
+                        <small style="color: #64748b;">位于52周区间${pricePositionNum > 80 ? '高位，需警惕追高风险' : pricePositionNum < 20 ? '低位，可能存在机会' : '中位'}</small>
                     </div>
                     <div class="col-md-6 mb-3">
                         <div class="text-report-label">技术趋势</div>
@@ -1152,7 +1181,7 @@
                     <div class="col-md-4 mb-3">
                         <div class="text-report-label">52周价格区间</div>
                         <div class="text-report-value" style="font-size: 0.95rem;">${data['currency_symbol']}${data.week52_low.toFixed(2)} - ${data['currency_symbol']}${data.week52_high.toFixed(2)}</div>
-                        <small style="color: #64748b;">当前位于${pricePosition}%分位</small>
+                        <small style="color: #64748b;">当前位于${pricePositionNum.toFixed(1)}%分位</small>
                     </div>
                     <div class="col-md-4 mb-3">
                         <div class="text-report-label">技术趋势</div>
@@ -1234,16 +1263,16 @@
                             <div style="margin-left: 1rem; margin-top: 0.3rem;">
                                 ${data.macro_data.fed_meetings.length > 0 ? `
                                 <div style="margin-bottom: 0.2rem;">
-                                    <strong>美联储利率决议：</strong>
-                                    ${data.macro_data.fed_meetings.map(m => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}
-                                </div>
-                                ` : ''}
+                            <strong>美联储利率决议：</strong>
+                            ${data.macro_data.fed_meetings.map(m => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}
+                        </div>
+                        ` : ''}
                                 ${data.macro_data.cpi_releases && data.macro_data.cpi_releases.filter(c => c.country === 'US').length > 0 ? `
                                 <div style="margin-bottom: 0.2rem;">
-                                    <strong>CPI数据发布：</strong>
+                            <strong>CPI数据发布：</strong>
                                     ${data.macro_data.cpi_releases.filter(c => c.country === 'US').map(c => `${c.date} (${c.days_until}天后，发布${c.data_month}数据)`).join('、')}
-                                </div>
-                                ` : ''}
+                        </div>
+                        ` : ''}
                                 ${data.macro_data.options_expirations && data.macro_data.options_expirations.length > 0 ? `
                                 <div style="margin-bottom: 0.2rem;">
                                     <strong>期权到期日：</strong>
@@ -1297,6 +1326,7 @@
                 </div>
                 ` : ''}
                 </div>
+                ${!data.is_etf_or_fund ? `
                 <div class="row" style="margin-top: 1rem;">
                     <div class="col-md-4 mb-3">
                         <div class="text-report-label">市盈率 (PE)</div>
@@ -1316,6 +1346,10 @@
                 </div>
                 <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
                     <p><strong style="color: #f8fafc;">估值结论：</strong>${data.pe && data.pe > 30 ? '当前估值水平偏高，市场情绪较为乐观，需警惕估值泡沫风险。' : data.pe && data.pe > 15 ? '当前估值水平处于合理区间，市场情绪相对稳定。' : data.pe && data.pe > 0 ? '当前估值水平偏低，可能存在价值投资机会。' : '估值数据不足，建议结合其他指标综合判断。'}</p>
+                ` : `
+                <div style="color: #cbd5e1; line-height: 1.8; margin-top: 1rem;">
+                    <p><strong style="color: #f8fafc;">估值结论：</strong>${data.fund_type === 'ETF' ? 'ETF不适用传统估值指标（PE、PEG等），主要关注跟踪标的指数的表现、流动性、管理费率和技术面指标（价格趋势、52周区间等）。' : data.fund_type === 'REIT' ? 'REIT主要通过股息收益率和资产质量进行评估，不适用传统的PE/PEG估值方法。' : '基金不适用传统估值指标，主要关注净值表现和管理质量。'}</p>
+                `}
                     ${data.options_data && (data.options_data.vix > 30 || (data.options_data.vix_change && data.options_data.vix_change > 10) || (data.options_data.put_call_ratio && data.options_data.put_call_ratio > 1.2)) ? `
                     <p style="color: #fca5a5; margin-top: 0.5rem;"><strong>期权市场风险提示：</strong>
                     ${data.options_data.vix > 30 ? `VIX指数处于高位(${data.options_data.vix.toFixed(1)})，市场波动加剧，存在Vanna crush和负Gamma风险。` : ''}
@@ -1397,8 +1431,15 @@
                             
                             <p style="margin-bottom: 0.8rem;"><strong style="color: #f8fafc;">特殊情况卖出：</strong></p>
                             <ul style="margin-left: 1.5rem; margin-bottom: 0.8rem; color: #cbd5e1;">
+                                ${!data.is_etf_or_fund ? `
                                 <li><strong style="color: #ef4444;">基本面恶化：</strong>如果营收转为负增长或利润率大幅下降（下降超过30%），立即卖出，不要等待。</li>
                                 <li><strong style="color: #ef4444;">估值过高：</strong>如果PE超过合理范围50%以上（当前PE：${data.pe ? data.pe.toFixed(2) : 'N/A'}），考虑提前卖出锁定利润。</li>
+                                ` : `
+                                ${data.fund_type === 'ETF' ? `
+                                <li><strong style="color: #ef4444;">跟踪误差过大：</strong>如果ETF跟踪误差持续扩大，或标的指数出现重大变化，考虑更换ETF。</li>
+                                <li><strong style="color: #ef4444;">流动性恶化：</strong>如果ETF成交量持续萎缩，买卖价差扩大，考虑减仓或卖出。</li>
+                                ` : ''}
+                                `}
                                 <li><strong style="color: #ef4444;">市场系统性风险：</strong>如果VIX>30或地缘政治风险>7，建议提前减仓50%或全部卖出，规避系统性风险。</li>
                             </ul>
                             
@@ -1536,6 +1577,7 @@
     </script>
     <script src="/static/auth.js"></script>
     <script src="/static/feedback.js"></script>
+    <script src="/static/forgot_password.js"></script>
 </body>
 
 </html>
