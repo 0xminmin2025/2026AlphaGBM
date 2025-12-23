@@ -95,6 +95,9 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', '')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', ''))
 
+# 普通用户每日最大查询次数
+REGULAR_USER_DAILY_MAX_QUERIES = int(os.getenv('REGULAR_USER_DAILY_MAX_QUERIES', '5'))
+
 # 初始化扩展
 db = SQLAlchemy(app) if SQLAlchemy else None
 jwt = JWTManager(app) if JWTManager else None
@@ -185,6 +188,20 @@ def get_user_info_from_token():
     except Exception:
         return None
 
+# 特定用户ID的每日最大查询次数配置
+# 格式: USER_<USER_ID>_MAX_QUERIES=次数
+# 例如: USER_1_MAX_QUERIES=20
+# 如果未设置特定用户ID的查询次数，则使用REGULAR_USER_DAILY_MAX_QUERIES
+def get_user_max_queries(user_id):
+    """根据用户ID获取其每日最大查询次数"""
+    env_key = f'USER_{user_id}_MAX_QUERIES'
+    # 先尝试获取特定用户的配置
+    if os.getenv(env_key):
+        return int(os.getenv(env_key))
+    # 其他用户使用普通用户配置
+    else:
+        return REGULAR_USER_DAILY_MAX_QUERIES
+
 def get_or_create_daily_query_count(user_id):
     """获取或创建用户当日的查询统计记录"""
     # 获取当前日期（仅年月日）
@@ -203,12 +220,15 @@ def get_or_create_daily_query_count(user_id):
         # 删除可能存在的过期记录
         DailyQueryCount.query.filter_by(user_id=user_id).delete()
         
+        # 获取用户的最大查询次数
+        dailyMaxQueryCount = get_user_max_queries(user_id)
+        
         # 创建新的每日查询记录
         daily_query = DailyQueryCount(
             user_id=user_id,
             date=today,
             query_count=0,
-            max_queries=5,  # 默认每天5次
+            max_queries=dailyMaxQueryCount,
             reset_time=reset_time
         )
         db.session.add(daily_query)
