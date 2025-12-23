@@ -322,7 +322,7 @@ async function requestPasswordResetCode() {
             messageDiv.style.display = 'block';
 
             // 倒计时
-            let countdown = 60;
+            let countdown = 300;
             button.textContent = `${countdown}秒后重试`;
 
             const timer = setInterval(() => {
