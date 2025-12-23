@@ -167,7 +167,7 @@ if SQLAlchemy:
         user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)  # 添加索引优化查询性能
         date = db.Column(db.Date, nullable=False)  # 查询日期
         query_count = db.Column(db.Integer, default=0)  # 已使用查询次数
-        max_queries = db.Column(db.Integer, default=10)  # 每日最大查询次数（默认10次）
+        max_queries = db.Column(db.Integer, default=5)  # 每日最大查询次数（默认5次）
         reset_time = db.Column(db.DateTime, nullable=False)  # 下次重置时间
         
         # 关联到用户表
@@ -208,7 +208,7 @@ def get_or_create_daily_query_count(user_id):
             user_id=user_id,
             date=today,
             query_count=0,
-            max_queries=10,  # 默认每天10次
+            max_queries=5,  # 默认每天5次
             reset_time=reset_time
         )
         db.session.add(daily_query)
