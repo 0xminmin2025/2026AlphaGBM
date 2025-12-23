@@ -1,5 +1,5 @@
-# 使用官方 Python 3.9 镜像作为基础镜像
-FROM python:3.9-slim
+# 使用官方 Python 3.12 镜像作为基础镜像
+FROM python:3.12-slim
 
 # 设置时区为北京时间
 RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo 'Asia/Shanghai' > /etc/timezone
