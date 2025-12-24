@@ -2121,7 +2121,7 @@ def calculate_market_sentiment(data):
     china_sentiment_adjustment = 0.0
     china_sentiment_adjustments = []
     
-    if is_cn_market or is_hk_market:
+    if is_hk_market:
         try:
             from china_sentiment import (
                 get_china_stock_sentiment, 
