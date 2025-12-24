@@ -73,16 +73,29 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # 配置数据库和JWT
-# MySQL数据库连接配置 - 从环境变量读取
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = os.getenv('DB_PORT', '3306')
-DB_NAME = os.getenv('DB_NAME', 'alphag_db')
+# 临时使用 SQLite 进行测试（方便开发）
+# 生产环境请使用 MySQL
+USE_SQLITE = os.getenv('USE_SQLITE', 'true').lower() == 'true'
 
-# 对密码进行URL编码，以处理特殊字符
-encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
-app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+if USE_SQLITE:
+    # SQLite 配置
+    db_dir = os.path.join(os.path.dirname(__file__), 'data')
+    os.makedirs(db_dir, exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(db_dir, "alphag.db")}'
+    logger.info("使用 SQLite 数据库")
+else:
+    # MySQL数据库连接配置 - 从环境变量读取
+    DB_USER = os.getenv('DB_USER', 'root')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_PORT = os.getenv('DB_PORT', '3306')
+    DB_NAME = os.getenv('DB_NAME', 'alphag_db')
+    
+    # 对密码进行URL编码，以处理特殊字符
+    encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+    logger.info(f"使用 MySQL 数据库: {DB_NAME}")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', '')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.getenv('JWT_EXPIRE_HOURS', '24')))
@@ -819,6 +832,29 @@ def analyze():
             stop_loss_price = market_data['price'] * 0.85
             market_data['stop_loss_price'] = stop_loss_price
             market_data['stop_loss_method'] = '固定15%止损（计算失败）'
+        
+        # 4.6. 计算 EV（期望值）模型
+        try:
+            from ev_model import calculate_ev_model
+            ev_result = calculate_ev_model(market_data, risk_result, style)
+            market_data['ev_model'] = ev_result
+            logger.info(f"EV模型计算完成: {ticker}, 加权EV={ev_result.get('ev_weighted_pct', 0):.2f}%")
+        except Exception as e:
+            print(f"计算EV模型时发生异常: {e}")
+            import traceback
+            traceback.print_exc()
+            # 使用默认值
+            market_data['ev_model'] = {
+                'error': str(e),
+                'ev_weighted': 0.0,
+                'ev_weighted_pct': 0.0,
+                'ev_score': 5.0,
+                'recommendation': {
+                    'action': 'HOLD',
+                    'reason': 'EV模型计算失败',
+                    'confidence': 'low'
+                }
+            }
 
         # 5. 调用 Gemini AI (这可能需要几秒钟)
         try:

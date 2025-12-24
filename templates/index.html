@@ -632,6 +632,7 @@
                 </div>
             </div>
 
+
             <div class="row g-4 mb-4">
                 <div class="col-lg-5">
                     <div class="card p-3 mb-3">
@@ -851,6 +852,54 @@
             }
         }
 
+        function renderEVModel(data) {
+            // 将 EV 模型数据整合到风险提示中（作为短期波动风险）
+            const evModel = data.ev_model;
+            const evShortTermEl = document.getElementById('ev_short_term_risk');
+            
+            if (!evModel || evModel.error || !evShortTermEl) {
+                console.warn('EV 模型数据不可用或元素未找到');
+                if (evShortTermEl) {
+                    evShortTermEl.innerText = '无明显短期波动风险';
+                    evShortTermEl.style.color = '#94a3b8';
+                }
+                return;
+            }
+            
+            console.log('EV 模型数据:', evModel);
+            
+            const evWeightedPct = evModel.ev_weighted_pct || 0;
+            const recommendation = evModel.recommendation || {};
+            const reason = recommendation.reason || '';
+            const ev1week = evModel.ev_1week;
+            
+            // 只有在 EV 显著时才显示风险提示（仅对短期投资风格有意义）
+            if (Math.abs(evWeightedPct) > 3) {
+                // 显示概率信息
+                let probText = '';
+                if (ev1week) {
+                    const probUp = (ev1week.probability_up * 100).toFixed(0);
+                    const probDown = (ev1week.probability_down * 100).toFixed(0);
+                    probText = `（上涨概率${probUp}%，下跌概率${probDown}%）`;
+                }
+                
+                evShortTermEl.innerHTML = `${reason} ${probText}`;
+                
+                // 根据风险设置颜色
+                if (evWeightedPct < -3) {
+                    evShortTermEl.style.color = '#fbbf24'; // 黄色警告
+                } else if (evWeightedPct > 3) {
+                    evShortTermEl.style.color = '#10b981'; // 绿色（短期向上）
+                } else {
+                    evShortTermEl.style.color = '#cbd5e1';
+                }
+            } else {
+                // EV 接近中性
+                evShortTermEl.innerText = '短期方向不明确，建议以中长期逻辑为主';
+                evShortTermEl.style.color = '#94a3b8';
+            }
+        }
+
         function renderDashboard(data) {
             const d = data.data;
             const r = data.risk;
@@ -930,8 +979,11 @@
 
             document.getElementById('val_position').innerText = `${r.suggested_position}%`;
 
-            // Render Text Report
+            // Render Text Report (先渲染，以便 EV 元素存在）
             renderTextReport(d, r, data.report);
+            
+            // 渲染 EV 模型数据（必须在 renderTextReport 之后，因为元素在文字报告中）
+            renderEVModel(d);
 
             // Fill Risk Flags
             const list = document.getElementById('riskList');
@@ -1367,6 +1419,10 @@
                     <div class="col-md-6 mb-3">
                         <div class="text-report-label">综合风险评分</div>
                         <div class="text-report-value ${risk.score >= 6 ? 'text-danger' : risk.score >= 4 ? 'text-warning' : 'text-success'}" style="font-size: 1.3rem; font-weight: 700;">${risk.score}/10</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="text-report-label">短期波动风险</div>
+                        <div id="ev_short_term_risk" class="text-report-value" style="font-size: 0.95rem;">--</div>
                     </div>
                     <div class="col-md-6 mb-3">
                         <div class="text-report-label">风险等级</div>

@@ -58,3 +58,13 @@ instance/
 .coverage
 htmlcov/
 
+
+# Backup files
+.env.bak*
+
+# Database
+data/
+*.db
+*.sqlite
+*.sqlite3
+
