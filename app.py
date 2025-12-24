@@ -315,6 +315,11 @@ AlphaG投资分析系统
 def index():
     return render_template('index.html')
 
+@app.route('/demo')
+def demo():
+    """设计系统演示页面"""
+    return render_template('demo.html')
+
 # 用户注册API端点 - 第一步：请求验证码
 @app.route('/api/register/request-code', methods=['POST'])
 def request_verification_code():
