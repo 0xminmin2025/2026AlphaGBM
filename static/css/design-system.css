@@ -17,9 +17,10 @@
   --card-hover: hsl(240, 5%, 12%);          /* 卡片悬停 */
   --card-foreground: hsl(0, 0%, 98%);       /* 卡片文本 */
   
-  /* 主色调 */
-  --primary: hsl(0, 0%, 98%);               /* 主要按钮、强调 */
-  --primary-foreground: hsl(240, 5.9%, 10%);
+  /* 主色调（品牌色 - 青色）*/
+  --primary: hsl(178, 78%, 32%);            /* #0D9B97 - 品牌青色（深色）*/
+  --primary-rgb: 13, 155, 151;              /* RGB 值 */
+  --primary-foreground: hsl(0, 0%, 98%);    /* 主色上的文字 */
   
   /* 次要色 */
   --secondary: hsl(240, 3.7%, 15.9%);       /* 次要按钮 */
@@ -29,15 +30,15 @@
   --muted: hsl(240, 3.7%, 15.9%);           /* 不活跃状态 */
   --muted-foreground: hsl(240, 5%, 64.9%);  /* #9CA3AF */
   
-  /* 强调色 */
-  --accent: hsl(240, 3.7%, 15.9%);          /* 悬停、焦点 */
+  /* 强调色（使用品牌色）*/
+  --accent: hsl(178, 78%, 32%);             /* #0D9B97 - 悬停、焦点 */
   --accent-foreground: hsl(0, 0%, 98%);
   
   /* 边框 */
   --border: hsl(240, 3.7%, 15.9%);          /* #27272A */
-  --border-hover: hsl(240, 3.7%, 20%);      /* 边框悬停 */
+  --border-hover: hsl(178, 78%, 32%);       /* 边框悬停使用品牌色 */
   --input: hsl(240, 3.7%, 15.9%);
-  --ring: hsl(240, 4.9%, 83.9%);            /* 焦点环 */
+  --ring: hsl(178, 78%, 32%);               /* 焦点环使用品牌色 */
   
   /* 金融专用色（中国市场习惯：红跌绿涨）*/
   --bull: hsl(142, 76%, 36%);               /* #10B981 - 上涨/看涨 */
@@ -48,12 +49,12 @@
   --success: hsl(142, 76%, 36%);            /* 成功 */
   --error: hsl(0, 72%, 51%);                /* 错误 */
   --warning: hsl(38, 92%, 50%);             /* #F59E0B - 警告 */
-  --info: hsl(199, 89%, 48%);               /* #0EA5E9 - 信息 */
+  --info: hsl(178, 78%, 32%);               /* #0D9B97 - 信息（使用品牌色）*/
   
   /* 数据可视化 */
   --chart-1: hsl(142, 76%, 36%);            /* 绿色 */
   --chart-2: hsl(0, 72%, 51%);              /* 红色 */
-  --chart-3: hsl(217, 91%, 60%);            /* 蓝色 */
+  --chart-3: hsl(178, 78%, 32%);            /* 青色（品牌色）*/
   --chart-4: hsl(280, 65%, 60%);            /* 紫色 */
   --chart-5: hsl(43, 74%, 66%);             /* 黄色 */
   
@@ -166,12 +167,15 @@ body.bg-dark {
 
 .btn-primary {
   background-color: var(--primary) !important;
-  color: var(--primary-foreground) !important;
+  color: white !important;
+  border: none !important;
 }
 
 .btn-primary:hover {
-  background-color: hsl(0, 0%, 90%) !important;
+  background-color: hsl(178, 78%, 40%) !important;  /* 稍亮的青色 */
+  color: white !important;
   transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(13, 155, 151, 0.3);
 }
 
 .btn-secondary {
@@ -229,9 +233,36 @@ body.bg-dark {
 .form-select:focus {
   background-color: var(--input) !important;
   border-color: var(--ring) !important;
-  box-shadow: 0 0 0 2px var(--ring) !important;
+  box-shadow: 0 0 0 2px rgba(16, 181, 176, 0.2) !important;
   color: var(--foreground) !important;
   outline: none;
+}
+
+/* ==================== 徽章 (Badges) ==================== */
+
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.badge-primary {
+  background-color: var(--primary) !important;
+  color: white !important;
+}
+
+.badge-secondary {
+  background-color: var(--secondary) !important;
+  color: var(--secondary-foreground) !important;
+}
+
+.badge-neutral {
+  background-color: var(--muted) !important;
+  color: var(--muted-foreground) !important;
 }
 
 .form-control::placeholder {

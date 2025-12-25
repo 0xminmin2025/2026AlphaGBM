@@ -294,6 +294,7 @@
     background: var(--accent);
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    border-left-color: var(--foreground);
 }
 
 .pillar-item strong {
@@ -301,6 +302,11 @@
     display: block;
     margin-bottom: 0.5rem;
     font-size: 1.05rem;
+    transition: color 0.2s;
+}
+
+.pillar-item:hover strong {
+    color: var(--foreground);
 }
 
 .pillar-item div {
@@ -344,7 +350,7 @@
 
 .style-badge:hover {
     background: var(--accent);
-    border-color: var(--primary);
+    border-color: var(--foreground);
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
@@ -352,6 +358,11 @@
 .style-badge strong {
     color: var(--primary);
     margin-right: 0.4rem;
+    transition: color 0.2s;
+}
+
+.style-badge:hover strong {
+    color: var(--foreground);
 }
 
 /* 8. 输入框占位符 */
@@ -431,7 +442,7 @@
                     <div class="philosophy-header" onclick="togglePhilosophy()" style="cursor: pointer;">
                         <div class="philosophy-title">
                             <i class="bi bi-lightbulb-fill me-2"></i>
-                            <span>AlphaG 投资理念</span>
+                            <span>AlphaP 投资理念</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.9rem;">
                             <span id="philosophyToggleText">收起</span>
@@ -442,7 +453,7 @@
                         <!-- 核心模型 -->
                         <div class="philosophy-section">
                             <div style="color: var(--muted-foreground); font-size: 0.95rem; line-height: 1.7;">
-                                <strong style="color: var(--foreground);">核心模型：<span class="philosophy-formula">G = B + M</span></strong>。我们将股票价格<span class="philosophy-formula">G</span>解构为基本面<span class="philosophy-formula bull">B</span>与市场情绪<span class="philosophy-formula warning">M</span>的叠加。通过量化分析识别价格与内在价值的偏离，寻找投资机会。
+                                <strong style="color: var(--foreground);">核心模型：<span class="philosophy-formula">P = F + S</span></strong>。我们将股票价格<span class="philosophy-formula">P</span>解构为基本面<span class="philosophy-formula bull">F</span>与市场情绪<span class="philosophy-formula warning">S</span>的叠加。通过量化分析识别价格与内在价值的偏离，寻找投资机会。
                             </div>
                         </div>
 
@@ -502,7 +513,7 @@
                     <div class="card shadow-md h-100" style="padding: 1.5rem;">
                         <div class="metric-label">
                             <i class="bi bi-graph-up me-2"></i>
-                            当前价格 (G)
+                            当前价格 (P)
                         </div>
                         <div class="metric-value" id="val_price">--</div>
                         <small class="text-muted" id="val_range" style="font-size: 0.85rem;">52w Range</small>
@@ -512,7 +523,7 @@
                     <div class="card shadow-md h-100" style="padding: 1.5rem;">
                         <div class="metric-label">
                             <i class="bi bi-emoji-smile me-2"></i>
-                            市场情绪（M）
+                            市场情绪（S）
                         </div>
                         <div class="metric-value" id="val_sentiment">--</div>
                         <small class="text-muted" id="val_sentiment_desc" style="font-size: 0.85rem;">0-10分，越高越乐观</small>
@@ -1191,7 +1202,7 @@
                 <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">四、估值分析 (M - 市场情绪)</div>
                 <div class="row" style="margin-top: 1rem;">
                     <div class="col-md-4 mb-3">
-                        <div class="text-report-label">当前价格 (G)</div>
+                        <div class="text-report-label">当前价格 (P)</div>
                         <div class="text-report-value" style="font-size: 1.1rem;">${data['currency_symbol']}${data.price.toFixed(2)}</div>
                     </div>
                     <div class="col-md-4 mb-3">
@@ -2145,7 +2156,7 @@ function updateQueryCountDisplay(queryInfo) {
                 <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">四、估值分析 (M - 市场情绪)</div>
                 <div class="row" style="margin-top: 1rem;">
                     <div class="col-md-4 mb-3">
-                        <div class="text-report-label">当前价格 (G)</div>
+                        <div class="text-report-label">当前价格 (P)</div>
                         <div class="text-report-value" style="font-size: 1.1rem;">${data['currency_symbol']}${data.price.toFixed(2)}</div>
                     </div>
                     <div class="col-md-4 mb-3">

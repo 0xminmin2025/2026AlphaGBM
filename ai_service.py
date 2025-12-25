@@ -84,11 +84,11 @@ def get_fallback_analysis(ticker, style, data, risk_result):
 
 ---
 
-### G=B+M 模型分析
+### Alpha P (P=F+S) 模型分析
 
-**G (价格)**: 当前价格 {data['currency_symbol']}{data['price']:.2f}，位于52周区间 {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f} 的 {price_position*100:.1f}% 位置。
+**P (价格 Price)**: 当前价格 {data['currency_symbol']}{data['price']:.2f}，位于52周区间 {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f} 的 {price_position*100:.1f}% 位置。
 
-**B (基本面)**: 
+**F (基本面 Fundamentals)**: 
 - 营收增长率: {data['growth']*100:.2f}%
 - 利润率: {data['margin']*100:.2f}%
 - 基本面评估: {'良好' if data['growth'] > 0.1 and data['margin'] > 0.1 else '一般' if data['growth'] > 0 else '较差'}
@@ -259,7 +259,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     if is_fund and fund_type == 'ETF':
         # ETF专用分析框架
         prompt = f"""
-你是一位精通"胡猛投机模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
+你是一位精通"Alpha P投资模型(P=F+S)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
 
 ### ⚠️ 重要提示：这是ETF（交易所交易基金）
 
@@ -280,7 +280,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 ### 1. 上下文数据
 
-- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
+- **当前价格 (P)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
 """
         if is_fund and fund_type == 'ETF':
             prompt += "- **注意：这是ETF，不适用公司财务指标**\n"
@@ -297,7 +297,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     else:
         # 普通股票分析框架
         prompt = f"""
-你是一位精通"胡猛投机模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
+你是一位精通"Alpha P投资模型(P=F+S)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
 
 ### 重要：投资风格与原则
 
@@ -309,7 +309,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 ### 1. 上下文数据
 
-- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
+- **当前价格 (P)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
 - **基本面 (B)**: 营收增长 {data['growth']:.1%}, 利润率 {data['margin']:.1%}
     - **情绪/估值 (M)**: PE {pe_value}, PEG {peg_value}
 - **技术面**: 50日均线 {data['currency_symbol']}{data['ma50']:.2f}, 200日均线 {data['currency_symbol']}{data['ma200']:.2f}
@@ -479,7 +479,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 你必须严格按照以下7个部分的顺序和标题输出报告，每个部分都必须包含，不能省略或合并：
 1. 第一部分：投资风格与原则重申
 2. 第二部分：公司概况（新增：包含公司业务介绍和最新动态）
-3. 第三部分：G=B+M 深度解构
+3. 第三部分：Alpha P (P=F+S) 深度解构
 4. 第四部分：五大支柱检查
 4.5. 第四.五部分：风险控制评估（新增：包含风险评分、主要风险因素和短期波动风险）
 5. 第五部分：估值分析与交易策略（宏观环境分析作为估值分析的背景，不是单独部分）
@@ -523,21 +523,21 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     
     prompt += """
 
-**第三部分：G=B+M 深度解构**
+**第三部分：Alpha P (P=F+S) 深度解构**
 
 """
     # 添加B（基本面）部分
     if is_fund and fund_type == 'ETF':
-        prompt += "* **B (基本面)**: 对于ETF，不适用公司财务指标（营收、利润、PE等）。请分析：\n"
+        prompt += "* **F (基本面 Fundamentals)**: 对于ETF，不适用公司财务指标（营收、利润、PE等）。请分析：\n"
         prompt += "  - ETF跟踪的标的指数是什么？指数的构成和权重如何？\n"
         prompt += "  - ETF的跟踪误差如何？管理费率是多少（如果数据中有）？\n"
         prompt += "  - 如果是杠杆ETF（如3x、UltraPro），需要特别说明杠杆倍数和风险（杠杆ETF在震荡市场中会遭受时间衰减）\n"
         prompt += "  - ETF的流动性如何？日均成交量是否充足？\n\n"
     else:
-        prompt += f"* **B (基本面)**: 当前处于行业周期的哪个阶段（复苏/过热/滞胀/衰退）？数据支撑是什么？是否符合{style_names.get(style, style)}风格的要求？\n\n"
+        prompt += f"* **F (基本面 Fundamentals)**: 当前处于行业周期的哪个阶段（复苏/过热/滞胀/衰退）？数据支撑是什么？是否符合{style_names.get(style, style)}风格的要求？\n\n"
     
-    # 添加M（市场情绪）部分
-    prompt += "* **M (市场情绪)**: 当前价格是否包含了过度的乐观或悲观情绪？"
+    # 添加S（市场情绪）部分
+    prompt += "* **S (市场情绪 Sentiment)**: 当前价格是否包含了过度的乐观或悲观情绪？"
     if is_fund and fund_type == 'ETF':
         prompt += "对于ETF，主要关注技术面指标（价格位置、均线、52周区间）和跟踪标的指数的市场情绪。\n\n"
     else:
@@ -738,7 +738,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 1. ## 第一部分：投资风格与原则重申
 2. ## 第二部分：公司概况（必须包含：公司业务介绍 + 最新动态）
-3. ## 第三部分：G=B+M 深度解构
+3. ## 第三部分：Alpha P (P=F+S) 深度解构
 4. ## 第四部分：五大支柱检查
 4.5. ## 第四.五部分：风险控制评估（必须包含：风险评分 + 主要风险因素 + 短期波动风险 + 风险控制建议）
 5. ## 第五部分：估值分析与交易策略（宏观环境分析作为估值分析的背景，说明宏观环境如何影响估值）

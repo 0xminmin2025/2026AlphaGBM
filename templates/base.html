@@ -54,18 +54,48 @@
             gap: 0.75rem;
             font-size: 1.25rem;
             font-weight: 600;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .navbar-brand-logo:hover {
+            color: white;
+            opacity: 0.9;
         }
         
         .navbar-brand-icon {
             width: 32px;
             height: 32px;
-            background: linear-gradient(135deg, #10B981 0%, #0EA5E9 100%);
-            border-radius: 0.5rem;
+            background: transparent;
+            border: 2px solid #0D9B97;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
+        }
+        
+        /* 网络/地球仪图标效果 */
+        .navbar-brand-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: #0D9B97;
+            fill: none;
+            stroke-width: 2;
+        }
+        
+        .navbar-brand-text {
+            font-size: 1.3rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .navbar-brand-text .alpha {
             color: white;
-            font-weight: 700;
+        }
+        
+        .navbar-brand-text .g-highlight {
+            color: #0D9B97;
         }
         
         .module-nav {
@@ -206,9 +236,18 @@
         <nav class="navbar navbar-expand-lg navbar-dark top-navbar">
             <div class="container-fluid container-main">
                 <!-- Logo 和品牌名 -->
-                <a class="navbar-brand navbar-brand-logo" href="/">
-                    <span class="navbar-brand-icon">α</span>
-                    <span>AlphaG</span>
+                <a class="navbar-brand navbar-brand-logo" href="http://localhost:8085">
+                    <span class="navbar-brand-icon">
+                        <!-- 圆形网络/地球仪图标 -->
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                    </span>
+                    <span class="navbar-brand-text">
+                        <span class="alpha">Alpha</span><span class="g-highlight">P</span>
+                    </span>
                 </a>
                 
                 <!-- 移动端折叠按钮 -->
@@ -362,7 +401,7 @@
                         <a href="#" class="footer-link">帮助中心</a>
                     </div>
                     <div class="text-muted" style="font-size: 0.875rem;">
-                        © 2025 AlphaG. 基于 G=B+M 投资框架 · EV 期望值模型
+                        © 2025 AlphaP. 基于 P=F+S 投资量化模型
                     </div>
                 </div>
             </div>
