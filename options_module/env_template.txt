@@ -1,0 +1,14 @@
+# Alpha P 期权分析模块 - 环境变量配置
+# 
+# 使用说明:
+# 1. 将此文件复制为 .env
+# 2. 填入你的 Polygon API Key
+# 3. 保存文件
+
+POLYGON_API_KEY=your_polygon_api_key_here
+
+# 获取 Polygon API Key:
+# 1. 访问 https://polygon.io
+# 2. 注册免费账户
+# 3. 在Dashboard中找到API Key
+# 4. 复制并粘贴到上方
