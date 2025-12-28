@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlphaP - 基于 Gemini AI 的智能股票分析</title>
+    <title>AlphaG - 基于 Gemini AI 的智能股票分析</title>
 
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -29,7 +29,7 @@
         rel="stylesheet">
 
     <style>
-        /* ==================== AlphaP 设计系统 ==================== */
+        /* ==================== AlphaG 设计系统 ==================== */
         
         :root {
             /* 品牌色 - 深青色 */
@@ -246,11 +246,11 @@
                     }
                 },
                 model: {
-                    title: "P = F + S",
+                    title: "G = B + M",
                     desc: "将混沌的市场波动解构为极简的数学逻辑",
-                    g: { title: "P (价格)", desc: "价格偏离度与技术形态" },
-                    b: { title: "F (基本面)", desc: "营收、利润与估值锚点" },
-                    m: { title: "S (市场情绪)", desc: "恐慌指数与宏观因子" }
+                    g: { title: "G (收益)", desc: "收益偏离度与技术形态" },
+                    b: { title: "B (基本面)", desc: "营收、利润与估值锚点" },
+                    m: { title: "M (动量)", desc: "恐慌指数与宏观因子" }
                 },
                 features: {
                     title: "全维度智能分析",
@@ -263,7 +263,7 @@
                 },
                 styles: {
                     title: "投资理念与四大风格",
-                    desc: "基于P=F+S模型，系统自动适配您的投资风格",
+                    desc: "基于G=B+M模型，系统自动适配您的投资风格",
                     cards: [
                         { name: "质量策略", color: "text-emerald-400", desc: "护城河深、财务稳健。适合长期持有。" },
                         { name: "价值策略", color: "text-blue-400", desc: "低估值、安全边际。寻找错杀机会。" },
@@ -272,13 +272,13 @@
                     ]
                 },
                 cta: {
-                    title: "加入 AlphaP 社区",
+                    title: "加入 AlphaG 社区",
                     desc: "获取内测资格、最新模型更新及深度投资策略。",
                     scan_text: "扫码关注公众号体验"
                 },
                 footer: {
                     disclaimer: "免责声明：本系统仅供学习和研究使用，不构成任何投资建议。投资有风险，入市需谨慎。",
-                    copy: "© 2025 AlphaP. 基于 P=F+S 投资量化模型"
+                    copy: "© 2025 AlphaG. 基于 G=B+M 投资框架"
                 }
             },
             en: {
@@ -345,11 +345,11 @@
                     }
                 },
                 model: {
-                    title: "P = F + S",
+                    title: "G = B + M",
                     desc: "Deconstructing chaos into mathematical logic",
-                    g: { title: "P (Price)", desc: "Price Action & Technicals" },
-                    b: { title: "F (Fundamentals)", desc: "Fundamental Support" },
-                    m: { title: "S (Sentiment)", desc: "Sentiment & Macro Factors" }
+                    g: { title: "G (Gain)", desc: "Gain Deviation & Technicals" },
+                    b: { title: "B (Basics)", desc: "Fundamental Support" },
+                    m: { title: "M (Momentum)", desc: "Momentum & Macro Factors" }
                 },
                 features: {
                     title: "Full-Dimension Analysis",
@@ -362,7 +362,7 @@
                 },
                 styles: {
                     title: "Model Philosophy & 4 Styles",
-                    desc: "Based on P=F+S Model, adapting to your investment style",
+                    desc: "Based on G=B+M Model, adapting to your investment style",
                     cards: [
                         { name: "Quality", color: "text-emerald-400", desc: "Wide moat, strong financials. Long-term." },
                         { name: "Value", color: "text-blue-400", desc: "Undervalued, safety margin. Mid-term." },
@@ -371,13 +371,13 @@
                     ]
                 },
                 cta: {
-                    title: "Join AlphaP Community",
+                    title: "Join AlphaG Community",
                     desc: "Get Beta access, model updates, and deep strategies.",
                     scan_text: "Scan to Follow"
                 },
                 footer: {
                     disclaimer: "Disclaimer: This system is for educational purposes only and does not constitute investment advice.",
-                    copy: "© 2025 AlphaP. Based on P=F+S Quantitative Investment Model"
+                    copy: "© 2025 AlphaG. Based on G=B+M Investment Framework"
                 }
             }
         };
@@ -718,7 +718,7 @@
                             <div className="flex items-center justify-between h-16">
                             <div className="flex items-center gap-2">
                                 <i className="ph ph-chart-polar text-brand text-2xl"></i>
-                                <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>P</span></span>
+                                <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>G</span></span>
                             </div>
                                 <div className="hidden md:block">
                                     <div className="ml-10 flex items-baseline space-x-8">
@@ -758,11 +758,11 @@
 
                             {/* PFS Model Formula */}
                             <div className="mt-8 flex items-center justify-center gap-3 text-lg font-mono">
-                                <span className="font-bold" style={{ color: '#0D9B97' }}>P（价格）</span>
+                                <span className="font-bold" style={{ color: '#0D9B97' }}>G（收益）</span>
                                 <span className="text-slate-500">=</span>
-                                <span className="font-bold text-emerald-400">F（基本面）</span>
+                                <span className="font-bold text-emerald-400">B（基本面）</span>
                                 <span className="text-slate-500">+</span>
-                                <span className="font-bold" style={{ color: '#F59E0B' }}>S（市场情绪）</span>
+                                <span className="font-bold" style={{ color: '#F59E0B' }}>M（动量）</span>
                             </div>
 
                             {/* CTA Area */}
@@ -982,7 +982,7 @@
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                             <div className="flex items-center justify-center gap-2 mb-8">
                                 <i className="ph ph-chart-polar text-brand text-2xl"></i>
-                                <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>P</span></span>
+                                <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>G</span></span>
                             </div>
                             <p className="text-slate-600 text-xs max-w-2xl mx-auto mb-4">
                                 {t.footer.disclaimer}

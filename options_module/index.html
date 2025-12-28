@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alpha P - 期权分析</title>
+    <title>AlphaG - 期权分析</title>
     
     <!-- Bootstrap 5 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
@@ -14,7 +14,7 @@
     
     <style>
         /**
-         * AlphaP 设计系统 - 完全匹配主系统
+         * AlphaG 设计系统 - 完全匹配主系统
          */
         
         /* ==================== 颜色系统 ==================== */
@@ -488,7 +488,7 @@
                         </svg>
                     </span>
                     <span class="navbar-brand-text">
-                        <span class="alpha">Alpha</span><span class="g-highlight">P</span>
+                        <span class="alpha">Alpha</span><span class="g-highlight">G</span>
                     </span>
                 </a>
                 
@@ -573,23 +573,23 @@
                     <div class="row mb-4">
                         <div class="col-md-4">
                             <div class="metric-card" style="border-left: 4px solid var(--primary);">
-                                <div class="metric-label">P（综合潜力）</div>
+                                <div class="metric-label">G（综合收益）</div>
                                 <div class="metric-value" id="pScore" style="color: var(--primary);">--</div>
-                                <div class="metric-desc">基于 F + S 模型</div>
+                                <div class="metric-desc">基于 B + M 模型</div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="metric-card" style="border-left: 4px solid var(--bull);">
-                                <div class="metric-label">F（基本面）</div>
+                                <div class="metric-label">B（基本面）</div>
                                 <div class="metric-value" id="fScore" style="color: var(--bull);">--</div>
                                 <div class="metric-desc">财务健康度</div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="metric-card" style="border-left: 4px solid var(--warning);">
-                                <div class="metric-label">S（市场情绪）</div>
+                                <div class="metric-label">M（动量）</div>
                                 <div class="metric-value" id="sScore" style="color: var(--warning);">--</div>
-                                <div class="metric-desc">技术面 + 情绪</div>
+                                <div class="metric-desc">技术面 + 动量</div>
                             </div>
                         </div>
                     </div>
@@ -638,7 +638,7 @@
                                 <h5 class="card-title">
                                     <i class="bi bi-table me-2"></i>
                                     推荐期权合约
-                                    <span class="badge badge-success ms-2">基于 Alpha P 模型</span>
+                                    <span class="badge badge-success ms-2">基于 AlphaG 模型</span>
                                 </h5>
                                 <div id="optionsGrid" class="ag-theme-alpine-dark" style="height: 500px; width: 100%;"></div>
                             </div>
@@ -669,7 +669,7 @@
                             <div class="philosophy-header" onclick="togglePhilosophy()" style="cursor: pointer;">
                                 <div class="philosophy-title">
                                     <i class="bi bi-lightbulb-fill"></i>
-                                    <span>Alpha P 期权投资理念</span>
+                                    <span>AlphaG 期权投资理念</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.9rem;">
                                     <span id="philosophyToggleText">展开</span>
@@ -686,14 +686,14 @@
                                 </div>
                                 
                                 <div class="philosophy-section">
-                                    <h6><i class="bi bi-diagram-3 me-2"></i>P = F + S 模型指导</h6>
+                                    <h6><i class="bi bi-diagram-3 me-2"></i>G = B + M 模型指导</h6>
                                     <p>
-                                        基于 <span class="philosophy-highlight">P（潜力）</span> = <span class="philosophy-highlight bull">F（基本面）</span> + <span class="philosophy-highlight warning">S（市场情绪）</span> 模型筛选标的：
+                                        基于 <span class="philosophy-highlight">G（收益）</span> = <span class="philosophy-highlight bull">B（基本面）</span> + <span class="philosophy-highlight warning">M（动量）</span> 模型筛选标的：
                                     </p>
                                     <ul style="color: var(--muted-foreground); line-height: 1.8;">
-                                        <li><strong style="color: var(--bull);">F（基本面优秀）</strong>：营收增长稳定、利润率健康、估值合理的公司</li>
-                                        <li><strong style="color: var(--warning);">S（价格回调）</strong>：技术面短期超跌、市场情绪过度悲观，提供更高安全边际</li>
-                                        <li><strong style="color: var(--primary);">P（综合潜力）</strong>：70分以上的综合评分，确保长期投资价值</li>
+                                        <li><strong style="color: var(--bull);">B（基本面优秀）</strong>：营收增长稳定、利润率健康、估值合理的公司</li>
+                                        <li><strong style="color: var(--warning);">M（动量回调）</strong>：技术面短期超跌、市场动量过度悲观，提供更高安全边际</li>
+                                        <li><strong style="color: var(--primary);">G（综合收益）</strong>：70分以上的综合评分，确保长期投资价值</li>
                                     </ul>
                                 </div>
                                 
@@ -737,7 +737,7 @@
             <div class="container-main">
                 <div class="footer-content">
                     <div style="color: var(--muted-foreground); font-size: 0.875rem;">
-                        © 2025 AlphaP. 基于 P=F+S 投资量化模型
+                        © 2025 AlphaG. 基于 G=B+M 投资框架
                     </div>
                     <div style="color: var(--muted-foreground); font-size: 0.75rem;">
                         <i class="bi bi-shield-check me-1"></i>
@@ -823,17 +823,17 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
             
-            // 更新 P/F/S 评分
-            document.getElementById('pScore').textContent = data.alpha_p_score.P.toFixed(0);
-            document.getElementById('fScore').textContent = data.alpha_p_score.F.toFixed(0);
-            document.getElementById('sScore').textContent = data.alpha_p_score.S.toFixed(0);
+            // 更新 G/B/M 评分
+            document.getElementById('pScore').textContent = data.alpha_g_score.G.toFixed(0);
+            document.getElementById('fScore').textContent = data.alpha_g_score.B.toFixed(0);
+            document.getElementById('sScore').textContent = data.alpha_g_score.M.toFixed(0);
             
             // 更新价格信息
             document.getElementById('currentPrice').textContent = `$${data.current_price.toFixed(2)}`;
             document.getElementById('supportLevel').textContent = data.support_level ? `$${data.support_level.toFixed(2)}` : '--';
             
             // 更新风险指示器
-            const riskPercent = ((data.alpha_p_score.P - 40) / 60) * 100;
+            const riskPercent = ((data.alpha_g_score.G - 40) / 60) * 100;
             document.getElementById('riskIndicator').style.left = `${Math.max(0, Math.min(100, riskPercent))}%`;
             
             // 更新风险警示
