@@ -48,6 +48,7 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+options_module/.env
 
 # Flask
 instance/
@@ -57,4 +58,23 @@ instance/
 .pytest_cache/
 .coverage
 htmlcov/
+
+
+# Backup files
+.env.bak*
+*.bak*
+*_old*
+*_old.html
+*.txt
+!requirements.txt
+!README.md
+!*.md
+!options_module/requirements.txt
+!options_module/env_template.txt
+
+# Database
+data/
+*.db
+*.sqlite
+*.sqlite3
 

@@ -1,681 +1,549 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlphaG - 投资分析系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <style>
-        :root {
-            --bg-dark: #0f172a;
-            --card-bg: #1e293b;
-            --text-primary: #f8fafc;
-            --accent: #3b82f6;
-        }
+{% block title %}股票分析 - AlphaG{% endblock %}
 
-        body {
-            background-color: var(--bg-dark);
-            color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
-        }
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid #334155;
-            color: white;
-        }
+<style>
+    /* ============================================
+   AlphaG 股票分析页面 - 精简样式
+   使用设计系统（design-system.css）+ 必要的自定义样式
+   ============================================ */
 
-        /* 模态框样式 */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0, 0, 0, 0.7);
-        }
+    /* 0. 通用文本样式类 */
+    .text-foreground {
+        color: var(--foreground) !important;
+    }
 
-        .modal-content {
-            background-color: var(--card-bg);
-            margin: 15% auto;
-            padding: 20px;
-            border: 1px solid #334155;
-            width: 90%;
-            max-width: 500px;
-            border-radius: 8px;
-        }
+    .text-muted-fg {
+        color: var(--muted-foreground) !important;
+    }
 
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
+    .text-primary-color {
+        color: var(--primary) !important;
+    }
 
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-        }
+    .fs-tiny {
+        font-size: 0.8rem;
+    }
 
-        .close:hover,
-        .close:focus {
-            color: white;
-            text-decoration: none;
-        }
+    .fs-small {
+        font-size: 0.9rem;
+    }
 
-        .form-group {
-            margin-bottom: 15px;
-        }
+    .fs-normal {
+        font-size: 0.95rem;
+    }
 
-        .form-control {
-            background-color: #0f172a;
-            border: 1px solid #334155;
-            color: white;
-        }
+    .fs-medium {
+        font-size: 1rem;
+    }
 
-        .form-control:focus {
-            background-color: #0f172a;
-            border-color: var(--accent);
-            color: white;
-            box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
-        }
+    .fs-large {
+        font-size: 1.1rem;
+    }
 
-        .btn {
-            padding: 8px 16px;
-            border-radius: 4px;
-        }
+    .fs-xlarge {
+        font-size: 1.2rem;
+    }
 
-        .btn-primary {
-            background-color: var(--accent);
-            border: none;
-        }
+    .fs-xxlarge {
+        font-size: 1.3rem;
+    }
 
-        .btn-primary:hover {
-            background-color: #2563eb;
-        }
+    .fw-medium {
+        font-weight: 500;
+    }
 
-        .btn-secondary {
-            background-color: #475569;
-            border: none;
-        }
+    .fw-semibold {
+        font-weight: 600;
+    }
 
-        .btn-secondary:hover {
-            background-color: #334155;
-        }
+    .fw-bold {
+        font-weight: 700;
+    }
 
-        .message {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 4px;
-            display: none;
-        }
+    .lh-relaxed {
+        line-height: 1.8;
+    }
 
-        .message.error {
-            background-color: rgba(239, 68, 68, 0.1);
-            border: 1px solid #ef4444;
-            color: #fca5a5;
-        }
+    /* 1. 度量值样式 - 加大尺寸 */
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0.5rem 0;
+    }
 
-        .message.success {
-            background-color: rgba(16, 185, 129, 0.1);
-            border: 1px solid #10b981;
-            color: #6ee7b7;
-        }
+    .metric-label {
+        color: var(--muted-foreground);
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
 
-        /* 响应式设计 */
-        @media (max-width: 768px) {
-            .modal-content {
-                margin: 25% auto;
-                width: 95%;
-            }
-        }
+    /* 2. 加载动画 */
+    #loading {
+        display: none;
+    }
 
-        /* 按钮通用样式 */
-        .btn-common {
-            background-color: var(--accent);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
+    /* 3. Markdown 内容样式 */
+    .markdown-body h1 {
+        color: var(--foreground);
+        margin-top: 1.5rem;
+        font-size: 1.3rem;
+    }
 
-        .btn-common:hover {
-            background-color: #2563eb;
-        }
+    .markdown-body h2 {
+        color: var(--foreground);
+        margin-top: 1.2rem;
+        font-size: 1.1rem;
+    }
 
-        /* 输入框通用样式 */
-        .input-common {
-            width: 100%;
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid #334155;
-            background-color: #0f172a;
-            color: white;
-            margin-bottom: 10px;
-        }
+    .markdown-body h3 {
+        color: var(--foreground);
+        margin-top: 1rem;
+        font-size: 1rem;
+    }
 
-        .input-common:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
+    .markdown-body strong {
+        color: var(--primary);
+    }
 
-        .btn-primary {
-            background-color: var(--accent);
-            border: none;
-        }
+    /* 4. 风险等级颜色 */
+    .risk-high {
+        color: var(--bear) !important;
+    }
 
-        .metric-value {
-            font-size: 1.8rem;
-            font-weight: 700;
-        }
+    .risk-med {
+        color: var(--warning) !important;
+    }
 
-        .metric-label {
-            color: #94a3b8;
-            font-size: 0.85rem;
-        }
+    .risk-low {
+        color: var(--bull) !important;
+    }
 
-        #loading {
-            display: none;
-        }
+    /* 5. 文本报告样式 - 增大间距 */
+    .text-report-section {
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border);
+    }
 
-        .markdown-body h1 {
-            color: #e2e8f0;
-            margin-top: 1.5rem;
-            font-size: 1.3rem;
-        }
+    .text-report-section:last-child {
+        border-bottom: none;
+    }
 
-        .markdown-body h2 {
-            color: #e2e8f0;
-            margin-top: 1.2rem;
-            font-size: 1.1rem;
-        }
+    .text-report-label {
+        color: var(--muted-foreground);
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
 
-        .markdown-body h3 {
-            color: #e2e8f0;
-            margin-top: 1rem;
-            font-size: 1rem;
-        }
+    .text-report-value {
+        color: var(--foreground);
+        font-weight: 500;
+        font-size: 1rem;
+    }
 
-        .markdown-body strong {
-            color: #60a5fa;
-        }
+    .text-report-title {
+        color: var(--primary);
+        font-size: 1.3rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--border);
+    }
 
-        .risk-high {
-            color: #ef4444;
-        }
+    /* 文本报告内容样式 */
+    .text-report-content {
+        color: var(--muted-foreground);
+        line-height: 1.8;
+        margin-top: 1rem;
+        font-size: 0.95rem;
+    }
 
-        .risk-med {
-            color: #f59e0b;
-        }
+    .text-report-content p {
+        margin-bottom: 1rem;
+    }
 
-        .risk-low {
-            color: #10b981;
-        }
+    .text-report-content strong {
+        color: var(--foreground);
+        font-weight: 600;
+    }
 
-        .text-report-section {
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #334155;
-        }
+    /* 6. AI 分析内容样式 - 增大字体和间距 */
+    .ai-summary {
+        color: var(--muted-foreground);
+        line-height: 1.9;
+        font-size: 1rem;
+    }
 
-        .text-report-section:last-child {
-            border-bottom: none;
-        }
+    .ai-summary h2 {
+        color: var(--primary);
+        font-size: 1.4rem;
+        font-weight: 600;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid var(--border);
+        padding-bottom: 0.75rem;
+    }
 
-        .text-report-label {
-            color: #94a3b8;
-            font-size: 0.85rem;
-            margin-bottom: 0.3rem;
-        }
+    .ai-summary h3 {
+        color: var(--foreground);
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
 
-        .text-report-value {
-            color: #f8fafc;
-            font-weight: 500;
-        }
+    .ai-summary h4 {
+        color: var(--foreground);
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-top: 1.2rem;
+        margin-bottom: 0.6rem;
+    }
 
-        .text-report-title {
-            color: #60a5fa;
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 0.8rem;
-        }
+    .ai-summary strong {
+        color: var(--foreground);
+        font-weight: 600;
+    }
 
-        .ai-summary {
-            color: #cbd5e1;
-            line-height: 1.8;
-            font-size: 0.95rem;
-        }
+    .ai-summary ul,
+    .ai-summary ol {
+        margin-left: 2rem;
+        margin-bottom: 1.2rem;
+    }
 
-        .ai-summary h2 {
-            color: #60a5fa;
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-top: 1.5rem;
-            margin-bottom: 0.8rem;
-            border-bottom: 1px solid #334155;
-            padding-bottom: 0.5rem;
-        }
+    .ai-summary li {
+        margin-bottom: 0.6rem;
+    }
 
-        .ai-summary h3 {
-            color: #94a3b8;
-            font-size: 1rem;
-            font-weight: 600;
-            margin-top: 1.2rem;
-            margin-bottom: 0.6rem;
-        }
+    .ai-summary hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 2rem 0;
+    }
 
-        .ai-summary strong {
-            color: #f8fafc;
-            font-weight: 600;
-        }
+    .ai-summary p {
+        margin-bottom: 1rem;
+    }
 
-        .ai-summary ul,
-        .ai-summary ol {
-            margin-left: 1.5rem;
-            margin-bottom: 1rem;
-        }
+    /* 7. 投资理念卡片样式 - 增大padding和字体 */
+    .philosophy-card {
+        background: var(--card);
+        border: 1px solid var(--primary);
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
 
-        .ai-summary li {
-            margin-bottom: 0.4rem;
-        }
+    .philosophy-header {
+        padding: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+    }
 
-        .ai-summary hr {
-            border: none;
-            border-top: 1px solid #334155;
-            margin: 1.5rem 0;
-        }
+    .philosophy-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--primary);
+        font-weight: 600;
+        font-size: 1.3rem;
+    }
 
-        .ai-summary p {
-            margin-bottom: 0.8rem;
-        }
+    .philosophy-content {
+        padding: 1.5rem;
+    }
 
-        /* 投资理念卡片样式 */
-        .philosophy-card {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #3b82f6;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
+    .philosophy-section {
+        margin-bottom: 2rem;
+    }
 
-        .philosophy-header {
-            padding: 0.75rem 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+    .philosophy-section:last-child {
+        margin-bottom: 0;
+    }
 
-        .philosophy-title {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #60a5fa;
-            font-weight: 600;
-            font-size: 1rem;
-        }
+    .philosophy-formula {
+        display: inline-block;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        padding: 0.5rem 1.2rem;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 1.2rem;
+        margin: 0 0.4rem;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
 
-        .philosophy-content {
-            padding: 1rem;
-        }
+    .philosophy-formula.bull {
+        background: var(--bull);
+    }
 
-        .philosophy-section {
-            margin-bottom: 1rem;
-        }
+    .philosophy-formula.warning {
+        background: var(--warning);
+    }
 
-        .philosophy-section:last-child {
-            margin-bottom: 0;
-        }
+    /* 五大支柱网格 - 固定5列布局 */
+    .pillar-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1.25rem;
+        margin-top: 1.25rem;
+    }
 
-        .philosophy-formula {
-            display: inline-block;
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 6px;
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin: 0 0.3rem;
-            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-        }
-
+    /* 响应式：中等屏幕3列 */
+    @media (max-width: 1200px) {
         .pillar-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 0.75rem;
-            margin-top: 0.75rem;
+            grid-template-columns: repeat(3, 1fr);
         }
+    }
 
-        .pillar-item {
-            background: rgba(59, 130, 246, 0.1);
-            border-left: 3px solid #3b82f6;
-            padding: 0.6rem 0.8rem;
-            border-radius: 4px;
-            font-size: 0.9rem;
-            line-height: 1.5;
+    /* 响应式：小屏幕2列 */
+    @media (max-width: 768px) {
+        .pillar-grid {
+            grid-template-columns: repeat(2, 1fr);
         }
+    }
 
-        .pillar-item strong {
-            color: #60a5fa;
-            display: block;
-            margin-bottom: 0.2rem;
+    /* 响应式：超小屏幕1列 */
+    @media (max-width: 576px) {
+        .pillar-grid {
+            grid-template-columns: 1fr;
         }
+    }
 
+    .pillar-item {
+        background: var(--muted);
+        border-left: 4px solid var(--primary);
+        padding: 1rem 1.25rem;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        transition: all 0.2s;
+    }
+
+    .pillar-item:hover {
+        background: var(--accent);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        border-left-color: var(--foreground);
+    }
+
+    .pillar-item strong {
+        color: var(--primary);
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 1.05rem;
+        transition: color 0.2s;
+    }
+
+    .pillar-item:hover strong {
+        color: var(--foreground);
+    }
+
+    .pillar-item div {
+        color: var(--muted-foreground);
+        font-size: 0.9rem;
+    }
+
+    /* 风格徽章 - 固定4列网格布局 */
+    .style-badges {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-top: 1.25rem;
+    }
+
+    /* 响应式：中等屏幕2列 */
+    @media (max-width: 992px) {
         .style-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
+            grid-template-columns: repeat(2, 1fr);
         }
+    }
 
-        .style-badge {
-            background: rgba(59, 130, 246, 0.15);
-            border: 1px solid #3b82f6;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            color: #cbd5e1;
+    /* 响应式：小屏幕1列 */
+    @media (max-width: 576px) {
+        .style-badges {
+            grid-template-columns: 1fr;
         }
+    }
 
-        .style-badge strong {
-            color: #60a5fa;
-            margin-right: 0.3rem;
-        }
-    </style>
-</head>
+    .style-badge {
+        background: var(--muted);
+        border: 1px solid var(--border);
+        padding: 0.65rem 1.25rem;
+        border-radius: 24px;
+        font-size: 0.95rem;
+        color: var(--foreground);
+        transition: all 0.2s;
+        text-align: center;
+        white-space: nowrap;
+    }
 
-<body>
-    <!-- 登录模态框 -->
-    <div id="loginModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>用户登录</h2>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label for="loginEmail">邮箱</label>
-                        <input type="email" id="loginEmail" required class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="loginPassword">密码</label>
-                        <input type="password" id="loginPassword" required class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <button type="button" class="btn btn-primary" onclick="handleLogin()">登录</button>
-                        <span style="margin-left: 10px;">还没有账号？<a href="javascript:void(0)"
-                                onclick="showRegisterModal()">立即注册</a></span>
-                    </div>
-                    <div id="loginMessage" class="message"></div>
-                </form>
-            </div>
-        </div>
-    </div>
+    .style-badge:hover {
+        background: var(--accent);
+        border-color: var(--foreground);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
 
-    <!-- 注册模态框 -->
-    <div id="registerModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>用户注册</h2>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="registerForm">
-                    <div class="form-group">
-                        <label for="registerUsername">用户名</label>
-                        <input type="text" id="registerUsername" required class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="registerEmail">邮箱</label>
-                        <input type="email" id="registerEmail" required class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="registerCode">验证码</label>
-                        <div style="display: flex;">
-                            <input type="text" id="registerCode" required class="form-control"
-                                style="flex: 1; margin-right: 10px;">
-                            <button type="button" class="btn btn-secondary" id="sendCodeBtn"
-                                onclick="requestVerificationCode()">获取验证码</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="registerPassword">密码</label>
-                        <input type="password" id="registerPassword" required class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <button type="button" class="btn btn-primary" onclick="handleRegister()">注册</button>
-                        <span style="margin-left: 10px;">已有账号？<a href="javascript:void(0)"
-                                onclick="showLoginModal()">立即登录</a></span>
-                    </div>
-                    <div id="registerMessage" class="message"></div>
-                </form>
-            </div>
-        </div>
-    </div>
+    .style-badge strong {
+        color: var(--primary);
+        margin-right: 0.4rem;
+        transition: color 0.2s;
+    }
 
+    .style-badge:hover strong {
+        color: var(--foreground);
+    }
 
-    <div class="container py-5">
-        <div class="row mb-4 align-items-center">
-            <div class="col-md-6">
-                <div>
-                    <h2 class="fw-bold"><span class="text-primary">Alpha</span>G 智能投研</h2>
-                    <p class="mb-0" style="color: #94a3b8;">Powered by Gemini and G=B+M Investment Model</p>
-                    <div id="queryCountDisplay" class="mt-2 text-sm" style="color: #60a5fa;"></div>
-                </div>
-            </div>
-            <div class="col-md-6 d-flex justify-content-end">
-                <div id="authButtons" class="md:flex items-center gap-2">
-                    <button id="loginBtn" class="btn btn-primary" onclick="showLoginModal()">登录</button>
-                    <div id="userInfo" class="hidden d-flex items-center align-items-center gap-3">
-                        <span id="usernameDisplay" class="text-white font-medium">用户: </span>
-                        <button id="logoutBtn" class="btn btn-secondary px-3 py-1"
-                            onclick="handleLogout()">退出登录</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <div class="mb-2">
-                    <small style="color: #94a3b8; font-size: 0.8rem;">选择您的投资风格</small>
-                </div>
-                <div class="input-group input-group-lg">
-                    <select class="form-select" id="styleSelect"
-                        style="min-width: 180px; background-color: #334155; color: white; border-color: #475569;">
+    /* 8. 输入框占位符 */
+    #tickerInput::placeholder {
+        color: var(--muted-foreground) !important;
+        opacity: 0.7;
+        font-size: 0.9rem !important;
+    }
+
+    /* 9. 警告区域样式 */
+    .warning-card {
+        background: var(--card);
+        border-left: 4px solid var(--bear) !important;
+    }
+
+    .warning-card h5 {
+        color: var(--bear) !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-main py-4 animate-in fade-in">
+    <!-- 股票查询表单 -->
+    <div class="card shadow-lg mb-4">
+        <div class="card-body p-4">
+            <h5 class="card-title mb-4" style="font-size: 1.3rem; font-weight: 600;">
+                <i class="bi bi-search me-2"></i>
+                股票智能分析
+            </h5>
+
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <label class="form-label text-muted"
+                        style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">投资风格</label>
+                    <select class="form-select form-select-lg" id="styleSelect" style="font-size: 1rem;">
                         <option value="quality">Quality (质量)</option>
                         <option value="value">Value (价值)</option>
                         <option value="growth">Growth (成长)</option>
                         <option value="momentum">Momentum (趋势)</option>
                     </select>
-                    <input type="text" id="tickerInput" class="form-control" placeholder="输入股票代码，支持美股港股A股"
-                        style="background-color: #0f172a; color: #f8fafc; border-color: #475569;">
-                    <style>
-                        #tickerInput::placeholder {
-                            color: #64748b !important;
-                            opacity: 1;
-                            font-size: 0.85rem !important;
-                        }
-                    </style>
-                    <button class="btn btn-primary px-4" onclick="startAnalysis()">分析</button>
                 </div>
-                <small id="styleDescription" class="mt-2 d-block"
-                    style="font-size: 0.85rem; min-height: 20px; color: #94a3b8;">
-                    <span id="styleDescText"></span>
-                </small>
+                <div class="col-md-6">
+                    <label class="form-label text-muted"
+                        style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem;">股票代码</label>
+                    <input type="text" id="tickerInput" class="form-control form-control-lg"
+                        placeholder="输入股票代码，如 AAPL, TSLA, 600519.SS" style="font-size: 1rem;">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary btn-lg w-100" onclick="startAnalysis()"
+                        style="font-size: 1.05rem; padding: 0.65rem 1rem;">
+                        <i class="bi bi-graph-up me-1"></i>
+                        分析
+                    </button>
+                </div>
+            </div>
+
+            <div id="styleDescription" class="mt-4 text-muted"
+                style="font-size: 0.9rem; padding: 0.75rem; background: var(--muted); border-radius: 6px;">
+                <span id="styleDescText"></span>
             </div>
         </div>
+    </div>
 
-        <!-- 市场预警区域 -->
-        <div id="warningsSection" class="row mb-4" style="display: none;">
-            <div class="col-12">
-                <div class="card p-3"
-                    style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-left: 4px solid #ef4444;">
-                    <h5 class="mb-3" style="color: #ef4444;">市场预警</h5>
-                    <div id="warningsList"></div>
-                </div>
+    <!-- 市场预警区域 -->
+    <div id="warningsSection" class="row mb-4" style="display: none;">
+        <div class="col-12">
+            <div class="card shadow-lg p-3 warning-card">
+                <h5 class="mb-3">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    市场预警
+                </h5>
+                <div id="warningsList"></div>
             </div>
         </div>
+    </div>
 
-        <!-- 投资理念说明 -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <div class="philosophy-card">
-                    <div class="philosophy-header" style="cursor: default;">
-                        <div class="philosophy-title">
-                            <span>AlphaG 投资理念</span>
+    <!-- 投资理念说明 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="philosophy-card shadow-md">
+                <div class="philosophy-header" onclick="togglePhilosophy()" style="cursor: pointer;">
+                    <div class="philosophy-title">
+                        <i class="bi bi-lightbulb-fill me-2"></i>
+                        <span>AlphaG 投资理念</span>
+                    </div>
+                    <div
+                        style="display: flex; align-items: center; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.9rem;">
+                        <span id="philosophyToggleText">收起</span>
+                        <i class="bi bi-chevron-up" id="philosophyToggleIcon" style="transition: transform 0.3s;"></i>
+                    </div>
+                </div>
+                <div class="philosophy-content" id="philosophyContent" style="transition: all 0.3s ease;">
+                    <!-- 核心模型 -->
+                    <div class="philosophy-section">
+                        <div style="color: var(--muted-foreground); font-size: 0.95rem; line-height: 1.7;">
+                            <strong style="color: var(--foreground);">核心模型：<span class="philosophy-formula">G = B +
+                                    M</span></strong>。我们将股票收益<span class="philosophy-formula">G (Gain)</span>解构为基本面<span
+                                class="philosophy-formula bull">B (Basics)</span>与市场动量<span
+                                class="philosophy-formula warning">M (Momentum)</span>的叠加。通过量化分析识别收益与内在价值的偏离，寻找投资机会。
                         </div>
                     </div>
-                    <div class="philosophy-content" style="max-height: none; padding: 1rem;">
-                        <!-- 核心模型 -->
-                        <div class="philosophy-section">
-                            <div style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.6;">
-                                <strong style="color: #f8fafc;">核心模型：<span class="philosophy-formula">G = B +
-                                        M</span></strong>。我们将股票价格<span class="philosophy-formula">G</span>解构为基本面<span
-                                    class="philosophy-formula"
-                                    style="background: linear-gradient(135deg, #10b981, #059669);">B</span>与市场情绪<span
-                                    class="philosophy-formula"
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706);">M</span>的叠加。通过量化分析识别价格与内在价值的偏离，寻找投资机会。
-                            </div>
-                        </div>
 
-                        <!-- 五大支柱 -->
-                        <div class="philosophy-section">
-                            <strong
-                                style="color: #f8fafc; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">五大支柱投资框架</strong>
-                            <div class="pillar-grid">
-                                <div class="pillar-item">
-                                    <strong>怀疑主义</strong>
-                                    <div style="color: #94a3b8; font-size: 0.85rem;">始终质疑，寻找不买入的理由</div>
-                                </div>
-                                <div class="pillar-item">
-                                    <strong>事前验尸</strong>
-                                    <div style="color: #94a3b8; font-size: 0.85rem;">假设投资失败，提前识别风险点</div>
-                                </div>
-                                <div class="pillar-item">
-                                    <strong>严格风控</strong>
-                                    <div style="color: #94a3b8; font-size: 0.85rem;">硬数据计算，设置仓位上限和止损</div>
-                                </div>
-                                <div class="pillar-item">
-                                    <strong>风格纪律</strong>
-                                    <div style="color: #94a3b8; font-size: 0.85rem;">严格遵守投资风格，不偏离策略</div>
-                                </div>
-                                <div class="pillar-item">
-                                    <strong>量化决策</strong>
-                                    <div style="color: #94a3b8; font-size: 0.85rem;">用数据说话，减少情绪干扰</div>
-                                </div>
+                    <!-- 五大支柱 -->
+                    <div class="philosophy-section">
+                        <strong
+                            style="color: var(--foreground); display: block; margin-bottom: 0.5rem; font-size: 1rem;">五大支柱投资框架</strong>
+                        <div class="pillar-grid">
+                            <div class="pillar-item">
+                                <strong>怀疑主义</strong>
+                                <div>始终质疑，寻找不买入的理由</div>
                             </div>
-                        </div>
-
-                        <!-- 投资风格 -->
-                        <div class="philosophy-section">
-                            <strong
-                                style="color: #f8fafc; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">投资风格</strong>
-                            <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">
-                                系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制：</div>
-                            <div class="style-badges">
-                                <div class="style-badge"><strong>Quality</strong>质量 - 财务稳健</div>
-                                <div class="style-badge"><strong>Value</strong>价值 - 寻找低估</div>
-                                <div class="style-badge"><strong>Growth</strong>成长 - 追求增长</div>
-                                <div class="style-badge"><strong>Momentum</strong>趋势 - 跟随动量</div>
+                            <div class="pillar-item">
+                                <strong>事前验尸</strong>
+                                <div>假设投资失败，提前识别风险点</div>
+                            </div>
+                            <div class="pillar-item">
+                                <strong>严格风控</strong>
+                                <div>硬数据计算，设置仓位上限和止损</div>
+                            </div>
+                            <div class="pillar-item">
+                                <strong>风格纪律</strong>
+                                <div>严格遵守投资风格，不偏离策略</div>
+                            </div>
+                            <div class="pillar-item">
+                                <strong>量化决策</strong>
+                                <div>用数据说话，减少情绪干扰</div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <div id="loading" class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-3 text-muted">正在连接 Gemini 进行深度推演...</p>
-        </div>
-
-        <div id="dashboard" style="display: none;">
-            <div class="row g-3 mb-4">
-                <div class="col-md-3">
-                    <div class="card p-3 h-100">
-                        <div class="metric-label">当前价格 (G)</div>
-                        <div class="metric-value" id="val_price">--</div>
-                        <small class="text-muted" id="val_range">52w Range</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card p-3 h-100">
-                        <div class="metric-label">市场情绪（M）</div>
-                        <div class="metric-value" id="val_sentiment">--</div>
-                        <small class="text-muted" id="val_sentiment_desc">0-10分，越高越乐观</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card p-3 h-100">
-                        <div class="metric-label">综合风控等级</div>
-                        <div class="metric-value" id="val_risk_level">--</div>
-                        <small class="text-danger" id="val_risk_score">Score: --</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card p-3 h-100 border-primary">
-                        <div class="metric-label text-primary">建议仓位</div>
-                        <div class="metric-value text-primary" id="val_position">--%</div>
-                        <small class="text-muted">基于模型限制</small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-4 mb-4">
-                <div class="col-lg-5">
-                    <div class="card p-3 mb-3">
-                        <div class="mb-3">
-                            <h5 class="card-title mb-0">近12月价格趋势</h5>
+                    <!-- 投资风格 -->
+                    <div class="philosophy-section">
+                        <strong
+                            style="color: var(--foreground); display: block; margin-bottom: 0.5rem; font-size: 1rem;">投资风格</strong>
+                        <div style="color: var(--muted-foreground); font-size: 0.9rem; margin-bottom: 0.75rem;">
+                            系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制：
                         </div>
-                        <canvas id="priceChart" height="200"></canvas>
-                        <div class="mt-2 text-center">
-                            <small id="chartDateRange" style="color: #94a3b8; font-weight: 400;"></small>
-                        </div>
-                    </div>
-
-                    <div class="card p-3">
-                        <h5 class="card-title mb-3">风险警示</h5>
-                        <ul id="riskList" class="list-group list-group-flush bg-transparent">
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="col-lg-7">
-                    <div class="card" style="display: flex; flex-direction: column;">
-                        <div
-                            class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">AI投资分析</h5>
-                            <span class="badge bg-primary">AI Generated</span>
-                        </div>
-                        <div class="card-body overflow-auto" style="max-height: 550px;">
-                            <div id="aiReport" class="markdown-body text-light" style="font-size: 0.9rem;">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 文字版数据报告 -->
-            <div class="row">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-transparent border-bottom border-secondary">
-                            <h5 class="mb-0">完整分析报告</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="textReport" class="text-light" style="line-height: 1.8; font-size: 0.95rem;">
-                            </div>
+                        <div class="style-badges">
+                            <div class="style-badge"><strong>Quality</strong>质量 - 财务稳健</div>
+                            <div class="style-badge"><strong>Value</strong>价值 - 寻找低估</div>
+                            <div class="style-badge"><strong>Growth</strong>成长 - 追求增长</div>
+                            <div class="style-badge"><strong>Momentum</strong>趋势 - 跟随动量</div>
                         </div>
                     </div>
                 </div>
@@ -683,339 +551,550 @@
         </div>
     </div>
 
-    <script>
-        function updateQueryCountDisplay(queryInfo) {
-            // 查询次数显示函数
-            const displayElement = document.getElementById('queryCountDisplay');
-            if (displayElement && queryInfo) {
-                // 显示"今日已查询: used/max次"
-                displayElement.textContent = `今日已查询: ${queryInfo.used}/${queryInfo.max}次`;
-                displayElement.style.display = 'block';
-            } else if (displayElement) {
-                // 如果没有查询信息，则隐藏显示
-                displayElement.style.display = 'none';
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 text-muted">正在连接 Gemini 进行深度推演...</p>
+    </div>
+
+    <div id="dashboard" style="display: none;">
+        <div class="row g-4 mb-5">
+            <div class="col-md-3">
+                <div class="card shadow-md h-100" style="padding: 1.5rem;">
+                    <div class="metric-label">
+                        <i class="bi bi-graph-up me-2"></i>
+                        当前价格 (P)
+                    </div>
+                    <div class="metric-value" id="val_price">--</div>
+                    <small class="text-muted" id="val_range" style="font-size: 0.85rem;">52w Range</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-md h-100" style="padding: 1.5rem;">
+                    <div class="metric-label">
+                        <i class="bi bi-emoji-smile me-2"></i>
+                        市场情绪（S）
+                    </div>
+                    <div class="metric-value" id="val_sentiment">--</div>
+                    <small class="text-muted" id="val_sentiment_desc" style="font-size: 0.85rem;">0-10分，越高越乐观</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-md h-100" style="padding: 1.5rem;">
+                    <div class="metric-label">
+                        <i class="bi bi-shield-check me-2"></i>
+                        综合风控等级
+                    </div>
+                    <div class="metric-value" id="val_risk_level">--</div>
+                    <small class="text-danger" id="val_risk_score" style="font-size: 0.85rem;">Score: --</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-md h-100 border-primary" style="padding: 1.5rem;">
+                    <div class="metric-label text-primary">
+                        <i class="bi bi-pie-chart-fill me-2"></i>
+                        建议仓位
+                    </div>
+                    <div class="metric-value text-primary" id="val_position">--%</div>
+                    <small class="text-muted" style="font-size: 0.85rem;">基于模型限制</small>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="row g-4 mb-5">
+            <div class="col-lg-5">
+                <div class="card shadow-md mb-4" style="padding: 1.5rem;">
+                    <h5 class="card-title mb-4" style="font-size: 1.2rem; font-weight: 600;">
+                        <i class="bi bi-graph-up-arrow me-2"></i>
+                        近12月价格趋势
+                    </h5>
+                    <canvas id="priceChart" height="200"></canvas>
+                    <div class="mt-4 text-center">
+                        <small id="chartDateRange"
+                            style="color: var(--muted-foreground); font-weight: 400; font-size: 0.85rem;"></small>
+                    </div>
+                </div>
+
+                <div class="card shadow-md" style="padding: 1.5rem;">
+                    <h5 class="card-title mb-4" style="font-size: 1.2rem; font-weight: 600;">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        风险警示
+                    </h5>
+                    <ul id="riskList" class="list-group list-group-flush bg-transparent">
+                    </ul>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card shadow-md" style="display: flex; flex-direction: column;">
+                    <div
+                        style="padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+                        <h5 class="mb-0" style="font-size: 1.2rem; font-weight: 600;">
+                            <i class="bi bi-stars me-2"></i>
+                            AI投资分析
+                        </h5>
+                        <span class="badge badge-primary" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">AI
+                            Generated</span>
+                    </div>
+                    <div class="overflow-auto" style="max-height: 650px; padding: 1.5rem;">
+                        <div id="aiReport" class="ai-summary">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文字版数据报告 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow-md">
+                    <div style="padding: 1.5rem; border-bottom: 1px solid var(--border);">
+                        <h5 class="mb-0" style="font-size: 1.2rem; font-weight: 600;">
+                            <i class="bi bi-file-text me-2"></i>
+                            完整分析报告
+                        </h5>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <div id="textReport" style="line-height: 1.8; font-size: 1rem;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 投资理念折叠/展开功能
+    let philosophyExpanded = true;
+
+    function togglePhilosophy() {
+        const content = document.getElementById('philosophyContent');
+        const icon = document.getElementById('philosophyToggleIcon');
+        const text = document.getElementById('philosophyToggleText');
+
+        philosophyExpanded = !philosophyExpanded;
+
+        if (philosophyExpanded) {
+            // 展开：移除高度限制，让内容自然展开
+            content.style.maxHeight = 'none';
+            content.style.overflow = 'visible';
+            content.style.opacity = '1';
+            content.style.padding = '1.5rem';
+            icon.style.transform = 'rotate(0deg)';
+            icon.className = 'bi bi-chevron-up';
+            text.textContent = '收起';
+        } else {
+            // 折叠：先设置maxHeight为当前高度，然后动画到0
+            const currentHeight = content.scrollHeight;
+            content.style.maxHeight = currentHeight + 'px';
+            content.style.overflow = 'hidden';
+
+            // 使用 setTimeout 确保动画生效
+            setTimeout(() => {
+                content.style.maxHeight = '0';
+                content.style.opacity = '0';
+                content.style.padding = '0 1.5rem';
+            }, 10);
+
+            icon.style.transform = 'rotate(180deg)';
+            icon.className = 'bi bi-chevron-down';
+            text.textContent = '展开';
+        }
+    }
+
+    // 页面加载时设置投资理念为展开状态（默认无高度限制）
+    window.addEventListener('load', function () {
+        const content = document.getElementById('philosophyContent');
+        if (content) {
+            content.style.maxHeight = 'none';
+            content.style.overflow = 'visible';
+        }
+    });
+
+    function updateQueryCountDisplay(queryInfo) {
+        // 查询次数显示函数
+        const displayElement = document.getElementById('query-counter');
+        if (displayElement && queryInfo) {
+            // 显示"今日已查询: used/max次"
+            displayElement.textContent = `今日已查询: ${queryInfo.used}/${queryInfo.max}次`;
+            displayElement.style.display = 'block';
+        } else if (displayElement) {
+            // 如果没有查询信息，则隐藏显示
+            displayElement.style.display = 'none';
+        }
+    }
+    let chartInstance = null;
+
+    // 风格说明映射
+    const styleDescriptions = {
+        'quality': 'Quality (质量): 关注财务稳健、盈利能力强、债务水平低的优质公司，适合长期持有，最大仓位20%',
+        'value': 'Value (价值): 寻找被市场低估的股票，关注低PE、低PEG，追求安全边际，最大仓位10%',
+        'growth': 'Growth (成长): 追求高营收增长和盈利增长的公司，容忍较高估值，最大仓位15%',
+        'momentum': 'Momentum (趋势): 跟随市场趋势和价格动量，快进快出，风险较高，最大仓位5%'
+    };
+
+    // 更新风格说明函数
+    function updateStyleDescription() {
+        const selectedStyle = document.getElementById('styleSelect').value;
+        document.getElementById('styleDescText').textContent = styleDescriptions[selectedStyle] || styleDescriptions['quality'];
+    }
+
+    // 页面加载时初始化风格说明
+    document.addEventListener('DOMContentLoaded', function () {
+        updateStyleDescription();
+    });
+
+    // 监听风格选择变化
+    document.getElementById('styleSelect').addEventListener('change', updateStyleDescription);
+
+    async function startAnalysis() {
+        const ticker = document.getElementById('tickerInput').value;
+        const style = document.getElementById('styleSelect').value;
+
+        if (!ticker) return alert("请输入代码");
+
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('dashboard').style.display = 'none';
+
+        try {
+            // 创建带超时的fetch请求
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+
+            // 获取JWT token
+            const token = localStorage.getItem('token');
+
+            // 检查是否有token，没有则显示登录模态框
+            if (!token) {
+                clearTimeout(timeoutId);
+                document.getElementById('loading').style.display = 'none';
+                alert('请先登录以使用分析功能');
+                showLoginModal();
+                return;
             }
-        }
-        let chartInstance = null;
 
-        // 风格说明映射
-        const styleDescriptions = {
-            'quality': 'Quality (质量): 关注财务稳健、盈利能力强、债务水平低的优质公司，适合长期持有，最大仓位20%',
-            'value': 'Value (价值): 寻找被市场低估的股票，关注低PE、低PEG，追求安全边际，最大仓位10%',
-            'growth': 'Growth (成长): 追求高营收增长和盈利增长的公司，容忍较高估值，最大仓位15%',
-            'momentum': 'Momentum (趋势): 跟随市场趋势和价格动量，快进快出，风险较高，最大仓位5%'
-        };
+            const res = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // 添加JWT token认证
+                },
+                body: JSON.stringify({ ticker, style }),
+                signal: controller.signal
+            });
 
-        // 更新风格说明函数
-        function updateStyleDescription() {
-            const selectedStyle = document.getElementById('styleSelect').value;
-            document.getElementById('styleDescText').textContent = styleDescriptions[selectedStyle] || styleDescriptions['quality'];
-        }
+            clearTimeout(timeoutId);
 
-        // 页面加载时初始化风格说明
-        document.addEventListener('DOMContentLoaded', function () {
-            updateStyleDescription();
-        });
+            // 先读取响应文本（响应体只能读取一次）
+            const responseText = await res.text();
 
-        // 监听风格选择变化
-        document.getElementById('styleSelect').addEventListener('change', updateStyleDescription);
-
-        async function startAnalysis() {
-            const ticker = document.getElementById('tickerInput').value;
-            const style = document.getElementById('styleSelect').value;
-
-            if (!ticker) return alert("请输入代码");
-
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('dashboard').style.display = 'none';
-
-            try {
-                // 创建带超时的fetch请求
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
-
-                // 获取JWT token
-                const token = localStorage.getItem('token');
-
-                // 检查是否有token，没有则显示登录模态框
-                if (!token) {
+            // 检查响应状态
+            if (!res.ok) {
+                // 特殊处理401未授权错误（token无效或过期）
+                if (res.status === 401) {
+                    // 清除本地存储的token
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('username');
+                    // 更新登录状态UI
+                    checkLoginStatus();
                     clearTimeout(timeoutId);
                     document.getElementById('loading').style.display = 'none';
-                    alert('请先登录以使用分析功能');
+                    alert('登录状态已过期，请重新登录');
                     showLoginModal();
                     return;
                 }
 
-                const res = await fetch('/api/analyze', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}` // 添加JWT token认证
-                    },
-                    body: JSON.stringify({ ticker, style }),
-                    signal: controller.signal
-                });
+                // 特殊处理429查询次数限制错误
+                if (res.status === 429) {
+                    clearTimeout(timeoutId);
+                    document.getElementById('loading').style.display = 'none';
 
-                clearTimeout(timeoutId);
-
-                // 先读取响应文本（响应体只能读取一次）
-                const responseText = await res.text();
-
-                // 检查响应状态
-                if (!res.ok) {
-                    // 特殊处理401未授权错误（token无效或过期）
-                    if (res.status === 401) {
-                        // 清除本地存储的token
-                        localStorage.removeItem('token');
-                        localStorage.removeItem('username');
-                        // 更新登录状态UI
-                        checkLoginStatus();
-                        clearTimeout(timeoutId);
-                        document.getElementById('loading').style.display = 'none';
-                        alert('登录状态已过期，请重新登录');
-                        showLoginModal();
-                        return;
-                    }
-
-                    // 特殊处理429查询次数限制错误
-                    if (res.status === 429) {
-                        clearTimeout(timeoutId);
-                        document.getElementById('loading').style.display = 'none';
-
-                        try {
-                            const errorJson = JSON.parse(responseText);
-                            const errorMsg = errorJson.error || '查询次数已达上限';
-                            const queryInfo = errorJson.query_info;
-
-                            let detailedMsg = errorMsg;
-                            if (queryInfo) {
-                                updateQueryCountDisplay(queryInfo);
-                                detailedMsg += `\n\n已使用: ${queryInfo.used}次\n最大次数: ${queryInfo.max}次\n重置时间: ${queryInfo.reset_time}`;
-                            }
-
-                            alert(detailedMsg);
-                        } catch (parseError) {
-                            alert('查询次数已达上限，请明日再试');
-                        }
-                        return;
-                    }
-
-                    // 尝试解析为JSON
                     try {
                         const errorJson = JSON.parse(responseText);
-                        throw new Error(errorJson.error || `服务器错误: ${res.status}`);
+                        const errorMsg = errorJson.error || '查询次数已达上限';
+                        const queryInfo = errorJson.query_info;
+
+                        let detailedMsg = errorMsg;
+                        if (queryInfo) {
+                            updateQueryCountDisplay(queryInfo);
+                            detailedMsg += `\n\n已使用: ${queryInfo.used}次\n最大次数: ${queryInfo.max}次\n重置时间: ${queryInfo.reset_time}`;
+                        }
+
+                        alert(detailedMsg);
                     } catch (parseError) {
-                        // 如果不是JSON，使用原始文本
-                        throw new Error(`服务器错误 (${res.status}): ${responseText.substring(0, 200)}`);
+                        alert('查询次数已达上限，请明日再试');
                     }
+                    return;
                 }
 
-                // 解析JSON响应
-                let json;
+                // 尝试解析为JSON
                 try {
-                    json = JSON.parse(responseText);
+                    const errorJson = JSON.parse(responseText);
+                    throw new Error(errorJson.error || `服务器错误: ${res.status}`);
                 } catch (parseError) {
-                    console.error('JSON解析错误:', parseError);
-                    throw new Error('服务器返回的数据格式错误，请稍后重试');
+                    // 如果不是JSON，使用原始文本
+                    throw new Error(`服务器错误 (${res.status}): ${responseText.substring(0, 200)}`);
                 }
-
-                if (json.success) {
-                    // 更新查询次数显示
-                    if (json.query_info) {
-                        updateQueryCountDisplay(json.query_info);
-                    } else {
-                        updateQueryCountDisplay();
-                    }
-                    renderDashboard(json);
-                } else {
-                    // 显示详细的错误信息
-                    const errorMsg = json.error || '未知错误';
-                    console.error('分析失败:', errorMsg);
-                    alert('分析失败\n\n' + errorMsg);
-                }
-            } catch (e) {
-                console.error('请求错误详情:', e);
-                let errorMsg = '网络连接错误';
-
-                if (e.name === 'AbortError') {
-                    errorMsg = '请求超时（超过60秒）\n\n可能原因：\n1. 网络连接较慢\n2. 数据源响应延迟\n3. 股票代码可能不存在或无法获取数据\n\n建议：\n- 检查网络连接\n- 稍后重试\n- 尝试其他股票代码（如AAPL、TSLA等）';
-                } else if (e.name === 'TypeError' && e.message.includes('fetch')) {
-                    errorMsg = '无法连接到服务器\n\n请检查：\n1. 服务器是否正在运行（http://127.0.0.1:5001）\n2. 网络连接是否正常\n3. 防火墙是否阻止了连接';
-                } else if (e.message) {
-                    errorMsg = e.message;
-                }
-
-                alert('请求失败\n\n' + errorMsg + '\n\n提示：\n- 如果持续失败，请检查浏览器控制台（F12）查看详细错误\n- 可以尝试刷新页面后重试\n- 确保输入的股票代码格式正确');
-            } finally {
-                document.getElementById('loading').style.display = 'none';
             }
+
+            // 解析JSON响应
+            let json;
+            try {
+                json = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('JSON解析错误:', parseError);
+                throw new Error('服务器返回的数据格式错误，请稍后重试');
+            }
+
+            if (json.success) {
+                // 更新查询次数显示
+                if (json.query_info) {
+                    updateQueryCountDisplay(json.query_info);
+                } else {
+                    updateQueryCountDisplay();
+                }
+                renderDashboard(json);
+            } else {
+                // 显示详细的错误信息
+                const errorMsg = json.error || '未知错误';
+                console.error('分析失败:', errorMsg);
+                alert('分析失败\n\n' + errorMsg);
+            }
+        } catch (e) {
+            console.error('请求错误详情:', e);
+            let errorMsg = '网络连接错误';
+
+            if (e.name === 'AbortError') {
+                errorMsg = '请求超时（超过60秒）\n\n可能原因：\n1. 网络连接较慢\n2. 数据源响应延迟\n3. 股票代码可能不存在或无法获取数据\n\n建议：\n- 检查网络连接\n- 稍后重试\n- 尝试其他股票代码（如AAPL、TSLA等）';
+            } else if (e.name === 'TypeError' && e.message.includes('fetch')) {
+                errorMsg = '无法连接到服务器\n\n请检查：\n1. 服务器是否正在运行（http://127.0.0.1:5001）\n2. 网络连接是否正常\n3. 防火墙是否阻止了连接';
+            } else if (e.message) {
+                errorMsg = e.message;
+            }
+
+            alert('请求失败\n\n' + errorMsg + '\n\n提示：\n- 如果持续失败，请检查浏览器控制台（F12）查看详细错误\n- 可以尝试刷新页面后重试\n- 确保输入的股票代码格式正确');
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+
+    function renderEVModel(data) {
+        // 将 EV 模型数据整合到风险提示中（作为短期波动风险）
+        const evModel = data.ev_model;
+        const evShortTermEl = document.getElementById('ev_short_term_risk');
+
+        if (!evModel || evModel.error || !evShortTermEl) {
+            console.warn('EV 模型数据不可用或元素未找到');
+            if (evShortTermEl) {
+                evShortTermEl.innerText = '无明显短期波动风险';
+                evShortTermEl.style.color = '#94a3b8';
+            }
+            return;
         }
 
-        function renderDashboard(data) {
-            const d = data.data;
-            const r = data.risk;
+        console.log('EV 模型数据:', evModel);
 
-            // 调试：检查ETF识别
-            console.log('ETF识别调试:', {
-                is_etf_or_fund: d.is_etf_or_fund,
-                fund_type: d.fund_type,
-                name: d.name,
-                symbol: d.symbol
-            });
+        const evWeightedPct = evModel.ev_weighted_pct || 0;
+        const recommendation = evModel.recommendation || {};
+        const reason = recommendation.reason || '';
+        const ev1week = evModel.ev_1week;
 
-            // Fill Metrics
-            document.getElementById('val_price').innerText = `${d['currency_symbol']}${d.price.toFixed(2)}`;
-            document.getElementById('val_range').innerText = `Low: ${d['currency_symbol']}${d.week52_low.toFixed(2)} - High: ${d['currency_symbol']}${d.week52_high.toFixed(2)}`;
-
-            // 显示市场情绪评分
-            const sentiment = d.market_sentiment !== undefined ? d.market_sentiment : 5.0;
-            console.log('市场情绪评分:', sentiment, '原始数据market_sentiment:', d.market_sentiment);
-            const sentimentEl = document.getElementById('val_sentiment');
-            if (sentimentEl) {
-                sentimentEl.innerText = sentiment.toFixed(1);
-                // 根据分数设置颜色
-                if (sentiment >= 7) {
-                    sentimentEl.className = 'metric-value text-warning'; // 乐观（黄色）
-                } else if (sentiment >= 4) {
-                    sentimentEl.className = 'metric-value text-success'; // 中性（绿色）
-                } else {
-                    sentimentEl.className = 'metric-value text-danger'; // 悲观（红色）
-                }
+        // 只有在 EV 显著时才显示风险提示（仅对短期投资风格有意义）
+        if (Math.abs(evWeightedPct) > 3) {
+            // 显示概率信息
+            let probText = '';
+            if (ev1week) {
+                const probUp = (ev1week.probability_up * 100).toFixed(0);
+                const probDown = (ev1week.probability_down * 100).toFixed(0);
+                probText = `（上涨概率${probUp}%，下跌概率${probDown}%）`;
             }
 
-            // 更新描述，包含期权市场信息
-            let sentimentDesc = '';
-            const optionsData = d.options_data || {};
+            evShortTermEl.innerHTML = `${reason} ${probText}`;
 
-            if (sentiment >= 8) {
-                sentimentDesc = '极度乐观（可能过热）';
-            } else if (sentiment >= 6) {
-                sentimentDesc = '乐观';
+            // 根据风险设置颜色
+            if (evWeightedPct < -3) {
+                evShortTermEl.style.color = '#fbbf24'; // 黄色警告
+            } else if (evWeightedPct > 3) {
+                evShortTermEl.style.color = '#10b981'; // 绿色（短期向上）
+            } else {
+                evShortTermEl.style.color = '#cbd5e1';
+            }
+        } else {
+            // EV 接近中性
+            evShortTermEl.innerText = '短期方向不明确，建议以中长期逻辑为主';
+            evShortTermEl.style.color = '#94a3b8';
+        }
+    }
+
+    function renderDashboard(data) {
+        const d = data.data;
+        const r = data.risk;
+
+        // 调试：检查ETF识别
+        console.log('ETF识别调试:', {
+            is_etf_or_fund: d.is_etf_or_fund,
+            fund_type: d.fund_type,
+            name: d.name,
+            symbol: d.symbol
+        });
+
+        // Fill Metrics
+        document.getElementById('val_price').innerText = `${d['currency_symbol']}${d.price.toFixed(2)}`;
+        document.getElementById('val_range').innerText = `Low: ${d['currency_symbol']}${d.week52_low.toFixed(2)} - High: ${d['currency_symbol']}${d.week52_high.toFixed(2)}`;
+
+        // 显示市场情绪评分
+        const sentiment = d.market_sentiment !== undefined ? d.market_sentiment : 5.0;
+        console.log('市场情绪评分:', sentiment, '原始数据market_sentiment:', d.market_sentiment);
+        const sentimentEl = document.getElementById('val_sentiment');
+        if (sentimentEl) {
+            sentimentEl.innerText = sentiment.toFixed(1);
+            // 根据分数设置颜色
+            if (sentiment >= 7) {
+                sentimentEl.className = 'metric-value text-warning'; // 乐观（黄色）
             } else if (sentiment >= 4) {
-                sentimentDesc = '中性';
-            } else if (sentiment >= 2) {
-                sentimentDesc = '悲观';
+                sentimentEl.className = 'metric-value text-success'; // 中性（绿色）
             } else {
-                sentimentDesc = '极度悲观';
+                sentimentEl.className = 'metric-value text-danger'; // 悲观（红色）
             }
-
-            // 添加期权市场信息
-            if (optionsData.vix !== null && optionsData.vix !== undefined) {
-                const vix = optionsData.vix.toFixed(1);
-                const vixChange = optionsData.vix_change ? optionsData.vix_change.toFixed(1) : '0.0';
-                const vixTrend = parseFloat(vixChange) > 0 ? '↑' : parseFloat(vixChange) < 0 ? '↓' : '→';
-                sentimentDesc += ` | VIX: ${vix} ${vixTrend}`;
-
-                // 如果VIX很高或快速上升，添加警告
-                if (optionsData.vix > 30 || (optionsData.vix_change && optionsData.vix_change > 10)) {
-                }
-            }
-
-            if (optionsData.put_call_ratio !== null && optionsData.put_call_ratio !== undefined) {
-                sentimentDesc += ` | P/C: ${optionsData.put_call_ratio.toFixed(2)}`;
-            }
-
-            const descEl = document.getElementById('val_sentiment_desc');
-            if (descEl) {
-                descEl.innerText = sentimentDesc;
-            }
-
-            // 显示市场预警
-            renderWarnings(d);
-
-            const riskEl = document.getElementById('val_risk_level');
-            riskEl.innerText = r.level;
-            riskEl.className = `metric-value ${r.score >= 6 ? 'risk-high' : r.score >= 4 ? 'risk-med' : 'risk-low'}`;
-            document.getElementById('val_risk_score').innerText = `Score: ${r.score}/10`;
-
-            document.getElementById('val_position').innerText = `${r.suggested_position}%`;
-
-            // Render Text Report
-            renderTextReport(d, r, data.report);
-
-            // Fill Risk Flags
-            const list = document.getElementById('riskList');
-            list.innerHTML = '';
-            if (r.flags.length === 0) {
-                list.innerHTML = '<li class="list-group-item bg-transparent text-success">硬逻辑检测通过，无明显结构性风险。</li>';
-            } else {
-                r.flags.forEach(flag => {
-                    list.innerHTML += `<li class="list-group-item bg-transparent text-danger">[警告] ${flag}</li>`;
-                });
-            }
-
-            // Render AI Report
-            document.getElementById('aiReport').innerHTML = marked.parse(data.report);
-
-            // Render Chart
-            const ctx = document.getElementById('priceChart').getContext('2d');
-            if (chartInstance) chartInstance.destroy();
-
-            // 计算时间段并显示日期范围
-            const dateCount = d.history_dates.length;
-            const startDate = d.history_dates[0];
-            const endDate = d.history_dates[dateCount - 1];
-
-            // 更新日期范围显示
-            document.getElementById('chartDateRange').textContent = `${startDate} 至 ${endDate}`;
-
-            chartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: d.history_dates,
-                    datasets: [{
-                        label: 'Price',
-                        data: d.history_prices,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { display: false },
-                        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
-                    }
-                }
-            });
-
-            document.getElementById('dashboard').style.display = 'block';
         }
 
-        function renderTextReport(data, risk, aiReport) {
-            const styleNames = {
-                'quality': '质量 (Quality)',
-                'value': '价值 (Value)',
-                'growth': '成长 (Growth)',
-                'momentum': '趋势 (Momentum)'
-            };
+        // 更新描述，包含期权市场信息
+        let sentimentDesc = '';
+        const optionsData = d.options_data || {};
 
-            const currentStyle = document.getElementById('styleSelect').value;
-            const styleName = styleNames[currentStyle] || '质量 (Quality)';
+        if (sentiment >= 8) {
+            sentimentDesc = '极度乐观（可能过热）';
+        } else if (sentiment >= 6) {
+            sentimentDesc = '乐观';
+        } else if (sentiment >= 4) {
+            sentimentDesc = '中性';
+        } else if (sentiment >= 2) {
+            sentimentDesc = '悲观';
+        } else {
+            sentimentDesc = '极度悲观';
+        }
 
-            // 计算投资评级
-            const getRating = () => {
-                if (risk.score >= 6) return { text: '观望', class: 'text-warning' };
-                if (risk.score >= 4) return { text: '中性', class: 'text-warning' };
-                if (risk.score >= 2) return { text: '增持', class: 'text-success' };
-                return { text: '买入', class: 'text-success' };
-            };
-            const rating = getRating();
+        // 添加期权市场信息
+        if (optionsData.vix !== null && optionsData.vix !== undefined) {
+            const vix = optionsData.vix.toFixed(1);
+            const vixChange = optionsData.vix_change ? optionsData.vix_change.toFixed(1) : '0.0';
+            const vixTrend = parseFloat(vixChange) > 0 ? '↑' : parseFloat(vixChange) < 0 ? '↓' : '→';
+            sentimentDesc += ` | VIX: ${vix} ${vixTrend}`;
 
-            // 获取当前日期
-            const reportDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+            // 如果VIX很高或快速上升，添加警告
+            if (optionsData.vix > 30 || (optionsData.vix_change && optionsData.vix_change > 10)) {
+            }
+        }
 
-            // 计算价格位置（保持为数字，在需要显示时再格式化）
-            const week52Range = data.week52_high - data.week52_low;
-            const pricePosition = week52Range > 0 ? ((data.price - data.week52_low) / week52Range * 100) : 50.0;
-            // 确保pricePosition是有效的数字
-            const pricePositionNum = isNaN(pricePosition) || !isFinite(pricePosition) ? 50.0 : Math.max(0, Math.min(100, pricePosition));
+        if (optionsData.put_call_ratio !== null && optionsData.put_call_ratio !== undefined) {
+            sentimentDesc += ` | P/C: ${optionsData.put_call_ratio.toFixed(2)}`;
+        }
 
-            let html = `
+        const descEl = document.getElementById('val_sentiment_desc');
+        if (descEl) {
+            descEl.innerText = sentimentDesc;
+        }
+
+        // 显示市场预警
+        renderWarnings(d);
+
+        const riskEl = document.getElementById('val_risk_level');
+        riskEl.innerText = r.level;
+        riskEl.className = `metric-value ${r.score >= 6 ? 'risk-high' : r.score >= 4 ? 'risk-med' : 'risk-low'}`;
+        document.getElementById('val_risk_score').innerText = `Score: ${r.score}/10`;
+
+        document.getElementById('val_position').innerText = `${r.suggested_position}%`;
+
+        // Render Text Report (先渲染，以便 EV 元素存在）
+        renderTextReport(d, r, data.report);
+
+        // 渲染 EV 模型数据（必须在 renderTextReport 之后，因为元素在文字报告中）
+        renderEVModel(d);
+
+        // Fill Risk Flags
+        const list = document.getElementById('riskList');
+        list.innerHTML = '';
+        if (r.flags.length === 0) {
+            list.innerHTML = '<li class="list-group-item bg-transparent text-success">硬逻辑检测通过，无明显结构性风险。</li>';
+        } else {
+            r.flags.forEach(flag => {
+                list.innerHTML += `<li class="list-group-item bg-transparent text-danger">[警告] ${flag}</li>`;
+            });
+        }
+
+        // Render AI Report
+        document.getElementById('aiReport').innerHTML = marked.parse(data.report);
+
+        // Render Chart
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+
+        // 计算时间段并显示日期范围
+        const dateCount = d.history_dates.length;
+        const startDate = d.history_dates[0];
+        const endDate = d.history_dates[dateCount - 1];
+
+        // 更新日期范围显示
+        document.getElementById('chartDateRange').textContent = `${startDate} 至 ${endDate}`;
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: d.history_dates,
+                datasets: [{
+                    label: 'Price',
+                    data: d.history_prices,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        document.getElementById('dashboard').style.display = 'block';
+    }
+
+    function renderTextReport(data, risk, aiReport) {
+        const styleNames = {
+            'quality': '质量 (Quality)',
+            'value': '价值 (Value)',
+            'growth': '成长 (Growth)',
+            'momentum': '趋势 (Momentum)'
+        };
+
+        const currentStyle = document.getElementById('styleSelect').value;
+        const styleName = styleNames[currentStyle] || '质量 (Quality)';
+
+        // 计算投资评级
+        const getRating = () => {
+            if (risk.score >= 6) return { text: '观望', class: 'text-warning' };
+            if (risk.score >= 4) return { text: '中性', class: 'text-warning' };
+            if (risk.score >= 2) return { text: '增持', class: 'text-success' };
+            return { text: '买入', class: 'text-success' };
+        };
+        const rating = getRating();
+
+        // 获取当前日期
+        const reportDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+
+        // 计算价格位置（保持为数字，在需要显示时再格式化）
+        const week52Range = data.week52_high - data.week52_low;
+        const pricePosition = week52Range > 0 ? ((data.price - data.week52_low) / week52Range * 100) : 50.0;
+        // 确保pricePosition是有效的数字
+        const pricePositionNum = isNaN(pricePosition) || !isFinite(pricePosition) ? 50.0 : Math.max(0, Math.min(100, pricePosition));
+
+        let html = `
             <!-- 报告标题 -->
             <div class="text-report-section" style="border-bottom: 2px solid #3b82f6; padding-bottom: 1.5rem;">
                 <div style="text-align: center; margin-bottom: 1rem;">
@@ -1070,8 +1149,8 @@
                         <div class="text-report-label">产品类型</div>
                         <div class="text-report-value">
                             ${data.fund_type === 'ETF' ? '<span style="color: #3b82f6; font-weight: bold;">交易所交易基金 (ETF)</span>' :
-                        data.fund_type === 'REIT' ? '<span style="color: #3b82f6; font-weight: bold;">房地产投资信托 (REIT)</span>' :
-                            '<span style="color: #3b82f6; font-weight: bold;">基金</span>'}
+                    data.fund_type === 'REIT' ? '<span style="color: #3b82f6; font-weight: bold;">房地产投资信托 (REIT)</span>' :
+                        '<span style="color: #3b82f6; font-weight: bold;">基金</span>'}
                         </div>
                     </div>
                     ` : `
@@ -1097,15 +1176,15 @@
                     <div style="color: #cbd5e1; line-height: 1.8; font-size: 0.95rem;">
                         <ul style="margin: 0; padding-left: 1.5rem;">
                             ${data.company_news.slice(0, 5).map(news => {
-                                const title = news && news.title ? news.title : '无标题';
-                                const publisher = news && news.publisher ? news.publisher : '';
-                                return `
+                            const title = news && news.title ? news.title : '无标题';
+                            const publisher = news && news.publisher ? news.publisher : '';
+                            return `
                                 <li style="margin-bottom: 0.8rem;">
                                     <strong>${title}</strong>
                                     ${publisher ? `<span style="color: #64748b; font-size: 0.9rem;"> - ${publisher}</span>` : ''}
                                 </li>
                             `;
-                            }).join('')}
+                        }).join('')}
                         </ul>
                     </div>
                 </div>
@@ -1175,7 +1254,7 @@
                 <div class="text-report-title" style="font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">四、估值分析 (M - 市场情绪)</div>
                 <div class="row" style="margin-top: 1rem;">
                     <div class="col-md-4 mb-3">
-                        <div class="text-report-label">当前价格 (G)</div>
+                        <div class="text-report-label">当前价格 (P)</div>
                         <div class="text-report-value" style="font-size: 1.1rem;">${data['currency_symbol']}${data.price.toFixed(2)}</div>
                     </div>
                     <div class="col-md-4 mb-3">
@@ -1251,8 +1330,8 @@
                 </div>
                 ` : ''}
                 ${data.macro_data && (data.macro_data.fed_meetings && data.macro_data.fed_meetings.length > 0 ||
-                    (data.macro_data.cpi_releases && data.macro_data.cpi_releases.filter(c => c.country === 'US').length > 0) ||
-                    (data.macro_data.china_events && data.macro_data.china_events.length > 0)) ? `
+                (data.macro_data.cpi_releases && data.macro_data.cpi_releases.filter(c => c.country === 'US').length > 0) ||
+                (data.macro_data.china_events && data.macro_data.china_events.length > 0)) ? `
                 <div style="margin-top: 1rem; padding: 0.8rem; background-color: #1e293b; border-left: 3px solid #8b5cf6; border-radius: 4px;">
                     <strong style="color: #8b5cf6;">重要经济事件提醒：</strong>
                     <div style="color: #cbd5e1; margin-top: 0.5rem;">
@@ -1289,12 +1368,12 @@
                             <strong style="color: #ef4444;">🇨🇳 中国：</strong>
                             <div style="margin-left: 1rem; margin-top: 0.3rem;">
                                 ${data.macro_data.china_events.map(e => {
-                        let eventText = `${e.type}：${e.date} (${e.days_until}天后`;
-                        if (e.data_month) eventText += `，${e.data_month}数据`;
-                        if (e.quarter) eventText += `，${e.quarter}数据`;
-                        eventText += ')';
-                        return eventText;
-                    }).join('<br>')}
+                    let eventText = `${e.type}：${e.date} (${e.days_until}天后`;
+                    if (e.data_month) eventText += `，${e.data_month}数据`;
+                    if (e.quarter) eventText += `，${e.quarter}数据`;
+                    eventText += ')';
+                    return eventText;
+                }).join('<br>')}
                             </div>
                         </div>
                         ` : ''}
@@ -1305,9 +1384,9 @@
                             <strong style="color: #10b981;">🌍 其它国家：</strong>
                             <div style="margin-left: 1rem; margin-top: 0.3rem;">
                                 ${data.macro_data.other_events.map(e => {
-                        let eventText = `${e.country || '未知'} - ${e.type}：${e.date} (${e.days_until}天后)`;
-                        return eventText;
-                    }).join('<br>')}
+                    let eventText = `${e.country || '未知'} - ${e.type}：${e.date} (${e.days_until}天后)`;
+                    return eventText;
+                }).join('<br>')}
                             </div>
                         </div>
                         ` : ''}
@@ -1320,8 +1399,8 @@
                     <span style="color: #cbd5e1; font-size: 1.1rem; font-weight: 600; margin-left: 0.5rem;">${data.macro_data.geopolitical_risk}/10</span>
                     <span style="color: #94a3b8; margin-left: 0.5rem;">
                         ${data.macro_data.geopolitical_risk >= 7 ? '高风险 - 地缘政治紧张局势加剧，市场避险情绪上升' :
-                        data.macro_data.geopolitical_risk >= 5 ? '中等风险 - 需关注地缘政治动态' :
-                            '低风险 - 地缘政治环境相对稳定'}
+                    data.macro_data.geopolitical_risk >= 5 ? '中等风险 - 需关注地缘政治动态' :
+                        '低风险 - 地缘政治环境相对稳定'}
                     </span>
                 </div>
                 ` : ''}
@@ -1369,6 +1448,10 @@
                         <div class="text-report-value ${risk.score >= 6 ? 'text-danger' : risk.score >= 4 ? 'text-warning' : 'text-success'}" style="font-size: 1.3rem; font-weight: 700;">${risk.score}/10</div>
                     </div>
                     <div class="col-md-6 mb-3">
+                        <div class="text-report-label">短期波动风险</div>
+                        <div id="ev_short_term_risk" class="text-report-value" style="font-size: 0.95rem;">--</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
                         <div class="text-report-label">风险等级</div>
                         <div class="text-report-value ${risk.score >= 6 ? 'text-danger' : risk.score >= 4 ? 'text-warning' : 'text-success'}" style="font-size: 1.1rem;">${risk.level}</div>
                     </div>
@@ -1391,10 +1474,10 @@
                     <p><strong style="color: #f8fafc;">目标价格：</strong>${risk.suggested_position === 0 ? `${data.currency_symbol}${data.price.toFixed(2)}（风险过高，不建议买入，无目标价格。当前价格仅供参考。）` : `${data.currency_symbol}${(data.target_price || data.week52_high).toFixed(2)}（基于PE估值、增长率和技术面综合计算）`}</p>
                     <p><strong style="color: #f8fafc;">建议仓位：</strong><span style="color: #3b82f6; font-size: 1.1rem; font-weight: 600;">${risk.suggested_position}%</span>（基于${styleName}风格和风险评分）</p>
                     ${risk.suggested_position === 0 ?
-                    `<p><strong style="color: #f8fafc;">建仓策略：</strong>当前风险评分过高（${risk.score}/10），不建议建仓。建议继续观望，等待风险降低或寻找其他投资机会。</p>` :
-                    `<p><strong style="color: #f8fafc;">建仓策略：</strong>${risk.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
+                `<p><strong style="color: #f8fafc;">建仓策略：</strong>当前风险评分过高（${risk.score}/10），不建议建仓。建议继续观望，等待风险降低或寻找其他投资机会。</p>` :
+                `<p><strong style="color: #f8fafc;">建仓策略：</strong>${risk.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
                         <p><strong style="color: #f8fafc;">止损建议：</strong>建议设置止损价格为${data.stop_loss_price ? `${data.currency_symbol}${data.stop_loss_price.toFixed(2)}（${data.stop_loss_method || '动态止损'}，止损幅度约${((data.price - data.stop_loss_price) / data.price * 100).toFixed(1)}%）` : `当前价格的85%（约${data.currency_symbol}${(data.price * 0.85).toFixed(2)}）`}，严格执行止损纪律。</p>`
-                }
+            }
                     <p><strong style="color: #f8fafc;">持有周期：</strong>根据${styleName}风格，建议持有${styleName === '质量 (Quality)' ? '长期（1-3年）' : styleName === '价值 (Value)' ? '中期（6-12个月）' : styleName === '成长 (Growth)' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
                     
                     <!-- 卖出策略 -->
@@ -1469,46 +1552,46 @@
             </div>
         `;
 
-            document.getElementById('textReport').innerHTML = html;
+        document.getElementById('textReport').innerHTML = html;
+    }
+    // 渲染市场预警
+    function renderWarnings(data) {
+        const warnings = data.market_warnings || [];
+        const warningsSection = document.getElementById('warningsSection');
+        const warningsList = document.getElementById('warningsList');
+
+        if (warnings.length === 0) {
+            warningsSection.style.display = 'none';
+            return;
         }
-        // 渲染市场预警
-        function renderWarnings(data) {
-            const warnings = data.market_warnings || [];
-            const warningsSection = document.getElementById('warningsSection');
-            const warningsList = document.getElementById('warningsList');
 
-            if (warnings.length === 0) {
-                warningsSection.style.display = 'none';
-                return;
-            }
+        warningsSection.style.display = 'block';
+        warningsList.innerHTML = '';
 
-            warningsSection.style.display = 'block';
-            warningsList.innerHTML = '';
+        warnings.forEach((warning, index) => {
+            const levelColors = {
+                'high': { bg: '#7f1d1d', border: '#ef4444', text: '#fca5a5' },
+                'medium': { bg: '#78350f', border: '#f59e0b', text: '#fcd34d' },
+                'low': { bg: '#1e3a2f', border: '#10b981', text: '#6ee7b7' }
+            };
 
-            warnings.forEach((warning, index) => {
-                const levelColors = {
-                    'high': { bg: '#7f1d1d', border: '#ef4444', text: '#fca5a5' },
-                    'medium': { bg: '#78350f', border: '#f59e0b', text: '#fcd34d' },
-                    'low': { bg: '#1e3a2f', border: '#10b981', text: '#6ee7b7' }
-                };
+            const colors = levelColors[warning.level] || levelColors['low'];
+            const urgencyLabels = {
+                'immediate': '[紧急]',
+                'soon': '[近期]',
+                'monitor': '[监控]'
+            };
 
-                const colors = levelColors[warning.level] || levelColors['low'];
-                const urgencyLabels = {
-                    'immediate': '[紧急]',
-                    'soon': '[近期]',
-                    'monitor': '[监控]'
-                };
-
-                const warningDiv = document.createElement('div');
-                warningDiv.className = 'mb-2 p-2 rounded';
-                warningDiv.style.cssText = `
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'mb-2 p-2 rounded';
+            warningDiv.style.cssText = `
                 background-color: ${colors.bg};
                 border-left: 3px solid ${colors.border};
                 color: ${colors.text};
                 margin-bottom: 0.5rem;
             `;
 
-                warningDiv.innerHTML = `
+            warningDiv.innerHTML = `
                 <div style="display: flex; align-items: start;">
                     <span style="font-size: 0.85rem; margin-right: 0.5rem; font-weight: 600; opacity: 0.9;">${urgencyLabels[warning.urgency] || '[监控]'}</span>
                     <div style="flex: 1;">
@@ -1518,66 +1601,17 @@
                 </div>
             `;
 
-                warningsList.appendChild(warningDiv);
-            });
-        }
-
-        // 移除了查询次数限制相关代码
-    </script>
-
-    <!-- 用户认证相关脚本 -->
-    <script src="{{ url_for('static', filename='utils.js') }}"></script>
-    <script>
-        // 模态框控制函数
-        function showLoginModal() {
-            document.getElementById('loginModal').style.display = 'block';
-        }
-
-        function showRegisterModal() {
-            document.getElementById('registerModal').style.display = 'block';
-        }
-
-        function hideModals() {
-            document.getElementById('loginModal').style.display = 'none';
-            document.getElementById('registerModal').style.display = 'none';
-        }
-
-        // 关闭按钮事件监听
-        document.querySelectorAll('.modal .close').forEach(closeBtn => {
-            closeBtn.onclick = function () {
-                hideModals();
-            }
+            warningsList.appendChild(warningDiv);
         });
+    }
 
-        // 点击模态框外部关闭
-        window.onclick = function (event) {
-            if (event.target.classList.contains('modal')) {
-                hideModals();
-            }
-        }
+    // 移除了查询次数限制相关代码
+</script>
 
-        // 页面加载时检查登录状态
-        // document.addEventListener('DOMContentLoaded', function () {
-        // checkLoginStatus();
-
-        // 添加移动端菜单按钮
-        // const authContainer = document.createElement('div');
-        // authContainer.className = 'md:hidden mt-2';
-        // authContainer.id = 'mobileAuthButtons';
-        // authContainer.innerHTML = `
-        //     <button id="mobileLoginBtn" class="btn btn-sm btn-primary me-2" onclick="showLoginModal()">登录</button>
-        //     <button id="mobileRegisterBtn" class="btn btn-sm btn-secondary" onclick="showRegisterModal()">注册</button>
-        //     <div id="mobileUserInfo" class="hidden mt-2">
-        //         <span id="mobileUsernameDisplay" class="text-white mr-2">用户: </span>
-        //         <button id="mobileLogoutBtn" class="btn btn-sm btn-secondary" onclick="handleLogout()">退出登录</button>
-        //     </div>
-        // `;
-        // document.querySelector('.row.mb-4.align-items-center').appendChild(authContainer);
-        // });
-    </script>
-    <script src="/static/auth.js"></script>
-    <script src="/static/feedback.js"></script>
-    <script src="/static/forgot_password.js"></script>
-</body>
-
-</html>
+<!-- 用户认证相关脚本 -->
+<script src="{{ url_for('static', filename='utils.js') }}"></script>
+<script src="/static/auth.js"></script>
+<script src="/static/feedback.js"></script>
+<script src="/static/forgot_password.js"></script>
+</div>
+{% endblock %}

@@ -231,10 +231,8 @@ async function fetchQueryCountInfo() {
 
         if (response.ok) {
             const data = await response.json();
-            // 调用updateQueryCountDisplay函数更新显示
-            if (window.updateQueryCountDisplay) {
-                window.updateQueryCountDisplay(data);
-            }
+            // 直接更新DOM中的查询次数显示
+            updateQueryCountDisplay(data)
         }
     } catch (error) {
         console.error('获取查询次数信息失败:', error);
@@ -262,11 +260,6 @@ function checkLoginStatus() {
     const loginBtn = document.getElementById('loginBtn');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // 更新移动端显示
-    const mobileLoginBtn = document.getElementById('mobileLoginBtn');
-    const mobileUserInfo = document.getElementById('mobileUserInfo');
-    const mobileUsernameDisplay = document.getElementById('mobileUsernameDisplay');
-
     if (token && username) {
         // 已登录状态
         console.log('用户已登录，用户名:', username);
@@ -279,13 +272,6 @@ function checkLoginStatus() {
         }
         if (loginBtn) loginBtn.style.display = 'none';
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
-
-        // 移动端处理
-        if (mobileLoginBtn) mobileLoginBtn.style.display = 'none';
-        if (mobileUserInfo) {
-            mobileUserInfo.style.display = 'flex';
-            if (mobileUsernameDisplay) mobileUsernameDisplay.textContent = `用户: ${username}`;
-        }
 
         // 获取并显示查询次数信息
         fetchQueryCountInfo();
@@ -301,11 +287,6 @@ function checkLoginStatus() {
         }
         if (loginBtn) loginBtn.style.display = 'inline-block';
         if (logoutBtn) logoutBtn.style.display = 'none';
-
-
-        // 移动端处理
-        if (mobileLoginBtn) mobileLoginBtn.style.display = 'block';
-        if (mobileUserInfo) mobileUserInfo.style.display = 'none';
     }
 }
 

@@ -84,16 +84,16 @@ def get_fallback_analysis(ticker, style, data, risk_result):
 
 ---
 
-### G=B+M 模型分析
+### AlphaG (G=B+M) 模型分析
 
-**G (价格)**: 当前价格 {data['currency_symbol']}{data['price']:.2f}，位于52周区间 {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f} 的 {price_position*100:.1f}% 位置。
+**G (收益 Gain)**: 当前价格 {data['currency_symbol']}{data['price']:.2f}，位于52周区间 {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f} 的 {price_position*100:.1f}% 位置。
 
-**B (基本面)**: 
+**B (基本面 Basics)**: 
 - 营收增长率: {data['growth']*100:.2f}%
 - 利润率: {data['margin']*100:.2f}%
 - 基本面评估: {'良好' if data['growth'] > 0.1 and data['margin'] > 0.1 else '一般' if data['growth'] > 0 else '较差'}
 
-**M (市场情绪/估值)**: 
+**M (动量 Momentum)**: 
 - 市盈率(PE): {pe_value}
 - PEG比率: {peg_value}
 - 估值评估: {'偏高' if data['pe'] and data['pe'] > 30 else '合理' if data['pe'] and data['pe'] > 15 else '偏低' if data['pe'] else '数据不足'}
@@ -126,13 +126,44 @@ def get_fallback_analysis(ticker, style, data, risk_result):
 
 **风险评分**: """ + f"{risk_result['score']}/10 ({risk_result['level']})" + """
 
-**主要风险点**:
+**主要风险因素**:
 """
     
     if risk_result['flags']:
         analysis += '\n'.join(['- ' + flag for flag in risk_result['flags']]) + '\n'
     else:
-        analysis += '- 无明显结构性风险\n'
+        analysis += '- 经系统评估，当前无明显结构性风险\n'
+    
+    # 添加 EV 模型短期风险评估（如果有）
+    ev_model = data.get('ev_model', {})
+    if ev_model and not ev_model.get('error'):
+        weighted_ev = ev_model.get('weighted_ev', 0)
+        ev_recommendation = ev_model.get('recommendation', {})
+        
+        if abs(weighted_ev) > 0.03:  # 只有当 EV 显著时才显示
+            analysis += f"\n**短期波动风险（基于期望值模型）**:\n"
+            analysis += f"- 加权期望值: {weighted_ev:.2%}\n"
+            analysis += f"- 风险评估: {ev_recommendation.get('reason', '短期方向不明确')}\n"
+            
+            if ev_model.get('ev_1week'):
+                ev_1week = ev_model['ev_1week']
+                prob_up = ev_1week.get('prob_up', 0.5)
+                prob_down = ev_1week.get('prob_down', 0.5)
+                analysis += f"- 短期概率分布: 上涨概率{prob_up*100:.0f}%，下跌概率{prob_down*100:.0f}%\n"
+            
+            style_name = style_names.get(style, style)
+            if style == 'quality' or style == 'value':
+                analysis += f"- **重要提示**: 这是短期（1周至3个月）的风险评估，对于{style_name}风格的中长期投资，短期波动不应过度影响决策，但需要作为风险提示纳入考量。\n"
+            else:
+                analysis += f"- **重要提示**: 这是短期（1周至3个月）的风险评估，对于{style_name}风格，需要重点关注这一短期风险指标。\n"
+    
+    analysis += "\n**风险控制建议**:\n"
+    analysis += f"- 严格遵守仓位限制，不要超过{risk_result['suggested_position']}%\n"
+    analysis += f"- 设置止损价格并严格执行\n"
+    if risk_result['score'] >= 6:
+        analysis += "- 由于风险评分较高，建议降低仓位或保持观望\n"
+    elif risk_result['score'] >= 4:
+        analysis += "- 风险处于中等水平，建议分批建仓以降低风险\n"
     
     analysis += """
 ---
@@ -228,7 +259,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     if is_fund and fund_type == 'ETF':
         # ETF专用分析框架
         prompt = f"""
-你是一位精通"胡猛投机模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
+你是一位精通"AlphaG投资模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
 
 ### ⚠️ 重要提示：这是ETF（交易所交易基金）
 
@@ -249,7 +280,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 ### 1. 上下文数据
 
-- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
+- **当前价格 (P)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
 """
         if is_fund and fund_type == 'ETF':
             prompt += "- **注意：这是ETF，不适用公司财务指标**\n"
@@ -266,7 +297,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     else:
         # 普通股票分析框架
         prompt = f"""
-你是一位精通"胡猛投机模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
+你是一位精通"AlphaG投资模型(G=B+M)"和"五大支柱投资框架"的资深基金经理。请对 {data['name']} ({ticker}) 进行严格的投资分析。
 
 ### 重要：投资风格与原则
 
@@ -278,7 +309,7 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 ### 1. 上下文数据
 
-- **当前价格 (G)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
+- **当前价格 (P)**: {data['currency_symbol']}{data['price']:.2f} (52周区间: {data['currency_symbol']}{data['week52_low']:.2f} - {data['currency_symbol']}{data['week52_high']:.2f})
 - **基本面 (B)**: 营收增长 {data['growth']:.1%}, 利润率 {data['margin']:.1%}
     - **情绪/估值 (M)**: PE {pe_value}, PEG {peg_value}
 - **技术面**: 50日均线 {data['currency_symbol']}{data['ma50']:.2f}, 200日均线 {data['currency_symbol']}{data['ma200']:.2f}
@@ -445,11 +476,12 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 ### 2. 分析任务 (请使用 Markdown 输出，必须严格按照以下结构输出报告)
 
 **⚠️ 重要：报告结构要求**
-你必须严格按照以下6个部分的顺序和标题输出报告，每个部分都必须包含，不能省略或合并：
+你必须严格按照以下7个部分的顺序和标题输出报告，每个部分都必须包含，不能省略或合并：
 1. 第一部分：投资风格与原则重申
 2. 第二部分：公司概况（新增：包含公司业务介绍和最新动态）
-3. 第三部分：G=B+M 深度解构
+3. 第三部分：AlphaG (G=B+M) 深度解构
 4. 第四部分：五大支柱检查
+4.5. 第四.五部分：风险控制评估（新增：包含风险评分、主要风险因素和短期波动风险）
 5. 第五部分：估值分析与交易策略（宏观环境分析作为估值分析的背景，不是单独部分）
 6. 第六部分：卖出策略
 
@@ -491,21 +523,21 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     
     prompt += """
 
-**第三部分：G=B+M 深度解构**
+**第三部分：AlphaG (G=B+M) 深度解构**
 
 """
     # 添加B（基本面）部分
     if is_fund and fund_type == 'ETF':
-        prompt += "* **B (基本面)**: 对于ETF，不适用公司财务指标（营收、利润、PE等）。请分析：\n"
+        prompt += "* **B (基本面 Basics)**: 对于ETF，不适用公司财务指标（营收、利润、PE等）。请分析：\n"
         prompt += "  - ETF跟踪的标的指数是什么？指数的构成和权重如何？\n"
         prompt += "  - ETF的跟踪误差如何？管理费率是多少（如果数据中有）？\n"
         prompt += "  - 如果是杠杆ETF（如3x、UltraPro），需要特别说明杠杆倍数和风险（杠杆ETF在震荡市场中会遭受时间衰减）\n"
         prompt += "  - ETF的流动性如何？日均成交量是否充足？\n\n"
     else:
-        prompt += f"* **B (基本面)**: 当前处于行业周期的哪个阶段（复苏/过热/滞胀/衰退）？数据支撑是什么？是否符合{style_names.get(style, style)}风格的要求？\n\n"
+        prompt += f"* **B (基本面 Basics)**: 当前处于行业周期的哪个阶段（复苏/过热/滞胀/衰退）？数据支撑是什么？是否符合{style_names.get(style, style)}风格的要求？\n\n"
     
-    # 添加M（市场情绪）部分
-    prompt += "* **M (市场情绪)**: 当前价格是否包含了过度的乐观或悲观情绪？"
+    # 添加S（市场情绪）部分
+    prompt += "* **M (动量 Momentum)**: 当前价格是否包含了过度的乐观或悲观情绪？"
     if is_fund and fund_type == 'ETF':
         prompt += "对于ETF，主要关注技术面指标（价格位置、均线、52周区间）和跟踪标的指数的市场情绪。\n\n"
     else:
@@ -566,6 +598,61 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 * **怀疑主义 (Skepticism)**: 请充当"空头律师"，列出 2-3 个如果不买这只股票的理由。
 
 * **事前验尸 (Pre-mortem)**: 假设我们现在买入，一年后亏损了 50%，最可能的原因是什么？
+
+**第四.五部分：风险控制评估**
+
+你必须使用Markdown二级标题格式输出：## 第四.五部分：风险控制评估
+
+此部分必须包含以下内容：
+
+1. **风险评分**: 系统综合评估风险评分为 {risk_result['score']}/10 (等级: {risk_result['level']})
+
+2. **主要风险因素**:
+"""
+    
+    # 添加风险因素
+    if risk_result['flags']:
+        prompt += '\n'.join(['   - ' + flag for flag in risk_result['flags']]) + '\n'
+    else:
+        prompt += '   - 经系统评估，当前无明显结构性风险\n'
+    
+    # 添加 EV 模型短期风险评估
+    ev_model = data.get('ev_model', {})
+    if ev_model and not ev_model.get('error'):
+        weighted_ev = ev_model.get('weighted_ev', 0)
+        ev_recommendation = ev_model.get('recommendation', {})
+        
+        if abs(weighted_ev) > 0.03:  # 只有当 EV 显著时才显示
+            prompt += f"""
+3. **短期波动风险（基于量化模型）**:
+   - 加权期望值: {weighted_ev:.2%}
+   - 风险评估: {ev_recommendation.get('reason', '短期方向不明确')}
+"""
+            if ev_model.get('ev_1week'):
+                ev_1week = ev_model['ev_1week']
+                prob_up = ev_1week.get('prob_up', 0.5)
+                prob_down = ev_1week.get('prob_down', 0.5)
+                prompt += f"   - 短期概率分布: 上涨概率{prob_up*100:.0f}%，下跌概率{prob_down*100:.0f}%\n"
+            
+            prompt += f"""   - **投资风格说明**: 这是短期（1周至3个月）的风险评估，"""
+            if style == 'quality' or style == 'value':
+                prompt += f"对于{style_names.get(style, style)}风格的中长期投资，短期波动不应过度影响核心决策，但需要作为风险提示纳入考量。\n"
+            else:
+                prompt += f"对于{style_names.get(style, style)}风格，需要重点关注这一短期风险指标。\n"
+        else:
+            prompt += """
+3. **短期波动风险**: 短期市场方向不明显，建议关注基本面和长期趋势。
+"""
+    else:
+        prompt += """
+3. **短期波动风险**: 量化模型暂时无法评估短期波动风险。
+"""
+    
+    prompt += """
+4. **风险控制建议**: 请基于以上风险评分、主要风险因素和短期波动风险，给出2-3条具体的风险控制建议。必须包括：
+   - 仓位限制建议
+   - 止损设置建议
+   - 在什么情况下应该降低仓位或退出
 
 **第五部分：估值分析与交易策略（必须包含）**
 
@@ -647,12 +734,13 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 **⚠️ 最后强调：报告结构要求**
 
-请务必严格按照以下6个部分的顺序和标题输出报告，使用Markdown格式的二级标题（## 第一部分：...）：
+请务必严格按照以下7个部分的顺序和标题输出报告，使用Markdown格式的二级标题（## 第一部分：...）：
 
 1. ## 第一部分：投资风格与原则重申
 2. ## 第二部分：公司概况（必须包含：公司业务介绍 + 最新动态）
-3. ## 第三部分：G=B+M 深度解构
+3. ## 第三部分：AlphaG (G=B+M) 深度解构
 4. ## 第四部分：五大支柱检查
+4.5. ## 第四.五部分：风险控制评估（必须包含：风险评分 + 主要风险因素 + 短期波动风险 + 风险控制建议）
 5. ## 第五部分：估值分析与交易策略（宏观环境分析作为估值分析的背景，说明宏观环境如何影响估值）
 6. ## 第六部分：卖出策略
 
@@ -660,6 +748,8 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 - 每个部分都必须包含，不能省略、合并或改变顺序
 - **第二部分：公司概况是新增的必需部分，绝不能省略**
 - 第二部分必须包含两个子部分：（1）公司业务介绍（不超过4句话）和（2）最新动态（3-5条重要新闻）
+- **第四.五部分：风险控制评估是新增的必需部分，绝不能省略**
+- 第四.五部分必须包含：风险评分、主要风险因素、短期波动风险（基于EV模型）和风险控制建议
 - 即使系统未提供新闻数据，也要说明"当前无法获取到最新新闻动态"
 """
 

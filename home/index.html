@@ -29,41 +29,69 @@
         rel="stylesheet">
 
     <style>
+        /* ==================== AlphaG 设计系统 ==================== */
+        
+        :root {
+            /* 品牌色 - 深青色 */
+            --brand-primary: #0D9B97;
+            --brand-primary-rgb: 13, 155, 151;
+            --brand-primary-light: #10B5B0;
+            --brand-primary-dark: #0A7D7A;
+            
+            /* 背景色 */
+            --bg-primary: #09090B;
+            --bg-secondary: #18181B;
+            --bg-tertiary: #27272A;
+            
+            /* 文字色 */
+            --text-primary: #FAFAFA;
+            --text-secondary: #A1A1AA;
+            --text-muted: #71717A;
+            
+            /* 金融色 */
+            --color-bull: #10B981;
+            --color-bear: #EF4444;
+        }
+        
         body {
             font-family: 'Inter', 'Noto Sans SC', sans-serif;
-            background-color: #030712;
-            /* Slate 950 */
-            color: #f8fafc;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .font-mono {
             font-family: 'JetBrains Mono', monospace;
         }
 
+        /* 渐变文字 - 使用品牌色 */
         .gradient-text {
-            background: linear-gradient(to right, #a78bfa, #22d3ee);
+            background: linear-gradient(to right, var(--brand-primary), var(--brand-primary-light));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
+        /* 玻璃卡片效果 */
         .glass-card {
-            background: rgba(30, 41, 59, 0.4);
+            background: rgba(24, 24, 27, 0.6);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            border: 1px solid rgba(39, 39, 42, 0.8);
             transition: all 0.3s ease;
         }
 
         .glass-card:hover {
-            border-color: rgba(34, 211, 238, 0.5);
+            border-color: rgba(13, 155, 151, 0.5);
             transform: translateY(-5px);
-            box-shadow: 0 10px 30px -10px rgba(34, 211, 238, 0.2);
+            box-shadow: 0 10px 30px -10px rgba(13, 155, 151, 0.3);
         }
 
+        /* 英雄区光晕 - 使用品牌色 */
         .hero-glow {
             position: absolute;
             width: 600px;
             height: 600px;
-            background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(3, 7, 18, 0) 70%);
+            background: radial-gradient(circle, rgba(13, 155, 151, 0.15) 0%, rgba(9, 9, 11, 0) 70%);
             top: -100px;
             left: 50%;
             transform: translateX(-50%);
@@ -71,25 +99,77 @@
             pointer-events: none;
         }
 
-        /* QR Code Scanner Effect Removed */
-
-        /* Beta Badge Pulse */
+        /* Beta 徽章脉冲动画 */
         .beta-pulse {
             animation: pulse-glow 2s infinite;
         }
 
         @keyframes pulse-glow {
             0% {
-                box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4);
+                box-shadow: 0 0 0 0 rgba(13, 155, 151, 0.4);
             }
-
             70% {
-                box-shadow: 0 0 0 10px rgba(34, 211, 238, 0);
+                box-shadow: 0 0 0 10px rgba(13, 155, 151, 0);
             }
-
             100% {
-                box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
+                box-shadow: 0 0 0 0 rgba(13, 155, 151, 0);
             }
+        }
+        
+        /* 导航栏优化 */
+        nav {
+            background: rgba(9, 9, 11, 0.8) !important;
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(39, 39, 42, 0.8);
+        }
+        
+        /* 按钮优化 */
+        .btn-primary {
+            background-color: var(--brand-primary) !important;
+            color: white !important;
+            box-shadow: 0 2px 4px rgba(13, 155, 151, 0.3);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--brand-primary-light) !important;
+            box-shadow: 0 4px 8px rgba(13, 155, 151, 0.4);
+        }
+        
+        /* 品牌色工具类 - 替代 cyan */
+        .text-brand {
+            color: var(--brand-primary) !important;
+        }
+        
+        .bg-brand {
+            background-color: var(--brand-primary) !important;
+        }
+        
+        .bg-brand\/5 {
+            background-color: rgba(13, 155, 151, 0.05) !important;
+        }
+        
+        .bg-brand\/10 {
+            background-color: rgba(13, 155, 151, 0.1) !important;
+        }
+        
+        .border-brand {
+            border-color: var(--brand-primary) !important;
+        }
+        
+        .border-brand\/10 {
+            border-color: rgba(13, 155, 151, 0.1) !important;
+        }
+        
+        .hover\:text-brand:hover {
+            color: var(--brand-primary) !important;
+        }
+        
+        .hover\:bg-brand:hover {
+            background-color: var(--brand-primary) !important;
+        }
+        
+        .shadow-brand {
+            box-shadow: 0 0 20px rgba(13, 155, 151, 0.3);
         }
     </style>
 </head>
@@ -104,76 +184,86 @@
         const content = {
             zh: {
                 nav: {
-                    features: "功能特性",
-                    model: "核心模型",
-                    styles: "投资风格",
+                    home: "首页",
+                    portfolio: "实盘追踪",
+                    styles: "模型理念",
                     download: "关注我们",
+                    cta: "立即体验",
                     lang: "EN"
                 },
                 portfolio: {
-                    title: "投资组合持仓分析",
-                    description: "基于 100 万美元投资的两只美股（ MU、GOOGL）、三只港股（1378.HK 中国宏桥、9988.HK 阿里巴巴、0883.HK 中海油）及三只A股（601899 紫金矿业、600900 长江电力、601318 中国平安）的持仓情况",
-                    totalValue: "总市值",
-                    totalProfitLossPercent: "总盈亏比例",
-                    aiPosition: "持仓比例",
+                    title: "四大风格投资组合实盘追踪",
+                    description: "四种投资风格组合（质量、价值、成长、趋势），每个组合 25 万美元，共 100 万美元实盘追踪，对比标普500、纳斯达克指数、恒生指数、沪深300表现",
+                    quality: "质量组合",
+                    value: "价值组合",
+                    growth: "成长组合",
+                    momentum: "趋势组合",
+                    sp500: "标普500",
+                    nasdaq: "纳斯达克",
+                    hsi: "恒生指数",
+                    csi300: "沪深300",
+                    performanceChart: "累计收益走势图",
+                    summary: "组合表现总结",
+                    totalReturn: "总收益率",
+                    dailyChange: "今日变化",
+                    maxDrawdown: "最大回撤",
+                    sharpeRatio: "夏普比率",
+                    startDate: "起始日期",
+                    initialCapital: "初始资金",
+                    holdings: "持仓明细",
+                    viewHoldings: "查看持仓",
+                    hideHoldings: "收起持仓",
+                    stock: "股票",
                     shares: "持仓股数",
-                    averageCost: "平均成本",
-                    finalPrice: "最新价格",
-                    actualInvestment: "实际投入",
-                    marketValue: "股票市值",
-                    profitLoss: "盈亏金额",
-                    summary: "投资组合总结",
-                    performance: "投资表现",
+                    costPrice: "成本价",
+                    currentPrice: "当前价",
+                    allocation: "占比",
                     profit: "盈利",
-                    loss: "亏损",
-                    fundUsage: "资金使用",
-                    used: "已使用",
-                    totalFund: "总资金",
-                    allocation: "资产配置"
+                    profitPercent: "收益率"
                 },
                 hero: {
-                    badge: "由 Gemini AI 驱动",
-                    title: "以 AI 重构",
-                    titleHighlight: "市场逻辑",
-                    subtitle: "基于自研 G=B+M 投机模型与五大支柱框架。我们不预测未来，我们只计算概率。智能识别全市场标的，提供机构级风控建议。",
-                    cta_primary: "立即体验 (内测版)",
+                    badge: "Powered by LLM",
+                    title: "以AI重构股价逻辑",
+                    titleHighlight: "",
+                    subtitle: "基于自研PFS投资模型，不预测未来，只计算概率，智能识别市场标的，提供机构级风控建议",
+                    cta_primary: "立即体验",
                     cta_secondary: "了解模型",
-                    limit_notice: "⚠️ 当前每位用户每日限额 2 次",
+                    limit_notice: "每位注册用户每日限额 5 次",
                     demo_card: {
                         ticker: "AAPL (苹果公司)",
                         style_label: "策略风格",
                         style_val: "质量策略",
                         risk_label: "风险评分",
                         risk_val: "2.5 / 10 (低风险)",
-                        g_label: "G-价格",
+                        g_label: "P-价格",
                         g_val: "高位",
-                        b_label: "B-基本面",
+                        b_label: "F-基本面",
                         b_val: "强劲",
-                        m_label: "M-情绪",
+                        m_label: "S-情绪",
                         m_val: "中性",
-                        ai_verdict: "AI 分析结论：基本面 (B) 支撑强劲，虽然价格 (G) 处于高位，但市场情绪 (M) 稳定。建议仓位",
+                        ai_verdict: "AI 分析结论：基本面 (F) 支撑强劲，虽然价格 (P) 处于高位，但市场情绪 (S) 稳定。建议仓位",
                         ai_pos: "18%"
                     }
                 },
                 model: {
                     title: "G = B + M",
                     desc: "将混沌的市场波动解构为极简的数学逻辑",
-                    g: { title: "G (价格引力)", desc: "价格偏离度与技术形态" },
-                    b: { title: "B (基本面支撑)", desc: "营收、利润与估值锚点" },
-                    m: { title: "M (市场情绪)", desc: "恐慌指数与宏观因子" }
+                    g: { title: "G (收益)", desc: "收益偏离度与技术形态" },
+                    b: { title: "B (基本面)", desc: "营收、利润与估值锚点" },
+                    m: { title: "M (动量)", desc: "恐慌指数与宏观因子" }
                 },
                 features: {
                     title: "全维度智能分析",
                     items: [
                         { icon: "Brain", title: "AI 深度决策", desc: "集成 Google Gemini AI，自动生成包含风格判定、五大支柱检查的深度研报。" },
                         { icon: "ShieldWarning", title: "风险量化系统", desc: "0-10 分动态风险评级，结合 VIX 与 Put/Call 比率，精准识别危险信号。" },
-                        { icon: "ChartLineUp", title: "智能仓位管理", desc: "拒绝盲目博弈。根据风险等级动态计算最优仓位，严格执行资金管理。" },
-                        { icon: "GlobeHemisphereWest", title: "全市场覆盖", desc: "无缝支持美股、港股、A股代码自动识别，打破市场信息壁垒。" }
+                        { icon: "ChartPie", title: "智能仓位管理", desc: "拒绝盲目博弈。根据风险等级动态计算最优仓位，严格执行资金管理。" },
+                        { icon: "Globe", title: "全市场覆盖", desc: "无缝支持美股、港股、A股代码自动识别，打破市场信息壁垒。" }
                     ]
                 },
                 styles: {
-                    title: "四种投资风格",
-                    desc: "系统自动适配您的交易性格",
+                    title: "投资理念与四大风格",
+                    desc: "基于G=B+M模型，系统自动适配您的投资风格",
                     cards: [
                         { name: "质量策略", color: "text-emerald-400", desc: "护城河深、财务稳健。适合长期持有。" },
                         { name: "价值策略", color: "text-blue-400", desc: "低估值、安全边际。寻找错杀机会。" },
@@ -188,81 +278,91 @@
                 },
                 footer: {
                     disclaimer: "免责声明：本系统仅供学习和研究使用，不构成任何投资建议。投资有风险，入市需谨慎。",
-                    copy: "© 2025 AlphaG 智能科技. 保留所有权利."
+                    copy: "© 2025 AlphaG. 基于 G=B+M 投资框架"
                 }
             },
             en: {
                 nav: {
-                    features: "Features",
-                    model: "The Model",
-                    styles: "Styles",
+                    home: "Home",
+                    portfolio: "Live Tracking",
+                    styles: "Model Philosophy",
                     download: "Follow Us",
+                    cta: "Try Now",
                     lang: "中"
                 },
                 portfolio: {
-                    title: "Portfolio Holdings Analysis",
-                    description: "Based on a $1 million investment in 2 U.S. stocks (MU, GOOGL), 3 Hong Kong stocks (1378.HK China Hongqiao, 9988.HK Alibaba, 0883.HK CNOOC), and 3 A-shares (601899 Zijin Mining, 600900 Yangtze Power, 601318 Ping An Insurance).",
-                    totalValue: "Total Value",
-                    totalProfitLossPercent: "Total P&L %",
-                    aiPosition: "Position Ratio",
+                    title: "Four-Style Portfolio Live Tracking",
+                    description: "Four investment style portfolios (Quality, Value, Growth, Momentum), each with $250K, total $1M live tracking vs S&P 500, NASDAQ, Hang Seng Index & CSI 300",
+                    quality: "Quality Portfolio",
+                    value: "Value Portfolio",
+                    growth: "Growth Portfolio",
+                    momentum: "Momentum Portfolio",
+                    sp500: "S&P 500",
+                    nasdaq: "NASDAQ",
+                    hsi: "Hang Seng",
+                    csi300: "CSI 300",
+                    performanceChart: "Cumulative Return",
+                    summary: "Performance Summary",
+                    totalReturn: "Total Return",
+                    dailyChange: "Daily Change",
+                    maxDrawdown: "Max Drawdown",
+                    sharpeRatio: "Sharpe Ratio",
+                    startDate: "Start Date",
+                    initialCapital: "Initial Capital",
+                    holdings: "Holdings Detail",
+                    viewHoldings: "View Holdings",
+                    hideHoldings: "Hide Holdings",
+                    stock: "Stock",
                     shares: "Shares",
-                    averageCost: "Average Cost",
-                    finalPrice: "Last Price",
-                    actualInvestment: "Actual Investment",
-                    marketValue: "Market Value",
-                    profitLoss: "P&L Amount",
-                    summary: "Portfolio Summary",
-                    performance: "Investment Performance",
+                    costPrice: "Cost",
+                    currentPrice: "Current",
+                    allocation: "Weight",
                     profit: "Profit",
-                    loss: "Loss",
-                    fundUsage: "Fund Usage",
-                    used: "Used",
-                    totalFund: "Total Fund",
-                    allocation: "Asset Allocation"
+                    profitPercent: "Return"
                 },
                 hero: {
-                    badge: "Powered by Gemini AI",
-                    title: "Redefine Markets with",
-                    titleHighlight: "AlphaG",
-                    subtitle: "Based on the proprietary G=B+M Model & 5 Pillars Framework. We don't predict the future; we calculate probabilities.",
-                    cta_primary: "Try Beta Now",
+                    badge: "Powered by LLM",
+                    title: "AI-Powered Stock Price Logic",
+                    titleHighlight: "",
+                    subtitle: "Based on proprietary PFS Model. We don't predict the future; we calculate probabilities. Intelligently identify market opportunities with institutional-grade risk management.",
+                    cta_primary: "Try Now",
                     cta_secondary: "Learn More",
-                    limit_notice: "⚠️ Limit: 2 uses per user/day",
+                    limit_notice: "5 queries per day for registered users",
                     demo_card: {
                         ticker: "AAPL (Apple Inc.)",
                         style_label: "STYLE",
                         style_val: "QUALITY",
                         risk_label: "Risk Score",
                         risk_val: "2.5 / 10 (Low)",
-                        g_label: "G-Score",
+                        g_label: "P-Score",
                         g_val: "High",
-                        b_label: "B-Score",
+                        b_label: "F-Score",
                         b_val: "Strong",
-                        m_label: "M-Score",
+                        m_label: "S-Score",
                         m_val: "Neutral",
-                        ai_verdict: "AI Verdict: Strong fundamentals (B) justify price (G). Sentiment (M) is neutral. Suggested Position:",
+                        ai_verdict: "AI Verdict: Strong fundamentals (F) justify price (P). Sentiment (S) is neutral. Suggested Position:",
                         ai_pos: "18%"
                     }
                 },
                 model: {
                     title: "G = B + M",
                     desc: "Deconstructing chaos into mathematical logic",
-                    g: { title: "G (Gravity)", desc: "Price Action & Technicals" },
-                    b: { title: "B (Basis)", desc: "Fundamental Support" },
-                    m: { title: "M (Momentum)", desc: "Sentiment & Macro Factors" }
+                    g: { title: "G (Gain)", desc: "Gain Deviation & Technicals" },
+                    b: { title: "B (Basics)", desc: "Fundamental Support" },
+                    m: { title: "M (Momentum)", desc: "Momentum & Macro Factors" }
                 },
                 features: {
                     title: "Full-Dimension Analysis",
                     items: [
                         { icon: "Brain", title: "AI Deep Decision", desc: "Integrated Gemini AI generates deep reports with 5-Pillar checks and strategy analysis." },
                         { icon: "ShieldWarning", title: "Risk Quant", desc: "0-10 dynamic risk rating based on VIX, Put/Call ratios, and macro indicators." },
-                        { icon: "ChartLineUp", title: "Position Sizing", desc: "Stop blind betting. Get calculated position suggestions based on risk levels." },
-                        { icon: "GlobeHemisphereWest", title: "Global Coverage", desc: "Seamless support for US, HK, and A-Shares. Breaking information barriers." }
+                        { icon: "ChartPie", title: "Position Sizing", desc: "Stop blind betting. Get calculated position suggestions based on risk levels." },
+                        { icon: "Globe", title: "Global Coverage", desc: "Seamless support for US, HK, and A-Shares. Breaking information barriers." }
                     ]
                 },
                 styles: {
-                    title: "4 Investment Personas",
-                    desc: "Adapting to your trading personality",
+                    title: "Model Philosophy & 4 Styles",
+                    desc: "Based on G=B+M Model, adapting to your investment style",
                     cards: [
                         { name: "Quality", color: "text-emerald-400", desc: "Wide moat, strong financials. Long-term." },
                         { name: "Value", color: "text-blue-400", desc: "Undervalued, safety margin. Mid-term." },
@@ -277,7 +377,7 @@
                 },
                 footer: {
                     disclaimer: "Disclaimer: This system is for educational purposes only and does not constitute investment advice.",
-                    copy: "© 2025 AlphaG Intelligence. All Rights Reserved."
+                    copy: "© 2025 AlphaG. Based on G=B+M Investment Framework"
                 }
             }
         };
@@ -290,9 +390,50 @@
             const [currentPrice, setCurrentPrice] = useState('');
             const [maxReturn, setMaxReturn] = useState('');
             const [aiPosition, setAiPosition] = useState('');
+            const [expandedPortfolio, setExpandedPortfolio] = useState(null);
             const t = content[lang];
 
             const toggleLang = () => setLang(lang === 'zh' ? 'en' : 'zh');
+
+            // 四个组合的持仓数据
+            const portfolioHoldings = {
+                quality: [
+                    { ticker: 'NVDA', name: '英伟达', shares: 150, cost: 450.00, current: 495.30, market: 'US' },
+                    { ticker: 'UNH', name: '联合健康', shares: 100, cost: 520.00, current: 545.80, market: 'US' },
+                    { ticker: '9988.HK', name: '阿里巴巴', shares: 2500, cost: 85.50, current: 92.30, market: 'HK' },
+                    { ticker: '0700.HK', name: '腾讯控股', shares: 600, cost: 320.00, current: 348.50, market: 'HK' },
+                    { ticker: '600276', name: '恒瑞医药', shares: 5000, cost: 42.50, current: 45.80, market: 'CN' },
+                    { ticker: '300750', name: '宁德时代', shares: 1000, cost: 185.00, current: 198.50, market: 'CN' }
+                ],
+                value: [
+                    { ticker: 'COP', name: '康菲石油', shares: 400, cost: 105.00, current: 112.30, market: 'US' },
+                    { ticker: 'PFE', name: '辉瑞', shares: 1500, cost: 28.50, current: 29.80, market: 'US' },
+                    { ticker: '0883.HK', name: '中国海油', shares: 15000, cost: 11.20, current: 12.10, market: 'HK' },
+                    { ticker: '1378.HK', name: '中国宏桥', shares: 8000, cost: 9.80, current: 10.50, market: 'HK' },
+                    { ticker: '600900', name: '长江电力', shares: 8000, cost: 22.50, current: 24.30, market: 'CN' },
+                    { ticker: '600028', name: '中国石化', shares: 25000, cost: 5.20, current: 5.65, market: 'CN' }
+                ],
+                growth: [
+                    { ticker: 'MU', name: '美光科技', shares: 550, cost: 88.00, current: 96.50, market: 'US' },
+                    { ticker: 'PLTR', name: 'Palantir', shares: 1200, cost: 35.00, current: 42.80, market: 'US' },
+                    { ticker: '09961.HK', name: '携程集团', shares: 1000, cost: 280.00, current: 315.50, market: 'HK' },
+                    { ticker: '02577.HK', name: '英诺赛科', shares: 3000, cost: 32.50, current: 38.20, market: 'HK' },
+                    { ticker: '603986', name: '兆易创新', shares: 2000, cost: 115.00, current: 128.50, market: 'CN' },
+                    { ticker: '688386', name: '泛亚微透', shares: 1500, cost: 55.00, current: 62.30, market: 'CN' }
+                ],
+                momentum: [
+                    { ticker: 'TSLA', name: '特斯拉', shares: 200, cost: 245.00, current: 268.50, market: 'US' },
+                    { ticker: 'MU', name: '美光科技', shares: 400, cost: 92.00, current: 96.50, market: 'US' },
+                    { ticker: '0981.HK', name: '中芯国际', shares: 5000, cost: 15.80, current: 17.20, market: 'HK' },
+                    { ticker: '09992.HK', name: '泡泡玛特', shares: 2000, cost: 42.50, current: 48.30, market: 'HK' },
+                    { ticker: '002371', name: '北方华创', shares: 800, cost: 218.00, current: 235.50, market: 'CN' },
+                    { ticker: '688256', name: '寒武纪', shares: 1200, cost: 125.00, current: 138.80, market: 'CN' }
+                ]
+            };
+
+            const toggleHoldings = (portfolio) => {
+                setExpandedPortfolio(expandedPortfolio === portfolio ? null : portfolio);
+            };
 
             // 从本地API获取股票价格数据
             useEffect(() => {
@@ -405,6 +546,161 @@
                 fetchAllStockPrices();
             }, []); // 仅在组件挂载时执行一次
 
+            // Initialize Portfolio Chart
+            useEffect(() => {
+                const ctx = document.getElementById('portfolio-chart');
+                if (!ctx) return;
+
+                // 模拟30天的数据
+                const days = Array.from({length: 30}, (_, i) => `Day ${i + 1}`);
+                
+                // 模拟累计收益数据
+                const generateData = (baseReturn, volatility) => {
+                    let cumulative = 0;
+                    return Array.from({length: 30}, () => {
+                        cumulative += (Math.random() - 0.5) * volatility + baseReturn / 30;
+                        return cumulative;
+                    });
+                };
+
+                const portfolioChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: days,
+                        datasets: [
+                            {
+                                label: t.portfolio.quality,
+                                data: generateData(12.5, 1.5),
+                                borderColor: '#10B981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2
+                            },
+                            {
+                                label: t.portfolio.value,
+                                data: generateData(8.3, 1.2),
+                                borderColor: '#3B82F6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2
+                            },
+                            {
+                                label: t.portfolio.growth,
+                                data: generateData(15.7, 2.0),
+                                borderColor: '#A78BFA',
+                                backgroundColor: 'rgba(167, 139, 250, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2
+                            },
+                            {
+                                label: t.portfolio.momentum,
+                                data: generateData(6.2, 2.5),
+                                borderColor: '#F59E0B',
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2
+                            },
+                            {
+                                label: t.portfolio.sp500,
+                                data: generateData(9.0, 1.0),
+                                borderColor: '#6B7280',
+                                backgroundColor: 'rgba(107, 116, 128, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            },
+                            {
+                                label: t.portfolio.nasdaq,
+                                data: generateData(11.0, 1.3),
+                                borderColor: '#0D9B97',
+                                backgroundColor: 'rgba(13, 155, 151, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            },
+                            {
+                                label: t.portfolio.hsi,
+                                data: generateData(7.5, 1.8),
+                                borderColor: '#EF4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            },
+                            {
+                                label: t.portfolio.csi300,
+                                data: generateData(5.8, 1.5),
+                                borderColor: '#F97316',
+                                backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    color: '#A1A1AA',
+                                    font: { size: 12 },
+                                    padding: 15,
+                                    usePointStyle: true
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(24, 24, 27, 0.95)',
+                                titleColor: '#FAFAFA',
+                                bodyColor: '#A1A1AA',
+                                borderColor: '#27272A',
+                                borderWidth: 1,
+                                padding: 12,
+                                displayColors: true,
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': +' + context.parsed.y.toFixed(2) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    color: 'rgba(39, 39, 42, 0.5)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    color: '#71717A',
+                                    font: { size: 11 }
+                                }
+                            },
+                            y: {
+                                grid: {
+                                    color: 'rgba(39, 39, 42, 0.5)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    color: '#71717A',
+                                    font: { size: 11 },
+                                    callback: function(value) {
+                                        return value.toFixed(1) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        }
+                    }
+                });
+
+                return () => portfolioChart.destroy();
+            }, [t]);
+
             return (
                 <div className="min-h-screen relative overflow-hidden">
                     {/* Background Grid */}
@@ -420,23 +716,24 @@
                     <nav className="fixed w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex items-center justify-between h-16">
-                                <div className="flex items-center gap-2">
-                                    <i className="ph ph-chart-polar text-cyan-400 text-2xl"></i>
-                                    <span className="font-bold text-xl tracking-tight">Alpha<span className="text-cyan-400">G</span></span>
-                                </div>
+                            <div className="flex items-center gap-2">
+                                <i className="ph ph-chart-polar text-brand text-2xl"></i>
+                                <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>G</span></span>
+                            </div>
                                 <div className="hidden md:block">
                                     <div className="ml-10 flex items-baseline space-x-8">
-                                        <a href="#model" className="hover:text-cyan-400 transition-colors text-sm">{t.nav.model}</a>
-                                        <a href="#features" className="hover:text-cyan-400 transition-colors text-sm">{t.nav.features}</a>
-                                        <a href="#styles" className="hover:text-cyan-400 transition-colors text-sm">{t.nav.styles}</a>
+                                        <a href="#" className="hover:text-brand transition-colors text-sm">{t.nav.home}</a>
+                                        <a href="#portfolio" className="hover:text-brand transition-colors text-sm">{t.nav.portfolio}</a>
+                                        <a href="#styles" className="hover:text-brand transition-colors text-sm">{t.nav.styles}</a>
+                                        <a href="#contact" className="hover:text-brand transition-colors text-sm">{t.nav.download}</a>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
                                         {t.nav.lang}
                                     </button>
-                                    <a href="#contact" className="bg-slate-100 text-slate-900 px-4 py-2 rounded-full text-sm font-semibold hover:bg-cyan-400 hover:text-slate-900 transition-colors">
-                                        {t.nav.download}
+                                    <a href="http://localhost:5002" className="bg-brand text-white px-4 py-2 rounded-full text-sm font-semibold hover:bg-opacity-90 transition-colors shadow-brand">
+                                        {t.nav.cta}
                                     </a>
                                 </div>
                             </div>
@@ -447,7 +744,7 @@
                     <main className="pt-32 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
 
                         <div className="text-center">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-cyan-400 text-xs font-medium mb-6">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-brand text-xs font-medium mb-6">
                                 <i className="ph ph-sparkle-fill"></i>
                                 {t.hero.badge}
                             </div>
@@ -459,254 +756,121 @@
                                 {t.hero.subtitle}
                             </p>
 
+                            {/* PFS Model Formula */}
+                            <div className="mt-8 flex items-center justify-center gap-3 text-lg font-mono">
+                                <span className="font-bold" style={{ color: '#0D9B97' }}>G（收益）</span>
+                                <span className="text-slate-500">=</span>
+                                <span className="font-bold text-emerald-400">B（基本面）</span>
+                                <span className="text-slate-500">+</span>
+                                <span className="font-bold" style={{ color: '#F59E0B' }}>M（动量）</span>
+                            </div>
+
                             {/* CTA Area */}
                             <div className="mt-10 flex flex-col items-center">
-                                <div className="flex gap-4">
-                                    <a href="#contact" className="beta-pulse px-8 py-3 rounded-lg bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)]">
-                                        {t.hero.cta_primary}
-                                    </a>
-                                    <a href="#model" className="px-8 py-3 rounded-lg border border-slate-700 hover:border-slate-500 hover:bg-slate-800 transition-all">
-                                        {t.hero.cta_secondary}
-                                    </a>
-                                </div>
-                                <div className="mt-4 text-xs text-yellow-500/80 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
+                                <a href="http://localhost:5002" className="beta-pulse px-8 py-3 rounded-lg bg-brand text-white font-bold hover:bg-brand transition-all shadow-brand">
+                                    {t.hero.cta_primary}
+                                </a>
+                                <div className="mt-4 text-xs text-slate-400 bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
                                     {t.hero.limit_notice}
                                 </div>
                             </div>
 
-                            {/* Abstract Intelligence Card (Mockup) */}
-                            <div className="mt-20 mx-auto max-w-lg relative">
-                                {/* Decorative elements */}
-                                <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 to-purple-600 rounded-2xl blur opacity-20"></div>
-                                <div className="relative bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
-                                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-800/50">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
-                                                <i className="ph ph-apple-logo text-white text-xl"></i>
-                                            </div>
-                                            <div className="text-left">
-                                                <div className="text-white font-bold text-sm sm:text-base">{t.hero.demo_card.ticker}</div>
-                                            </div>
-                                        </div>
-                                        <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
-                                            {t.hero.demo_card.style_val}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        {/* Score Visualizations */}
-                                        <div className="flex justify-between items-end">
-                                            <div className="text-sm text-slate-400">{t.hero.demo_card.risk_label}</div>
-                                            <div className="text-xl font-bold text-emerald-400">{t.hero.demo_card.risk_val}</div>
-                                        </div>
-                                        <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-emerald-500 w-[25%]"></div>
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-2 mt-4">
-                                            <div className="bg-slate-800/50 p-3 rounded-lg text-center">
-                                                <div className="text-xs text-slate-500 mb-1">{t.hero.demo_card.g_label}</div>
-                                                <div className="text-cyan-400 font-bold text-sm">{t.hero.demo_card.g_val}</div>
-                                            </div>
-                                            <div className="bg-slate-800/50 p-3 rounded-lg text-center">
-                                                <div className="text-xs text-slate-500 mb-1">{t.hero.demo_card.b_label}</div>
-                                                <div className="text-purple-400 font-bold text-sm">{t.hero.demo_card.b_val}</div>
-                                            </div>
-                                            <div className="bg-slate-800/50 p-3 rounded-lg text-center">
-                                                <div className="text-xs text-slate-500 mb-1">{t.hero.demo_card.m_label}</div>
-                                                <div className="text-yellow-400 font-bold text-sm">{t.hero.demo_card.m_val}</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-4 p-3 bg-cyan-500/5 border border-cyan-500/10 rounded-lg flex gap-3 items-start">
-                                            <i className="ph ph-sparkle text-cyan-400 mt-0.5"></i>
-                                            <p className="text-xs text-slate-300 text-left leading-relaxed">
-                                                {t.hero.demo_card.ai_verdict} <span className="text-white font-bold">{t.hero.demo_card.ai_pos}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Portfolio Section - Replaced Stock Chart */}
-                            <section id="stock-chart-section" className="my-20">
+                            {/* Portfolio Section - Four Style Portfolios */}
+                            <section id="portfolio" className="my-20">
                                 <div className="text-center mb-12">
                                     <h2 className="text-3xl font-bold mb-4">{t.portfolio.title}</h2>
                                     <p className="text-slate-400 max-w-2xl mx-auto">{t.portfolio.description}</p>
                                 </div>
 
+                                {/* Performance Chart */}
                                 <div className="glass-card rounded-2xl p-6 mb-8">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                        <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                            <div className="text-slate-400 text-sm mb-1">{t.portfolio.totalValue}</div>
-                                            <div className="text-2xl font-bold text-white">${currentPrice}</div>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                            <div className="text-slate-400 text-sm mb-1">{t.portfolio.totalProfitLossPercent}</div>
-                                            <div className={`text-2xl font-bold ${parseFloat(maxReturn) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{maxReturn}</div>
-                                        </div>
-                                        <div className="bg-slate-800/50 rounded-xl p-4 text-center">
-                                            <div className="text-slate-400 text-sm mb-1">{t.portfolio.aiPosition}</div>
-                                            <div className="text-2xl font-bold text-purple-400">{aiPosition}</div>
-                                        </div>
+                                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                        <i className="ph ph-chart-line-up"></i>
+                                        {t.portfolio.performanceChart}
+                                    </h3>
+                                    <div className="w-full h-[400px]">
+                                        <canvas id="portfolio-chart"></canvas>
                                     </div>
+                                </div>
 
-                                    {/* Portfolio Details */}
-                                    {stockData?.mockPortfolio && (
-                                        <div className="space-y-8">
-                                            {/* Portfolio Summary */}
-                                            <div className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 rounded-xl p-6 border border-slate-700">
-                                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                                    <i className="ph ph-chart-pie-simple"></i>
-                                                    {t.portfolio.summary}
-                                                </h3>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Portfolio Summary Cards with Holdings Detail */}
+                                <div className="space-y-6 mb-8">
+                                    {[
+                                        { key: 'quality', name: t.portfolio.quality, return: '+12.5%', daily: '+0.8%', color: 'emerald', dailyPositive: true },
+                                        { key: 'value', name: t.portfolio.value, return: '+8.3%', daily: '+0.5%', color: 'blue', dailyPositive: true },
+                                        { key: 'growth', name: t.portfolio.growth, return: '+15.7%', daily: '+1.2%', color: 'purple', dailyPositive: true },
+                                        { key: 'momentum', name: t.portfolio.momentum, return: '+6.2%', daily: '-0.3%', color: 'orange', dailyPositive: false }
+                                    ].map((portfolio, idx) => (
+                                        <div key={idx} className="glass-card rounded-2xl p-6">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-1 h-12 rounded-full bg-${portfolio.color}-500`}></div>
                                                     <div>
-                                                        <div className="text-slate-400 text-sm mb-2">{t.portfolio.performance}</div>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className={`text-2xl font-bold ${stockData.mockPortfolio.totalProfitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                                {stockData.mockPortfolio.totalProfitLoss >= 0 ? '+' : ''}{stockData.mockPortfolio.totalProfitLossPercent}%
-                                                            </div>
-                                                            <div className={`text-sm ${stockData.mockPortfolio.totalProfitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                                {stockData.mockPortfolio.totalProfitLoss >= 0 ? t.portfolio.profit : t.portfolio.loss}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-slate-400 text-sm mb-2">{t.portfolio.fundUsage}</div>
-                                                        <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden mb-2">
-                                                            <div className="h-full bg-cyan-500 w-[100%]"></div>
-                                                        </div>
-                                                        <div className="flex justify-between text-xs text-slate-400">
-                                                            <span>{t.portfolio.used}: ${stockData.mockPortfolio.totalActualInvestment.toLocaleString()}</span>
-                                                            <span>{t.portfolio.totalFund}: ${stockData.mockPortfolio.initialCapital.toLocaleString()}</span>
-                                                        </div>
+                                                        <div className={`text-${portfolio.color}-400 font-semibold text-lg`}>{portfolio.name}</div>
+                                                        <div className="text-xs text-slate-400">{t.portfolio.initialCapital}: $250K</div>
                                                     </div>
                                                 </div>
-
-                                                {/* Allocation Chart */}
-                                                <div className="mt-6">
-                                                    <div className="text-slate-400 text-sm mb-3">{t.portfolio.allocation}</div>
-                                                    <div className="grid grid-cols-1 gap-4">
-                                                        {stockData.mockPortfolio.stocks.map((stock, index) => {
-                                                            const allocation = ((stock.actualInvestment / stockData.mockPortfolio.totalActualInvestment) * 100).toFixed(1);
-                                                            // 为八只股票准备不同的颜色
-                                                            const colors = ['#22d3ee', '#a78bfa', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#ec4899'];
-                                                            return (
-                                                                <div key={index}>
-                                                                    <div className="flex justify-between items-center mb-1">
-                                                                        <span className="text-sm text-slate-300">{stock.ticker} - {stock.name}</span>
-                                                                        <span className="text-sm text-slate-300">{allocation}%</span>
-                                                                    </div>
-                                                                    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                                                                        <div
-                                                                            className="h-full rounded-full"
-                                                                            style={{
-                                                                                width: `${allocation}%`,
-                                                                                backgroundColor: colors[index % colors.length]
-                                                                            }}
-                                                                        ></div>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
+                                                <div className="flex items-center gap-6">
+                                                    <div className="text-right">
+                                                        <div className="text-2xl font-bold text-white">{portfolio.return}</div>
+                                                        <div className={`text-sm ${portfolio.dailyPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {t.portfolio.dailyChange}: {portfolio.daily}
+                                                        </div>
                                                     </div>
+                                                    <button 
+                                                        onClick={() => toggleHoldings(portfolio.key)}
+                                                        className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors">
+                                                        {expandedPortfolio === portfolio.key ? t.portfolio.hideHoldings : t.portfolio.viewHoldings}
+                                                    </button>
                                                 </div>
                                             </div>
-
-                                            {/* Individual Stock Positions */}
-                                            <div className="space-y-6">
-                                                {stockData.mockPortfolio.stocks.map((stock, index) => (
-                                                    <div key={index} className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-                                                        <div className="flex items-center justify-between mb-4">
-                                                            <div className="flex items-center gap-3">
-                                                                {/*
-                                                                <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center">
-                                                                    <span className="text-white font-bold">{stock.ticker}</span>
-                                                                </div>*/}
-                                                                <div>
-                                                                    <div className="text-white font-bold text-lg">{stock.ticker} ({stock.name})</div>
-                                                                </div>
-                                                            </div>
-                                                            <div className={`px-3 py-1 rounded-full text-xs font-bold ${stock.profitLoss >= 0 ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
-                                                                {stock.profitLoss >= 0 ? '+' : ''}{stock.profitLossPercent}%
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                            <div>
-                                                                <div className="text-slate-400 text-sm mb-1">{t.portfolio.shares}</div>
-                                                                <div className="text-white font-bold">{stock.shares.toLocaleString()}</div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-slate-400 text-sm mb-1">{t.portfolio.averageCost}</div>
-                                                                <div className="text-white font-bold">${stock.buyPrice.toFixed(2)}</div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-slate-400 text-sm mb-1">{t.portfolio.finalPrice}</div>
-                                                                <div className="text-white font-bold">${stock.finalPrice.toFixed(2)}</div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-slate-400 text-sm mb-1">{t.portfolio.actualInvestment}</div>
-                                                                <div className="text-white font-bold">${stock.actualInvestment.toLocaleString()}</div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-slate-400 text-sm mb-1">{t.portfolio.marketValue}</div>
-                                                                <div className="text-white font-bold">${stock.marketValue.toLocaleString()}</div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-slate-400 text-sm mb-1">{t.portfolio.profitLoss}</div>
-                                                                <div className={`font-bold ${stock.profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                                    {stock.profitLoss >= 0 ? '+' : ''}${stock.profitLoss.toLocaleString()}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                            
+                                            {/* Holdings Detail Table */}
+                                            {expandedPortfolio === portfolio.key && (
+                                                <div className="mt-4 overflow-x-auto">
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="border-b border-slate-700">
+                                                                <th className="text-left py-3 px-2 text-slate-400 font-medium">{t.portfolio.stock}</th>
+                                                                <th className="text-right py-3 px-2 text-slate-400 font-medium">{t.portfolio.shares}</th>
+                                                                <th className="text-right py-3 px-2 text-slate-400 font-medium">{t.portfolio.costPrice}</th>
+                                                                <th className="text-right py-3 px-2 text-slate-400 font-medium">{t.portfolio.currentPrice}</th>
+                                                                <th className="text-right py-3 px-2 text-slate-400 font-medium">{t.portfolio.allocation}</th>
+                                                                <th className="text-right py-3 px-2 text-slate-400 font-medium">{t.portfolio.profitPercent}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {portfolioHoldings[portfolio.key].map((holding, hidx) => {
+                                                                const profit = ((holding.current - holding.cost) / holding.cost * 100).toFixed(2);
+                                                                const marketValue = holding.shares * holding.current;
+                                                                const totalValue = portfolioHoldings[portfolio.key].reduce((sum, h) => sum + h.shares * h.current, 0);
+                                                                const allocation = ((marketValue / totalValue) * 100).toFixed(1);
+                                                                return (
+                                                                    <tr key={hidx} className="border-b border-slate-800 hover:bg-slate-800/30">
+                                                                        <td className="py-3 px-2">
+                                                                            <div className="text-white font-medium">{holding.ticker}</div>
+                                                                            <div className="text-xs text-slate-500">{holding.name}</div>
+                                                                        </td>
+                                                                        <td className="text-right py-3 px-2 text-slate-300">{holding.shares.toLocaleString()}</td>
+                                                                        <td className="text-right py-3 px-2 text-slate-300">${holding.cost.toFixed(2)}</td>
+                                                                        <td className="text-right py-3 px-2 text-white font-medium">${holding.current.toFixed(2)}</td>
+                                                                        <td className="text-right py-3 px-2 text-slate-300">{allocation}%</td>
+                                                                        <td className={`text-right py-3 px-2 font-medium ${parseFloat(profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                            {parseFloat(profit) >= 0 ? '+' : ''}{profit}%
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
+                                    ))}
                                 </div>
                             </section>
                         </div>
                     </main>
-
-                    {/* Model Section */}
-                    <section id="model" className="py-20 relative">
-                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                            <div className="text-center mb-16">
-                                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">{t.model.title}</h2>
-                                <p className="text-slate-400">{t.model.desc}</p>
-                            </div>
-
-                            <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-4 font-mono text-center">
-                                {/* G Block */}
-                                <div className="p-6 rounded-2xl glass-card w-full md:w-1/4 border-t-4 border-cyan-500">
-                                    <div className="text-4xl font-bold mb-2 text-cyan-400">G</div>
-                                    <div className="text-lg font-semibold mb-1">{t.model.g.title}</div>
-                                    <div className="text-sm text-slate-400">{t.model.g.desc}</div>
-                                </div>
-
-                                <div className="text-4xl font-bold text-slate-600">=</div>
-
-                                {/* B Block */}
-                                <div className="p-6 rounded-2xl glass-card w-full md:w-1/4 border-t-4 border-emerald-500">
-                                    <div className="text-4xl font-bold mb-2 text-emerald-400">B</div>
-                                    <div className="text-lg font-semibold mb-1">{t.model.b.title}</div>
-                                    <div className="text-sm text-slate-400">{t.model.b.desc}</div>
-                                </div>
-
-                                <div className="text-4xl font-bold text-slate-600">+</div>
-
-                                {/* M Block */}
-                                <div className="p-6 rounded-2xl glass-card w-full md:w-1/4 border-t-4 border-purple-500">
-                                    <div className="text-4xl font-bold mb-2 text-purple-400">M</div>
-                                    <div className="text-lg font-semibold mb-1">{t.model.m.title}</div>
-                                    <div className="text-sm text-slate-400">{t.model.m.desc}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
 
                     {/* Styles Section */}
                     <section id="styles" className="py-20 bg-slate-900/30">
@@ -744,7 +908,7 @@
                                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                                     <div className="text-center md:text-left">
                                         <div className="text-sm text-slate-400">当前价格</div>
-                                        <div className="text-3xl font-bold text-cyan-400">${currentPrice}</div>
+                                        <div className="text-3xl font-bold text-brand">${currentPrice}</div>
                                     </div>
                                     <div className="text-center">
                                         <div className="text-sm text-slate-400">最高买入收益率</div>
@@ -769,7 +933,7 @@
                                 {t.features.items.map((feature, idx) => (
                                     <div key={idx} className="flex gap-4 p-6 glass-card rounded-xl">
                                         <div className="flex-shrink-0">
-                                            <i className={`ph ph-${feature.icon.toLowerCase().replace('warning', '-warning').replace('up', '-up').replace('west', '-west')} text-3xl text-cyan-400`}></i>
+                                            <i className={`ph ph-${feature.icon.toLowerCase().replace('warning', '-warning').replace('up', '-up').replace('west', '-west').replace('pie', '-pie')} text-3xl text-brand`}></i>
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
@@ -784,7 +948,7 @@
                     {/* QR Code / Contact Section */}
                     <section id="contact" className="py-20 relative overflow-hidden">
                         {/* Background glow for this section */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 blur-[100px] rounded-full pointer-events-none"></div>
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand/10 blur-[100px] rounded-full pointer-events-none"></div>
 
                         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                             <div className="glass-card rounded-2xl p-8 md:p-12 text-center border border-slate-700/50 shadow-2xl">
@@ -803,7 +967,7 @@
                                             />
 
                                         </div>
-                                        <div className="mt-4 flex items-center justify-center gap-2 text-cyan-400 font-semibold text-sm">
+                                        <div className="mt-4 flex items-center justify-center gap-2 text-brand font-semibold text-sm">
                                             <i className="ph ph-qr-code"></i>
                                             {t.cta.scan_text}
                                         </div>
@@ -817,8 +981,8 @@
                     <footer className="border-t border-slate-800 bg-slate-950 py-12">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                             <div className="flex items-center justify-center gap-2 mb-8">
-                                <i className="ph ph-chart-polar text-cyan-400 text-2xl"></i>
-                                <span className="font-bold text-xl tracking-tight">Alpha<span className="text-cyan-400">G</span></span>
+                                <i className="ph ph-chart-polar text-brand text-2xl"></i>
+                                <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>G</span></span>
                             </div>
                             <p className="text-slate-600 text-xs max-w-2xl mx-auto mb-4">
                                 {t.footer.disclaimer}
