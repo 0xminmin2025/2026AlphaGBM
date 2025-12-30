@@ -2673,7 +2673,7 @@ def calculate_target_price(data, risk_result, style):
     if pe and pe > 0:
         forward_pe = data.get('forward_pe', 0)
         
-        if forward_pe and forward_pe > 0:
+        if 0 and forward_pe and forward_pe > 0:
             # 使用预期PE计算
             pe_based_price = current_price * (reasonable_pe / forward_pe)
         else:

@@ -12,6 +12,8 @@ import urllib.parse
 import smtplib
 from analysis_engine import get_market_data, get_ticker_price, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price, calculate_atr_stop_loss
 from ai_service import get_gemini_analysis
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # 配置日志
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -71,6 +73,9 @@ except ImportError:
 app = Flask(__name__)
 # CORS配置
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# 初始化定时任务调度器
+scheduler = BackgroundScheduler()
 
 # 配置数据库和JWT
 # 临时使用 SQLite 进行测试（方便开发）
@@ -188,6 +193,44 @@ if SQLAlchemy:
         
         # 关联到用户表
         user = db.relationship('User', backref=db.backref('daily_queries', lazy=True))
+    
+    # 股票持仓模型
+    class PortfolioHolding(db.Model):
+        __tablename__ = 'portfolio_holdings'
+        
+        id = db.Column(db.Integer, primary_key=True)
+        ticker = db.Column(db.String(20), nullable=False, index=True)  # 股票代码
+        name = db.Column(db.String(100), nullable=False)  # 股票名称
+        shares = db.Column(db.Integer, nullable=False)  # 持仓数量
+        buy_price = db.Column(db.Float, nullable=False)  # 买入价格
+        style = db.Column(db.String(20), nullable=False, index=True)  # 投资风格(quality, value, growth, momentum)
+        currency = db.Column(db.String(3), nullable=False)  # 货币单位
+        created_at = db.Column(db.DateTime, default=datetime.now)
+        updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+        
+    # 每日盈亏记录模型
+    class DailyProfitLoss(db.Model):
+        __tablename__ = 'daily_profit_loss'
+        
+        id = db.Column(db.Integer, primary_key=True)
+        trading_date = db.Column(db.Date, nullable=False, index=True)  # 交易日期
+        total_actual_investment = db.Column(db.Float, nullable=False)  # 总实际投入
+        total_market_value = db.Column(db.Float, nullable=False)  # 总市值
+        total_profit_loss = db.Column(db.Float, nullable=False)  # 总盈亏金额
+        total_profit_loss_percent = db.Column(db.Float, nullable=False)  # 总盈亏比例
+        created_at = db.Column(db.DateTime, default=datetime.now)
+
+    # 投资风格盈亏记录模型
+    class StyleProfit(db.Model):
+        __tablename__ = 'style_profits'
+        
+        id = db.Column(db.Integer, primary_key=True)
+        trading_date = db.Column(db.Date, nullable=False, index=True)  # 交易日期
+        style = db.Column(db.String(20), nullable=False)  # 投资风格
+        style_investment = db.Column(db.Float, nullable=False)  # 该风格的总投资
+        style_market_value = db.Column(db.Float, nullable=False)  # 该风格的总市值
+        style_profit_loss = db.Column(db.Float, nullable=False)  # 该风格的总盈亏
+        style_profit_loss_percent = db.Column(db.Float, nullable=False)  # 该风格的总盈亏比例
 
 # 辅助函数：从JWT令牌获取用户信息
 def get_user_info_from_token():
@@ -309,6 +352,204 @@ AlphaG投资分析系统
     except Exception as e:
         logger.error(f"发送验证码失败: {e}")
         return False
+
+
+# 自定义异常类
+class PortfolioException(Exception):
+    """
+    投资组合相关自定义异常
+    """
+    def __init__(self, message, error_code=None, status_code=500):
+        self.message = message
+        self.error_code = error_code or 'UNKNOWN_ERROR'
+        self.status_code = status_code
+        super().__init__(self.message)
+
+def calculate_daily_profit_loss():
+    """
+    计算每日盈亏金额和盈亏率，并保存到数据库
+    
+    Returns:
+        dict: 包含计算结果的字典，如果数据已存在则返回None
+    """
+    try:
+        with app.app_context():
+            # 获取当前日期，使用交易日日期
+            today = datetime.now().date()
+            
+            # 检查今天是否已经计算过盈亏
+            existing_record = DailyProfitLoss.query.filter_by(
+                trading_date=today
+            ).first()
+            
+            if existing_record:
+                logging.info(f"今天 {today} 的盈亏数据已存在，跳过计算")
+                return {
+                    'total_profit_loss': existing_record.total_profit_loss,
+                    'total_profit_loss_percent': existing_record.total_profit_loss_percent,
+                    'style_profits': {},
+                    'trading_date': today.isoformat()
+                }
+            
+            # 查询所有持仓记录
+            holdings = PortfolioHolding.query.all()
+            
+            if not holdings:
+                logging.warning(f"{today}: 没有找到持仓数据，无法计算盈亏")
+                raise PortfolioException(
+                    message="没有找到持仓数据，无法计算盈亏",
+                    error_code="NO_HOLDINGS_DATA",
+                    status_code=404
+                )
+            
+            # 计算总体盈亏
+            total_investment = 0
+            total_market_value = 0
+            
+            # 汇率定义，用于将不同货币转换为美元
+            exchange_rates = {
+                'USD': 1.0,
+                'HKD': 0.128,  # 港币兑美元汇率
+                'CNY': 0.139   # 人民币兑美元汇率
+            }
+            
+            # 按风格分组计算盈亏
+            style_data = {}
+            for holding in holdings:
+                # 获取当前持仓的货币单位
+                currency = holding.currency
+                # 获取对应的汇率，如果没有定义则使用1.0
+                rate = exchange_rates.get(currency, 1.0)
+                
+                # 将实际投资金额和市值转换为美元
+                investment_in_usd = holding.shares * holding.buy_price * rate
+                price = get_ticker_price(holding.ticker)
+                if price is None:
+                    logging.error(f"获取股票 {holding.ticker} 价格失败")
+                    raise PortfolioException(
+                        message=f"获取股票 {holding.ticker} 价格失败",
+                        error_code="PRICE_FETCH_FAILED",
+                        status_code=400
+                    )
+                market_value_in_usd = holding.shares * price * rate
+                
+                # 使用转换后的美元金额累加
+                total_investment += investment_in_usd
+                total_market_value += market_value_in_usd
+                
+                # 更新风格数据
+                if holding.style not in style_data:
+                    style_data[holding.style] = {
+                        'investment': 0,
+                        'market_value': 0,
+                        'profit_loss': 0
+                    }
+                
+                style_data[holding.style]['investment'] += investment_in_usd
+                style_data[holding.style]['market_value'] += market_value_in_usd
+            
+            # 计算总体盈亏金额和盈亏率
+            total_profit_loss = total_market_value - total_investment
+            total_profit_loss_percent = (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
+            
+            # 创建每日盈亏记录
+            try:
+                # 创建每日盈亏总记录
+                daily_profit = DailyProfitLoss(
+                    trading_date=today,
+                    total_actual_investment=total_investment,
+                    total_market_value=total_market_value,
+                    total_profit_loss=total_profit_loss,
+                    total_profit_loss_percent=total_profit_loss_percent
+                )
+                db.session.add(daily_profit)
+                
+                # 创建各风格盈亏记录
+                style_profits_data = {}
+                for style, data in style_data.items():
+                    style_profit_loss = data['market_value'] - data['investment']
+                    style_profit_loss_percent = (style_profit_loss / data['investment'] * 100) if data['investment'] > 0 else 0
+                    
+                    # 保存风格盈亏记录
+                    style_profit = StyleProfit(
+                        trading_date=today,
+                        style=style,
+                        style_investment=data['investment'],
+                        style_market_value=data['market_value'],
+                        style_profit_loss=style_profit_loss,
+                        style_profit_loss_percent=style_profit_loss_percent
+                    )
+                    db.session.add(style_profit)
+                    db.session.commit()
+                    
+                    # 构建返回数据
+                    style_profits_data[style] = {
+                        'profit_loss': style_profit_loss,
+                        'profit_loss_percent': style_profit_loss_percent
+                    }
+                
+                logging.info(f"成功保存 {today} 的盈亏数据: 盈亏金额={total_profit_loss:.2f}, 盈亏率={total_profit_loss_percent:.2f}%")
+                
+                return {
+                    'total_profit_loss': total_profit_loss,
+                    'total_profit_loss_percent': total_profit_loss_percent,
+                    'style_profits': style_profits_data,
+                    'trading_date': today.isoformat()
+                }
+            
+            except Exception as db_error:
+                db.session.rollback()
+                logging.error(f"保存盈亏数据到数据库时发生错误: {str(db_error)}")
+                raise PortfolioException(
+                    message=f"保存盈亏数据失败: {str(db_error)}",
+                    error_code="DB_SAVE_ERROR",
+                    status_code=500
+                )
+            
+    except PortfolioException:
+        # 直接重新抛出已定义的自定义异常
+        raise
+    except Exception as e:
+        # 包装其他异常
+        raise PortfolioException(
+            message=f"计算盈亏过程中发生错误: {str(e)}",
+            error_code="CALCULATION_ERROR",
+            status_code=500
+        )
+
+# 定时任务：每天凌晨6点执行盈亏计算
+def schedule_daily_profit_loss_calculation():
+    """
+    配置定时任务，每天凌晨自动计算盈亏
+    """
+    # 每天凌晨6点执行
+    scheduler.add_job(
+        func=calculate_daily_profit_loss,
+        trigger=CronTrigger(hour=6, minute=0, second=0),
+        id='daily_profit_loss_calculation',
+        name='每日盈亏自动计算',
+        replace_existing=True
+    )
+    
+    # 启动调度器
+    scheduler.start()
+    logging.info("定时任务调度器已启动，设置每天凌晨6点自动计算盈亏")
+
+def initialize_app():
+    """
+    初始化应用配置，包括数据库和定时任务
+    """
+    try:
+        # 创建数据库表
+        with app.app_context():
+            db.create_all()
+            logging.info("数据库表创建成功")
+            
+            # 启动定时任务
+            schedule_daily_profit_loss_calculation()  
+    except Exception as e:
+        logging.error(f"应用初始化失败: {str(e)}")
+        raise
 
 
 @app.route('/')
@@ -658,6 +899,221 @@ def get_query_count():
         'reset_time': daily_query.reset_time.strftime('%Y-%m-%d %H:%M:%S') if daily_query.reset_time else None
     })
 
+@app.route('/api/portfolio/holdings', methods=['GET'])
+def get_portfolio_holdings():
+    """
+    获取投资组合持仓数据
+    """
+    try:
+        # 查询所有持仓记录
+        holdings = PortfolioHolding.query.all()
+        
+        if not holdings:
+            # 如果没有持仓数据，返回空列表而不是错误
+            logging.info("当前没有持仓数据记录")
+            return jsonify({
+                'portfolio': {
+                    'totalActualInvestment': 0,
+                    'totalMarketValue': 0,
+                    'totalProfitLoss': 0,
+                    'totalProfitLossPercent': '0',
+                    'stocks': [],
+                    'styleStats': {}
+                }
+            }), 200
+        
+        # 转换为前端需要的格式
+        stocks_data = []
+        total_actual_investment = 0
+        total_market_value = 0
+        
+        # 初始化按风格分组的数据
+        style_investments = {}
+        style_market_values = {}
+
+        # 汇率定义，用于将不同货币转换为美元
+        exchange_rates = {
+            'USD': 1.0,
+            'HKD': 0.128,  # 港币兑美元汇率
+            'CNY': 0.139   # 人民币兑美元汇率
+        }
+        
+        for holding in holdings:
+            try:
+                price = get_ticker_price(holding.ticker)
+                if price is None:
+                    return jsonify({'success': False, 'error': f'获取股票 {holding.ticker} 价格失败'}), 400
+                
+                # 获取当前持仓的货币单位
+                currency = getattr(holding, 'currency', 'USD')
+                # 获取对应的汇率，如果没有定义则使用1.0
+                rate = exchange_rates.get(currency, 1.0)
+                
+                actualInvestment = holding.shares * holding.buy_price * rate
+                marketValue = price * holding.shares * rate
+                stocks_data.append({
+                    'ticker': holding.ticker,
+                    'name': holding.name,
+                    'shares': holding.shares,
+                    'buyPrice': holding.buy_price,
+                    'currency': currency,
+                    'actualInvestment': actualInvestment,
+                    'finalPrice': price,
+                    'marketValue': marketValue,
+                    'profitLoss': marketValue - actualInvestment,
+                    'profitLossPercent': str(round(marketValue / actualInvestment * 100 - 100, 2)),
+                    'style': holding.style
+                })
+                
+                total_actual_investment += actualInvestment
+                total_market_value += marketValue
+                
+                # 按风格分组累计
+                if holding.style not in style_investments:
+                    style_investments[holding.style] = 0
+                    style_market_values[holding.style] = 0
+                
+                style_investments[holding.style] += actualInvestment
+                style_market_values[holding.style] += marketValue
+            except Exception as e:
+                # 单个持仓数据处理失败，记录日志但继续处理其他数据
+                logging.error(f"处理持仓数据时出错: {holding.ticker}, 错误: {str(e)}")
+        
+        # 计算总体盈亏
+        total_profit_loss = total_market_value - total_actual_investment
+        total_profit_loss_percent = (total_profit_loss / total_actual_investment * 100) if total_actual_investment > 0 else 0
+        
+        # 计算各风格的盈亏率
+        style_stats = {}
+        for style, investment in style_investments.items():
+            market_value = style_market_values[style]
+            profit_loss = market_value - investment
+            profit_loss_percent = (profit_loss / investment * 100) if investment > 0 else 0
+            
+            # 从StyleProfit中获取昨日数据以计算相对昨日的盈亏率
+            try:
+                # 获取今日和昨日的记录
+                today = datetime.now().date()
+                yesterday = today - timedelta(days=1)
+                
+                # 获取昨日记录
+                yesterday_profit = StyleProfit.query.filter_by(
+                    style=style,
+                    trading_date=yesterday
+                ).first()
+                
+                # 获取今日记录
+                today_profit = StyleProfit.query.filter_by(
+                    style=style,
+                    trading_date=today
+                ).first()
+                
+                # 计算相对昨日的盈亏率
+                if yesterday_profit and today_profit:
+                    vs_yesterday_percent = (today_profit.style_market_value - yesterday_profit.style_market_value) / yesterday_profit.style_market_value * 100 if yesterday_profit.style_market_value > 0 else 0
+                else:
+                    vs_yesterday_percent = 0
+            except Exception as e:
+                logging.error(f"获取风格 {style} 盈亏历史数据时出错: {str(e)}")
+                vs_yesterday_percent = 0
+            
+            style_stats[style] = {
+                'actualInvestment': investment,
+                'marketValue': market_value,
+                'profitLoss': profit_loss,
+                'profitLossPercent': str(round(profit_loss_percent, 2)),
+                'vsYesterdayPercent': str(vs_yesterday_percent)
+            }
+        
+        # 构建返回数据
+        response_data = {
+            'success': True,
+            'portfolio': {
+                'totalActualInvestment': total_actual_investment,
+                'totalMarketValue': total_market_value,
+                'totalProfitLoss': total_profit_loss,
+                'totalProfitLossPercent': str(round(total_profit_loss_percent, 2)),
+                'stocks': stocks_data,
+                'styleStats': style_stats
+            }
+        }
+        
+        logging.info(f"成功获取了 {len(stocks_data)} 条持仓记录")
+        return jsonify(response_data), 200
+    
+    except Exception as e:
+        raise PortfolioException(
+            message=f"获取持仓数据失败: {str(e)}",
+            error_code="GET_HOLDINGS_ERROR",
+            status_code=500
+        )
+
+@app.route('/api/profit-loss/history', methods=['GET'])
+def get_profit_loss_history():
+    """
+    获取盈亏历史记录
+    """
+    try:
+        # 获取分页参数
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 30, type=int)
+        
+        # 限制每页最大记录数
+        if per_page > 100:
+            per_page = 100
+        
+        # 查询每日盈亏记录，按日期倒序排列
+        pagination = DailyProfitLoss.query.order_by(
+            DailyProfitLoss.trading_date.desc()
+        ).paginate(page=page, per_page=per_page, error_out=False)
+        
+        daily_records = pagination.items
+        
+        # 转换为前端需要的格式
+        history_data = []
+        for record in daily_records:
+            # 查询该日期的风格盈亏记录
+            style_profits = StyleProfit.query.filter_by(
+                trading_date=record.trading_date
+            ).all()
+            
+            # 构建风格盈亏数据
+            style_data = {
+                style_profit.style: {
+                    'profit_loss': style_profit.style_profit_loss,
+                    'profit_loss_percent': style_profit.style_profit_loss_percent
+                }
+                for style_profit in style_profits
+            }
+            
+            history_data.append({
+                'date': record.trading_date.isoformat(),
+                'total_profit_loss': record.total_profit_loss,
+                'total_profit_loss_percent': record.total_profit_loss_percent,
+                'total_investment': record.total_actual_investment,
+                'total_market_value': record.total_market_value,
+                'style_profits': style_data
+            })
+        
+        # 返回分页数据
+        return jsonify({
+            "success": True,
+            "data": {
+                "items": history_data,
+                "total": pagination.total,
+                "page": pagination.page,
+                "pages": pagination.pages,
+                "per_page": pagination.per_page
+            }
+        }), 200
+    except Exception as e:
+        raise PortfolioException(
+            message=f"获取盈亏历史记录失败: {str(e)}",
+            error_code="GET_HISTORY_ERROR",
+            status_code=500
+        )
+
+
 @app.route('/api/stock-price', methods=['GET'])
 def get_stock_price():
     """获取单只股票的价格数据"""
@@ -975,9 +1431,7 @@ def submit_feedback():
 
 
 if __name__ == '__main__':
-    print("启动投资分析系统...")
-    # 确保数据库表存在
-    with app.app_context():
-        db.create_all()
     print("服务器地址: http://127.0.0.1:5002")
-    app.run(debug=True, port=5002, host='0.0.0.0', threaded=True)
+    # 初始化应用配置和定时任务
+    initialize_app()
+    app.run(debug=False, port=5002, host='0.0.0.0', threaded=True)
