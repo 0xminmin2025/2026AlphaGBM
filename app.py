@@ -517,15 +517,15 @@ def calculate_daily_profit_loss():
             status_code=500
         )
 
-# 定时任务：每天凌晨6点执行盈亏计算
+# 定时任务：每天下午6点执行盈亏计算
 def schedule_daily_profit_loss_calculation():
     """
-    配置定时任务，每天凌晨自动计算盈亏
+    配置定时任务，每天下午6点自动计算盈亏
     """
-    # 每天凌晨6点执行
+    # 每天下午6点执行
     scheduler.add_job(
         func=calculate_daily_profit_loss,
-        trigger=CronTrigger(hour=6, minute=0, second=0),
+        trigger=CronTrigger(hour=18, minute=0, second=0),
         id='daily_profit_loss_calculation',
         name='每日盈亏自动计算',
         replace_existing=True
@@ -533,7 +533,7 @@ def schedule_daily_profit_loss_calculation():
     
     # 启动调度器
     scheduler.start()
-    logging.info("定时任务调度器已启动，设置每天凌晨6点自动计算盈亏")
+    logging.info("定时任务调度器已启动，设置每天下午6点自动计算盈亏")
 
 def initialize_app():
     """
