@@ -175,5 +175,5 @@ python main.py  # 运行在 8000 端口
 
 ---
 
-**© 2025 AlphaG. 基于 G=B+M 投资框架**
+**© 2025 Alpha GBM. 基于 G=B+M 投资框架**
 
