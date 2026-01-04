@@ -4,7 +4,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alpha GBM - 基于 Gemini AI 的智能股票分析</title>
+    <title>AlphaGBM：由 AI 驱动的机构级投资操作系统 | G=B+M 投资模型</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AlphaGBM是一款由AI驱动的机构级投资操作系统，融合股票模型(G=B+M)、期权策略与全自动智能体。覆盖美/港/A股，提供深度研报、风险量化、智能仓位管理。注册即送每日5次深度分析。">
+    <meta name="keywords" content="AlphaGBM,AI投资,股票分析,期权策略,量化投资,G=B+M模型,投资操作系统,机构级投资,风险量化,智能仓位管理,美股分析,港股分析,A股分析,投资智能体">
+    <meta name="author" content="AlphaGBM">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="AlphaGBM：由 AI 驱动的机构级投资操作系统">
+    <meta property="og:description" content="融合股票模型、期权策略与全自动智能体。基于G=B+M模型，覆盖美/港/A股，提供深度研报、风险量化、智能仓位管理。">
+    <meta property="og:site_name" content="AlphaGBM">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="AlphaGBM：由 AI 驱动的机构级投资操作系统">
+    <meta name="twitter:description" content="融合股票模型、期权策略与全自动智能体。基于G=B+M模型，覆盖美/港/A股。">
+
+    <!-- FAQ Structured Data (Schema.org) -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "AlphaGBM 的股票分析功能如何使用？",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "输入股票代码（如 AAPL、600519.SS、0700.HK），选择投资风格（质量、价值、成长、趋势），系统即可生成包含基本面分析、技术面分析、风险评估和仓位建议的完整投资报告。基于 G=B+M 模型，提供机构级的量化分析服务。"
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "AlphaGBM 支持哪些市场的股票分析？",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "AlphaGBM 支持三大市场：美股（AAPL、TSLA）、港股（0700.HK、2525.HK）、A股（600519、000001）。系统自动识别市场类型，无需手动添加后缀。覆盖全市场数据，打破信息壁垒，一站式完成多市场投资分析。"
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "AlphaGBM 的 G=B+M 模型是什么？",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "G=B+M 是 AlphaGBM 的核心投资模型，G (Gain) 代表收益，B (Basics) 代表基本面，M (Momentum) 代表动量。模型将股票收益解构为基本面支撑与市场动量的叠加，通过量化分析识别收益与内在价值的偏离，帮助投资者发现投资机会。适用于所有投资风格。"
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "AlphaGBM 的期权分析功能有哪些？",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "AlphaGBM 期权分析模块提供专业的期权策略分析，包括波动率分析、希腊字母（Greeks）计算、期权链数据、隐含波动率（IV）分析等。系统基于概率计算，帮助您寻找非对称收益机会。支持多种策略构建，为期权交易提供量化决策支持。"
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "AlphaGBM 如何进行风险量化评估？",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "AlphaGBM 采用 0-10 分动态风险评级系统，综合评估基本面风险（营收增长、利润率、估值水平）、技术面风险（价格位置、成交量异常）、市场情绪风险（VIX 恐慌指数、Put/Call 比率）、宏观风险（利率、汇率、经济指标）等多个维度。结合 VIX 和 Greeks 等量化指标，精准识别危险信号。"
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "AlphaGBM 的投资风格有哪些？",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "AlphaGBM 支持四种投资风格：质量策略（Quality）关注财务稳健、盈利能力强，最大仓位 20%；价值策略（Value）寻找被低估股票，关注安全边际，最大仓位 10%；成长策略（Growth）追求高营收增长，容忍较高估值，最大仓位 15%；趋势策略（Momentum）跟随价格动量，快进快出，最大仓位 5%。"
+                }
+            }
+        ]
+    }
+    </script>
 
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -189,7 +264,7 @@
                     home: "首页",
                     portfolio: "实盘追踪",
                     styles: "模型理念",
-                    download: "关注我们",
+                    contact: "关注我们",
                     cta: "立即体验",
                     lang: "EN"
                 },
@@ -225,12 +300,13 @@
                 },
                 hero: {
                     badge: "Powered by LLM",
-                    title: "以AI重构股价逻辑",
+                    title: "AlphaGBM",
                     titleHighlight: "",
-                    subtitle: "基于自研投资模型，不预测未来，只计算概率，智能识别市场标的，提供机构级风控建议",
-                    cta_primary: "立即体验",
+                    titleSub: "AI 驱动的机构级投资操作系统",
+                    subtitle: "融合股票模型、期权策略与全自动智能体。不预测未来，只计算概率。",
+                    cta_primary: "立即开启 AI 投资",
                     cta_secondary: "了解模型",
-                    limit_notice: "每位注册用户每日限额 5 次",
+                    limit_notice: "注册即送每日 5 次深度分析",
                     demo_card: {
                         ticker: "AAPL (苹果公司)",
                         style_label: "策略风格",
@@ -254,14 +330,35 @@
                     b: { title: "B (基本面)", desc: "营收、利润与估值锚点" },
                     m: { title: "M (动量)", desc: "恐慌指数与宏观因子" }
                 },
-                features: {
-                    title: "全维度智能分析",
+                valueProposition: {
+                    title: "三大引擎",
                     items: [
-                        { icon: "Brain", title: "AI 深度决策", desc: "集成 Google Gemini AI，自动生成包含风格判定、五大支柱检查的深度研报。" },
-                        { icon: "ShieldWarning", title: "风险量化系统", desc: "0-10 分动态风险评级，结合 VIX 与 Put/Call 比率，精准识别危险信号。" },
-                        { icon: "ChartPie", title: "智能仓位管理", desc: "拒绝盲目博弈。根据风险等级动态计算最优仓位，严格执行资金管理。" },
-                        { icon: "Globe", title: "全市场覆盖", desc: "无缝支持美股、港股、A股代码自动识别，打破市场信息壁垒。" }
+                        { icon: "chart-line-up", title: "股票", badge: "", desc: "覆盖美/港/A股，精准识别价值与趋势。", link: "http://localhost:5002" },
+                        { icon: "sigma", title: "期权", badge: "New", desc: "寻找高概率非对称收益机会。", link: "http://localhost:8000" },
+                        { icon: "robot", title: "智能体", badge: "Coming Soon", desc: "24/7个性化专业投资助理", link: null }
                     ]
+                },
+                features: {
+                    title: "核心能力",
+                    items: [
+                        { title: "深度研报生成", desc: "Powered by LLM" },
+                        { title: "风险量化", desc: "VIX + Greeks" },
+                        { title: "智能仓位管理", desc: "凯利公式 + 波动率加权" }
+                    ]
+                },
+                faq: {
+                    title: "常见问题",
+                    items: [
+                        { question: "AlphaGBM 的股票分析功能如何使用？", answer: "输入股票代码（如 AAPL、600519.SS、0700.HK），选择投资风格（质量、价值、成长、趋势），系统即可生成包含基本面分析、技术面分析、风险评估和仓位建议的完整投资报告。基于 G=B+M 模型，提供机构级的量化分析服务。" },
+                        { question: "AlphaGBM 支持哪些市场的股票分析？", answer: "AlphaGBM 支持三大市场：美股（AAPL、TSLA）、港股（0700.HK、2525.HK）、A股（600519、000001）。系统自动识别市场类型，无需手动添加后缀。覆盖全市场数据，打破信息壁垒，一站式完成多市场投资分析。" },
+                        { question: "AlphaGBM 的 G=B+M 模型是什么？", answer: "G=B+M 是 AlphaGBM 的核心投资模型，G (Gain) 代表收益，B (Basics) 代表基本面，M (Momentum) 代表动量。模型将股票收益解构为基本面支撑与市场动量的叠加，通过量化分析识别收益与内在价值的偏离，帮助投资者发现投资机会。适用于所有投资风格。" },
+                        { question: "AlphaGBM 的期权分析功能有哪些？", answer: "AlphaGBM 期权分析模块提供专业的期权策略分析，包括波动率分析、希腊字母（Greeks）计算、期权链数据、隐含波动率（IV）分析等。系统基于概率计算，帮助您寻找非对称收益机会。支持多种策略构建，为期权交易提供量化决策支持。" },
+                        { question: "AlphaGBM 如何进行风险量化评估？", answer: "AlphaGBM 采用 0-10 分动态风险评级系统，综合评估基本面风险（营收增长、利润率、估值水平）、技术面风险（价格位置、成交量异常）、市场情绪风险（VIX 恐慌指数、Put/Call 比率）、宏观风险（利率、汇率、经济指标）等多个维度。结合 VIX 和 Greeks 等量化指标，精准识别危险信号。" },
+                        { question: "AlphaGBM 的投资风格有哪些？", answer: "AlphaGBM 支持四种投资风格：质量策略（Quality）关注财务稳健、盈利能力强，最大仓位 20%；价值策略（Value）寻找被低估股票，关注安全边际，最大仓位 10%；成长策略（Growth）追求高营收增长，容忍较高估值，最大仓位 15%；趋势策略（Momentum）跟随价格动量，快进快出，最大仓位 5%。" }
+                    ]
+                },
+                seoFooter: {
+                    text: "AlphaGBM 是什么？AlphaGBM 是一款领先的 AI 金融分析工具，由 AI 驱动的机构级投资操作系统。AlphaGBM 结合了股票分析模型、期权策略与全自动智能体，为投资者提供专业的量化投资服务。AlphaGBM 基于 G=B+M 投资模型（Gain = Basics + Momentum），覆盖美股、港股、A股全市场分析。AlphaGBM 提供深度研报生成、风险量化评估、智能仓位管理等核心功能。AlphaGBM 支持四种投资风格：质量策略、价值策略、成长策略、趋势策略。AlphaGBM 是一款专业的 AI 投资分析平台、量化投资工具、智能投资系统。"
                 },
                 styles: {
                     title: "投资理念与四大风格",
@@ -288,7 +385,7 @@
                     home: "Home",
                     portfolio: "Live Tracking",
                     styles: "Model Philosophy",
-                    download: "Follow Us",
+                    contact: "Follow Us",
                     cta: "Try Now",
                     lang: "中"
                 },
@@ -324,12 +421,13 @@
                 },
                 hero: {
                     badge: "Powered by LLM",
-                    title: "AI-Powered Stock Price Logic",
+                    title: "AlphaGBM",
                     titleHighlight: "",
-                    subtitle: "Based on proprietary Model. We don't predict the future; we calculate probabilities. Intelligently identify market opportunities with institutional-grade risk management.",
-                    cta_primary: "Try Now",
+                    titleSub: "AI-Driven Institutional Investment Operating System",
+                    subtitle: "Integrating stock models, options strategies, and fully autonomous agents. We don't predict the future; we calculate probabilities.",
+                    cta_primary: "Start AI Investing Now",
                     cta_secondary: "Learn More",
-                    limit_notice: "5 queries per day for registered users",
+                    limit_notice: "Register for 5 free deep analyses daily",
                     demo_card: {
                         ticker: "AAPL (Apple Inc.)",
                         style_label: "STYLE",
@@ -353,14 +451,38 @@
                     b: { title: "B (Basics)", desc: "Fundamental Support" },
                     m: { title: "M (Momentum)", desc: "Momentum & Macro Factors" }
                 },
-                features: {
-                    title: "Full-Dimension Analysis",
+                valueProposition: {
+                    title: "Three Engines",
                     items: [
-                        { icon: "Brain", title: "AI Deep Decision", desc: "Integrated Gemini AI generates deep reports with 5-Pillar checks and strategy analysis." },
-                        { icon: "ShieldWarning", title: "Risk Quant", desc: "0-10 dynamic risk rating based on VIX, Put/Call ratios, and macro indicators." },
-                        { icon: "ChartPie", title: "Position Sizing", desc: "Stop blind betting. Get calculated position suggestions based on risk levels." },
-                        { icon: "Globe", title: "Global Coverage", desc: "Seamless support for US, HK, and A-Shares. Breaking information barriers." }
+                        { icon: "chart-line-up", title: "Stocks", badge: "", desc: "Covering US/HK/A-shares, precisely identifying value and trends.", link: "http://localhost:5002" },
+                        { icon: "sigma", title: "Options", badge: "New", desc: "Finding high-probability asymmetric return opportunities.", link: "http://localhost:8000" },
+                        { icon: "robot", title: "Agent", badge: "Coming Soon", desc: "Your 24/7 personalized professional investment assistant", link: null }
                     ]
+                },
+                features: {
+                    title: "Core Capabilities",
+                    items: [
+                        { title: "Deep Report Generation", desc: "Powered by LLM" },
+                        { title: "Risk Quantification", desc: "VIX + Greeks" },
+                        { title: "Smart Position Management", desc: "Kelly Formula + Volatility Weighting" }
+                    ]
+                },
+                faq: {
+                    title: "FAQ",
+                    items: [
+                        { question: "How to use AlphaGBM's stock analysis feature?", answer: "Enter a stock ticker (e.g., AAPL, 600519.SS, 0700.HK), select an investment style (Quality, Value, Growth, Momentum), and the system generates a complete investment report including fundamental analysis, technical analysis, risk assessment, and position recommendations. Based on the G=B+M model, providing institutional-grade quantitative analysis." },
+                        { question: "Which markets does AlphaGBM support for stock analysis?", answer: "AlphaGBM supports three major markets: US stocks (AAPL, TSLA), HK stocks (0700.HK, 2525.HK), and A-shares (600519, 000001). The system automatically identifies market types without requiring manual suffixes. Full market data coverage breaks information barriers, enabling multi-market investment analysis in one place." },
+                        { question: "What is AlphaGBM's G=B+M model?", answer: "G=B+M is AlphaGBM's core investment model, where G (Gain) represents returns, B (Basics) represents fundamentals, and M (Momentum) represents momentum. The model deconstructs stock returns as the superposition of fundamental support and market momentum, identifying deviations between returns and intrinsic value through quantitative analysis to help investors discover opportunities. Applies to all investment styles." },
+                        { question: "What options analysis features does AlphaGBM offer?", answer: "AlphaGBM's options analysis module provides professional options strategy analysis, including volatility analysis, Greeks calculations, options chain data, implied volatility (IV) analysis, and more. The system is based on probability calculations to help you find asymmetric return opportunities. Supports multiple strategy construction for quantitative decision support." },
+                        { question: "How does AlphaGBM perform risk quantification assessment?", answer: "AlphaGBM uses a 0-10 dynamic risk rating system that comprehensively evaluates fundamental risks (revenue growth, profit margins, valuation levels), technical risks (price position, volume anomalies), market sentiment risks (VIX fear index, Put/Call ratios), and macro risks (interest rates, exchange rates, economic indicators). Integrates quantitative metrics like VIX and Greeks to precisely identify warning signals." },
+                        { question: "What investment styles does AlphaGBM support?", answer: "AlphaGBM supports four investment styles: Quality strategy focuses on financial stability and strong profitability, max position 20%; Value strategy seeks undervalued stocks with safety margins, max position 10%; Growth strategy pursues high revenue growth, tolerating higher valuations, max position 15%; Momentum strategy follows price momentum, quick in and out, max position 5%." }
+                    ]
+                },
+                seoFooter: {
+                    text: "What is AlphaGBM? AlphaGBM is a leading AI financial analysis tool, an AI-driven institutional investment operating system. AlphaGBM combines stock analysis models, options strategies, and fully autonomous agents to provide professional quantitative investment services for investors. AlphaGBM is based on the G=B+M investment model (Gain = Basics + Momentum), covering US stocks, HK stocks, and A-shares market analysis. AlphaGBM provides core features including deep report generation, risk quantification assessment, and smart position management. AlphaGBM supports four investment styles: Quality, Value, Growth, and Momentum strategies. AlphaGBM is a professional AI investment analysis platform, quantitative investment tool, and intelligent investment system."
+                },
+                seoFooter: {
+                    text: "What is AlphaGBM? AlphaGBM is a leading AI financial analysis tool, an AI-driven institutional investment operating system. AlphaGBM combines stock analysis models, options strategies, and fully autonomous agents to provide professional quantitative investment services for investors. AlphaGBM is based on the G=B+M investment model (Gain = Basics + Momentum), covering US stocks, HK stocks, and A-shares market analysis. AlphaGBM provides core features including deep report generation, risk quantification assessment, and smart position management. AlphaGBM supports four investment styles: Quality, Value, Growth, and Momentum strategies. AlphaGBM is a professional AI investment analysis platform, quantitative investment tool, and intelligent investment system."
                 },
                 styles: {
                     title: "Model Philosophy & 4 Styles",
@@ -866,7 +988,7 @@
                                         <a href="#" className="hover:text-brand transition-colors text-sm">{t.nav.home}</a>
                                         <a href="#portfolio" className="hover:text-brand transition-colors text-sm">{t.nav.portfolio}</a>
                                         <a href="#styles" className="hover:text-brand transition-colors text-sm">{t.nav.styles}</a>
-                                        <a href="#contact" className="hover:text-brand transition-colors text-sm">{t.nav.download}</a>
+                                        <a href="#contact" className="hover:text-brand transition-colors text-sm">{t.nav.contact}</a>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
@@ -890,21 +1012,13 @@
                                 {t.hero.badge}
                             </div>
                             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
-                                {t.hero.title} <br className="hidden md:block" />
-                                <span className="gradient-text">{t.hero.titleHighlight}</span>
+                                {t.hero.title}
+                                <br />
+                                <span className="text-4xl md:text-6xl">{t.hero.titleSub}</span>
                             </h1>
-                            <p className="mt-4 max-w-2xl mx-auto text-xl text-slate-400">
+                            <h2 className="mt-4 max-w-2xl mx-auto text-xl text-slate-400 font-normal">
                                 {t.hero.subtitle}
-                            </p>
-
-                            {/* G=B+M Model Formula */}
-                            <div className="mt-8 flex items-center justify-center gap-3 text-lg font-mono">
-                                <span className="font-bold" style={{ color: '#0D9B97' }}>{lang === 'en' ? 'G (Gain)' : 'G（收益）'}</span>
-                                <span className="text-slate-500">=</span>
-                                <span className="font-bold text-emerald-400">{lang === 'en' ? 'B (Basics)' : 'B（基本面）'}</span>
-                                <span className="text-slate-500">+</span>
-                                <span className="font-bold" style={{ color: '#F59E0B' }}>{lang === 'en' ? 'M (Momentum)' : 'M（动量）'}</span>
-                            </div>
+                            </h2>
 
                             {/* CTA Area */}
                             <div className="mt-10 flex flex-col items-center">
@@ -915,6 +1029,47 @@
                                     {t.hero.limit_notice}
                                 </div>
                             </div>
+
+                            {/* Value Proposition - 三大引擎 */}
+                            <section id="value-proposition" className="my-20">
+                                <div className="text-center mb-12">
+                                    <h2 className="text-3xl font-bold mb-4">{t.valueProposition.title}</h2>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+                                    {t.valueProposition.items.map((item, idx) => {
+                                        const CardContent = (
+                                            <div className="glass-card rounded-xl p-6 text-center transition-all hover:border-brand/50 hover:transform hover:scale-105 cursor-pointer">
+                                                <div className="flex items-center justify-center mb-4">
+                                                    <i className={`ph ph-${item.icon} text-4xl text-brand`}></i>
+                                                </div>
+                                                <div className="flex items-center justify-center gap-2 mb-3">
+                                                    <h3 className="text-xl font-bold text-white">{item.title}</h3>
+                                                    {item.badge && (
+                                                        <span className="px-2 py-1 text-xs font-semibold bg-brand/20 text-brand rounded-full border border-brand/30">
+                                                            {item.badge}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
+                                            </div>
+                                        );
+                                        
+                                        if (item.link) {
+                                            return (
+                                                <a key={idx} href={item.link} className="block no-underline">
+                                                    {CardContent}
+                                                </a>
+                                            );
+                                        } else {
+                                            return (
+                                                <div key={idx} onClick={() => alert('功能开发中，敬请期待')} className="block">
+                                                    {CardContent}
+                                                </div>
+                                            );
+                                        }
+                                    })}
+                                </div>
+                            </section>
 
                             {/* Portfolio Section - Four Style Portfolios */}
                             <section id="portfolio" className="my-20">
@@ -1114,22 +1269,50 @@
 
                     {/* Features Section */}
                     <section id="features" className="py-20">
-                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                            <div className="text-center mb-16">
-                                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">{t.features.title}</h2>
+                        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-center mb-12">
+                                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-8">{t.features.title}</h2>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                {t.features.items.map((feature, idx) => (
-                                    <div key={idx} className="flex gap-4 p-6 glass-card rounded-xl">
-                                        <div className="flex-shrink-0">
-                                            <i className={`ph ph-${feature.icon.toLowerCase().replace('warning', '-warning').replace('up', '-up').replace('west', '-west').replace('pie', '-pie')} text-3xl text-brand`}></i>
+                            <div className="glass-card rounded-xl p-8">
+                                <div className="space-y-4">
+                                    {t.features.items.map((feature, idx) => (
+                                        <div key={idx} className="flex items-center justify-between py-3 border-b border-slate-700/50 last:border-b-0">
+                                            <div className="flex-1">
+                                                <span className="text-lg font-semibold text-white">{feature.title}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-slate-500">|</span>
+                                                <span className="text-slate-400 font-mono text-sm">{feature.desc}</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                                            <p className="text-slate-400 text-sm leading-relaxed">{feature.desc}</p>
-                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* FAQ Section */}
+                    <section id="faq" className="py-20">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-center mb-12">
+                                <h2 className="text-3xl font-bold mb-4">{t.faq.title}</h2>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {t.faq.items.map((item, idx) => (
+                                    <div key={idx} className="glass-card rounded-xl p-6">
+                                        <h3 className="text-lg font-semibold text-white mb-3">{item.question}</h3>
+                                        <p className="text-slate-400 leading-relaxed">{item.answer}</p>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* SEO Footer Text */}
+                    <section className="py-12 bg-slate-950/50 border-y border-slate-800">
+                        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-slate-500 text-sm leading-relaxed text-center">
+                                {t.seoFooter.text}
                             </div>
                         </div>
                     </section>
