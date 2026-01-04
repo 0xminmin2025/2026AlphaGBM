@@ -899,11 +899,11 @@
 
                             {/* G=B+M Model Formula */}
                             <div className="mt-8 flex items-center justify-center gap-3 text-lg font-mono">
-                                <span className="font-bold" style={{ color: '#0D9B97' }}>G（收益）</span>
+                                <span className="font-bold" style={{ color: '#0D9B97' }}>{lang === 'en' ? 'G (Gain)' : 'G（收益）'}</span>
                                 <span className="text-slate-500">=</span>
-                                <span className="font-bold text-emerald-400">B（基本面）</span>
+                                <span className="font-bold text-emerald-400">{lang === 'en' ? 'B (Basics)' : 'B（基本面）'}</span>
                                 <span className="text-slate-500">+</span>
-                                <span className="font-bold" style={{ color: '#F59E0B' }}>M（动量）</span>
+                                <span className="font-bold" style={{ color: '#F59E0B' }}>{lang === 'en' ? 'M (Momentum)' : 'M（动量）'}</span>
                             </div>
 
                             {/* CTA Area */}
