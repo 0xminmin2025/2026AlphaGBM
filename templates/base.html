@@ -241,7 +241,7 @@
         <nav class="navbar navbar-expand-lg navbar-dark top-navbar">
             <div class="container-fluid container-main">
                 <!-- Logo 和品牌名 -->
-                <a class="navbar-brand navbar-brand-logo" href="http://localhost:8085">
+                <a class="navbar-brand navbar-brand-logo" href="https://alphagbm.com/stock/">
                     <span class="navbar-brand-text">
                         <span class="alpha">Alpha</span><span class="gbm-highlight">GBM</span>
                     </span>
@@ -287,7 +287,8 @@
                                 今日已查询: 0/5次
                             </span>
                         </div>
-                        <button class="btn btn-outline btn-sm" id="langBtn" onclick="showEnglishComingSoon()" style="font-family: monospace; font-weight: 500;">
+                        <button class="btn btn-outline btn-sm" id="langBtn" onclick="showEnglishComingSoon()"
+                            style="font-family: monospace; font-weight: 500;">
                             EN
                         </button>
                         <button class="btn btn-outline btn-sm" id="logoutBtn" onclick="handleLogout()">
@@ -422,7 +423,7 @@
         function showEnglishComingSoon() {
             showToast('English Coming Soon - We are working on the English version. Please stay tuned!', 'info');
         }
-        
+
         // Toast 通知
         function showToast(message, type = 'info') {
             const toastHtml = `

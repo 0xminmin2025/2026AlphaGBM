@@ -1,97 +1,98 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alpha GBM - 期权分析</title>
-    
+
     <!-- Bootstrap 5 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    
+
     <!-- AG Grid -->
     <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
-    
+
     <style>
         /**
          * Alpha GBM 设计系统 - 完全匹配主系统
          */
-        
+
         /* ==================== 颜色系统 ==================== */
-        
+
         :root {
-          /* 背景色 */
-          --background: hsl(240, 10%, 3.9%);
-          --background-secondary: hsl(240, 5%, 6%);
-          --foreground: hsl(0, 0%, 98%);
-          
-          /* 卡片 */
-          --card: hsl(240, 6%, 10%);
-          --card-hover: hsl(240, 5%, 12%);
-          --card-foreground: hsl(0, 0%, 98%);
-          
-          /* 主色调（品牌色）*/
-          --primary: hsl(178, 78%, 32%);
-          --primary-rgb: 13, 155, 151;
-          --primary-foreground: hsl(0, 0%, 98%);
-          
-          /* 边框 */
-          --border: hsl(240, 3.7%, 15.9%);
-          --border-hover: hsl(178, 78%, 32%);
-          --muted: hsl(240, 3.7%, 15.9%);
-          --muted-foreground: hsl(240, 5%, 64.9%);
-          --accent: hsl(240, 3.7%, 15.9%);
-          --accent-foreground: hsl(0, 0%, 98%);
-          
-          /* 金融专用色 */
-          --bull: hsl(142, 76%, 36%);
-          --bear: hsl(0, 72%, 51%);
-          --warning: hsl(38, 92%, 50%);
-          --info: hsl(178, 78%, 32%);
-          
-          /* 数据可视化 */
-          --chart-1: hsl(142, 76%, 36%);
-          --chart-2: hsl(0, 72%, 51%);
-          --chart-3: hsl(178, 78%, 32%);
+            /* 背景色 */
+            --background: hsl(240, 10%, 3.9%);
+            --background-secondary: hsl(240, 5%, 6%);
+            --foreground: hsl(0, 0%, 98%);
+
+            /* 卡片 */
+            --card: hsl(240, 6%, 10%);
+            --card-hover: hsl(240, 5%, 12%);
+            --card-foreground: hsl(0, 0%, 98%);
+
+            /* 主色调（品牌色）*/
+            --primary: hsl(178, 78%, 32%);
+            --primary-rgb: 13, 155, 151;
+            --primary-foreground: hsl(0, 0%, 98%);
+
+            /* 边框 */
+            --border: hsl(240, 3.7%, 15.9%);
+            --border-hover: hsl(178, 78%, 32%);
+            --muted: hsl(240, 3.7%, 15.9%);
+            --muted-foreground: hsl(240, 5%, 64.9%);
+            --accent: hsl(240, 3.7%, 15.9%);
+            --accent-foreground: hsl(0, 0%, 98%);
+
+            /* 金融专用色 */
+            --bull: hsl(142, 76%, 36%);
+            --bear: hsl(0, 72%, 51%);
+            --warning: hsl(38, 92%, 50%);
+            --info: hsl(178, 78%, 32%);
+
+            /* 数据可视化 */
+            --chart-1: hsl(142, 76%, 36%);
+            --chart-2: hsl(0, 72%, 51%);
+            --chart-3: hsl(178, 78%, 32%);
         }
-        
+
         /* ==================== 全局样式 ==================== */
-        
+
         * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        
+
         body {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-          background-color: var(--background);
-          color: var(--foreground);
-          line-height: 1.6;
-          min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--background);
+            color: var(--foreground);
+            line-height: 1.6;
+            min-height: 100vh;
         }
-        
+
         /* ==================== 布局 ==================== */
-        
+
         .main-wrapper {
             display: flex;
             flex-direction: column;
             min-height: 100vh;
         }
-        
+
         .main-content {
             flex: 1;
             padding-top: 80px;
         }
-        
+
         .container-main {
             max-width: 1440px;
             margin: 0 auto;
             padding: 0 1rem;
         }
-        
+
         /* ==================== 顶部导航栏（完全匹配主系统）==================== */
-        
+
         .top-navbar {
             position: fixed;
             top: 0;
@@ -102,7 +103,7 @@
             border-bottom: 1px solid var(--border);
             backdrop-filter: blur(10px);
         }
-        
+
         .navbar-brand-logo {
             display: flex;
             align-items: center;
@@ -112,12 +113,12 @@
             color: white;
             text-decoration: none;
         }
-        
+
         .navbar-brand-logo:hover {
             color: white;
             opacity: 0.9;
         }
-        
+
         .navbar-brand-icon {
             width: 32px;
             height: 32px;
@@ -128,7 +129,7 @@
             align-items: center;
             justify-content: center;
         }
-        
+
         .navbar-brand-icon svg {
             width: 20px;
             height: 20px;
@@ -136,27 +137,27 @@
             fill: none;
             stroke-width: 2;
         }
-        
+
         .navbar-brand-text {
             font-size: 1.3rem;
             font-weight: 600;
             letter-spacing: 0.5px;
         }
-        
+
         .navbar-brand-text .alpha {
             color: white;
         }
-        
+
         .navbar-brand-text .gbm-highlight {
             color: #0D9B97;
         }
-        
+
         .module-nav {
             display: flex;
             gap: 0.5rem;
             align-items: center;
         }
-        
+
         .module-nav-item {
             padding: 0.5rem 1rem;
             border-radius: 0.5rem;
@@ -169,22 +170,22 @@
             align-items: center;
             gap: 0.5rem;
         }
-        
+
         .module-nav-item:hover {
             color: var(--foreground);
             background-color: var(--accent);
         }
-        
+
         .module-nav-item.active {
             color: var(--foreground);
             background-color: var(--muted);
         }
-        
+
         .module-nav-item.disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        
+
         .coming-soon-badge {
             font-size: 0.625rem;
             padding: 0.125rem 0.375rem;
@@ -193,32 +194,32 @@
             border-radius: 0.25rem;
             font-weight: 600;
         }
-        
+
         /* ==================== 卡片样式 ==================== */
-        
+
         .card {
-          background-color: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 1.5rem;
-          margin-bottom: 1.5rem;
-          transition: all 0.2s;
+            background-color: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: all 0.2s;
         }
-        
+
         .card:hover {
-          border-color: var(--border-hover);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border-color: var(--border-hover);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
-        
+
         .card-title {
-          font-size: 1.2rem;
-          font-weight: 600;
-          margin-bottom: 1rem;
-          color: var(--foreground);
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--foreground);
         }
-        
+
         /* ==================== 投资理念卡片 ==================== */
-        
+
         .philosophy-card {
             background: var(--card);
             border: 1px solid var(--primary);
@@ -226,7 +227,7 @@
             transition: all 0.3s ease;
             margin-bottom: 2rem;
         }
-        
+
         .philosophy-header {
             padding: 1.5rem;
             display: flex;
@@ -234,7 +235,7 @@
             align-items: center;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .philosophy-title {
             display: flex;
             align-items: center;
@@ -243,32 +244,32 @@
             font-weight: 600;
             font-size: 1.3rem;
         }
-        
+
         .philosophy-content {
             padding: 1.5rem;
         }
-        
+
         .philosophy-section {
             margin-bottom: 1.5rem;
         }
-        
+
         .philosophy-section:last-child {
             margin-bottom: 0;
         }
-        
+
         .philosophy-section h6 {
             color: var(--primary);
             font-weight: 600;
             margin-bottom: 0.75rem;
             font-size: 1.1rem;
         }
-        
+
         .philosophy-section p {
             color: var(--muted-foreground);
             line-height: 1.8;
             margin-bottom: 0.5rem;
         }
-        
+
         .philosophy-highlight {
             display: inline-block;
             background: var(--primary);
@@ -278,172 +279,172 @@
             font-weight: 600;
             margin: 0 0.25rem;
         }
-        
+
         .philosophy-highlight.bull {
             background: var(--bull);
         }
-        
+
         .philosophy-highlight.warning {
             background: var(--warning);
         }
-        
+
         /* ==================== 表单样式 ==================== */
-        
+
         .form-control,
         .form-select {
-          background-color: var(--card);
-          border: 1px solid var(--border);
-          color: var(--foreground);
-          border-radius: 8px;
-          padding: 0.75rem 1rem;
-          font-size: 1rem;
+            background-color: var(--card);
+            border: 1px solid var(--border);
+            color: var(--foreground);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
         }
-        
+
         .form-control:focus,
         .form-select:focus {
-          background-color: var(--card);
-          border-color: var(--primary);
-          color: var(--foreground);
-          box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+            background-color: var(--card);
+            border-color: var(--primary);
+            color: var(--foreground);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
         }
-        
+
         .form-label {
-          color: var(--foreground);
-          font-weight: 500;
-          margin-bottom: 0.5rem;
+            color: var(--foreground);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
         }
-        
+
         /* ==================== 按钮样式 ==================== */
-        
+
         .btn {
-          border-radius: 8px;
-          padding: 0.75rem 1.5rem;
-          font-weight: 600;
-          transition: all 0.2s;
-          border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: none;
         }
-        
+
         .btn-primary {
-          background-color: var(--primary);
-          color: var(--primary-foreground);
-          box-shadow: 0 2px 4px rgba(13, 155, 151, 0.3);
+            background-color: var(--primary);
+            color: var(--primary-foreground);
+            box-shadow: 0 2px 4px rgba(13, 155, 151, 0.3);
         }
-        
+
         .btn-primary:hover {
-          background-color: hsl(178, 78%, 38%);
-          box-shadow: 0 4px 8px rgba(13, 155, 151, 0.4);
-          transform: translateY(-2px);
+            background-color: hsl(178, 78%, 38%);
+            box-shadow: 0 4px 8px rgba(13, 155, 151, 0.4);
+            transform: translateY(-2px);
         }
-        
+
         /* ==================== 仪表盘指标卡片 ==================== */
-        
+
         .metric-card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 1.5rem;
-          text-align: center;
-          transition: all 0.3s;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
         }
-        
+
         .metric-card:hover {
-          border-color: var(--border-hover);
-          transform: translateY(-4px);
-          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+            border-color: var(--border-hover);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
         }
-        
+
         .metric-label {
-          font-size: 0.9rem;
-          color: var(--muted-foreground);
-          margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--muted-foreground);
+            margin-bottom: 0.5rem;
         }
-        
+
         .metric-value {
-          font-size: 2.5rem;
-          font-weight: 700;
-          margin-bottom: 0.5rem;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
         }
-        
+
         .metric-desc {
-          font-size: 0.85rem;
-          color: var(--muted-foreground);
+            font-size: 0.85rem;
+            color: var(--muted-foreground);
         }
-        
+
         /* ==================== 风险进度条 ==================== */
-        
+
         .risk-bar {
-          height: 8px;
-          background: linear-gradient(to right, var(--bull), var(--warning), var(--bear));
-          border-radius: 4px;
-          position: relative;
-          margin: 1rem 0;
+            height: 8px;
+            background: linear-gradient(to right, var(--bull), var(--warning), var(--bear));
+            border-radius: 4px;
+            position: relative;
+            margin: 1rem 0;
         }
-        
+
         .risk-indicator {
-          position: absolute;
-          width: 4px;
-          height: 20px;
-          background: white;
-          top: -6px;
-          border-radius: 2px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-          transition: left 0.5s;
+            position: absolute;
+            width: 4px;
+            height: 20px;
+            background: white;
+            top: -6px;
+            border-radius: 2px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            transition: left 0.5s;
         }
-        
+
         /* ==================== AG Grid 暗色主题 ==================== */
-        
+
         .ag-theme-alpine-dark {
-          --ag-background-color: var(--card);
-          --ag-foreground-color: var(--foreground);
-          --ag-header-background-color: var(--background-secondary);
-          --ag-odd-row-background-color: var(--card);
-          --ag-border-color: var(--border);
-          --ag-row-hover-color: var(--card-hover);
+            --ag-background-color: var(--card);
+            --ag-foreground-color: var(--foreground);
+            --ag-header-background-color: var(--background-secondary);
+            --ag-odd-row-background-color: var(--card);
+            --ag-border-color: var(--border);
+            --ag-row-hover-color: var(--card-hover);
         }
-        
+
         .ag-theme-alpine-dark .ag-header-cell-text {
-          color: var(--foreground);
-          font-weight: 600;
+            color: var(--foreground);
+            font-weight: 600;
         }
-        
+
         .ag-theme-alpine-dark .recommended-row {
-          background-color: rgba(13, 155, 151, 0.15) !important;
-          font-weight: 600;
+            background-color: rgba(13, 155, 151, 0.15) !important;
+            font-weight: 600;
         }
-        
+
         /* ==================== 徽章 ==================== */
-        
+
         .badge {
-          padding: 0.4rem 0.8rem;
-          border-radius: 6px;
-          font-weight: 600;
-          font-size: 0.85rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.85rem;
         }
-        
+
         .badge-success {
-          background-color: var(--bull);
-          color: white;
+            background-color: var(--bull);
+            color: white;
         }
-        
+
         .badge-warning {
-          background-color: var(--warning);
-          color: var(--background);
+            background-color: var(--warning);
+            color: var(--background);
         }
-        
+
         .badge-danger {
-          background-color: var(--bear);
-          color: white;
+            background-color: var(--bear);
+            color: white;
         }
-        
+
         /* ==================== Footer ==================== */
-        
+
         .main-footer {
             background-color: var(--card);
             border-top: 1px solid var(--border);
             padding: 2rem 0;
             margin-top: 4rem;
         }
-        
+
         .footer-content {
             display: flex;
             justify-content: space-between;
@@ -451,9 +452,9 @@
             flex-wrap: wrap;
             gap: 1rem;
         }
-        
+
         /* ==================== 响应式 ==================== */
-        
+
         @media (max-width: 992px) {
             .module-nav {
                 flex-direction: column;
@@ -461,44 +462,45 @@
                 width: 100%;
             }
         }
-        
+
         @media (max-width: 768px) {
             .main-content {
                 padding-top: 70px;
             }
-            
+
             .metric-value {
                 font-size: 2rem;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="main-wrapper">
         <!-- 顶部导航栏（完全匹配主系统）-->
         <nav class="navbar navbar-expand-lg navbar-dark top-navbar">
             <div class="container-fluid container-main">
                 <!-- Logo 和品牌名 -->
-                <a class="navbar-brand navbar-brand-logo" href="http://localhost:8085">
+                <a class="navbar-brand navbar-brand-logo" href="https://alphagbm.com/stock/">
                     <span class="navbar-brand-text">
                         <span class="alpha">Alpha</span><span class="gbm-highlight">GBM</span>
                     </span>
                 </a>
-                
+
                 <!-- 移动端折叠按钮 -->
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                
+
                 <!-- 导航内容 -->
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <!-- 模块导航 -->
                     <div class="module-nav mx-auto">
-                        <a href="http://localhost:5002" class="module-nav-item">
+                        <a href="https://alphagbm.com/stock/" class="module-nav-item">
                             <i class="bi bi-graph-up"></i>
                             <span>股票分析</span>
                         </a>
-                        <a href="http://localhost:8000" class="module-nav-item active">
+                        <a href="https://alphagbm.com/stock/" class="module-nav-item active">
                             <i class="bi bi-pie-chart"></i>
                             <span>期权研究</span>
                         </a>
@@ -516,7 +518,7 @@
                 </div>
             </div>
         </nav>
-        
+
         <!-- 主内容区 -->
         <main class="main-content">
             <div class="container-main">
@@ -559,7 +561,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 分析结果仪表盘 -->
                 <div id="dashboard" style="display: none;">
                     <!-- P/F/S 评分 -->
@@ -586,7 +588,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 当前价格与支撑位 -->
                     <div class="row mb-4">
                         <div class="col-md-6">
@@ -597,7 +599,8 @@
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center">
                                     <span style="color: var(--muted-foreground);">MA200支撑位</span>
-                                    <span id="supportLevel" style="font-size: 1.2rem; font-weight: 600; color: var(--bull);">--</span>
+                                    <span id="supportLevel"
+                                        style="font-size: 1.2rem; font-weight: 600; color: var(--bull);">--</span>
                                 </div>
                             </div>
                         </div>
@@ -607,7 +610,8 @@
                                 <div class="risk-bar">
                                     <div class="risk-indicator" id="riskIndicator"></div>
                                 </div>
-                                <div class="d-flex justify-content-between" style="font-size: 0.85rem; color: var(--muted-foreground);">
+                                <div class="d-flex justify-content-between"
+                                    style="font-size: 0.85rem; color: var(--muted-foreground);">
                                     <span>低风险</span>
                                     <span>中风险</span>
                                     <span>高风险</span>
@@ -615,15 +619,16 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 风险提示 -->
-                    <div id="warningSection" class="card" style="display: none; background: rgba(239, 68, 68, 0.1); border-color: var(--bear);">
+                    <div id="warningSection" class="card"
+                        style="display: none; background: rgba(239, 68, 68, 0.1); border-color: var(--bear);">
                         <h6 style="color: var(--bear); margin-bottom: 1rem;">
                             <i class="bi bi-exclamation-triangle-fill me-2"></i>风险警示
                         </h6>
                         <div id="warningList"></div>
                     </div>
-                    
+
                     <!-- 期权推荐表格 -->
                     <div class="row">
                         <div class="col-12">
@@ -633,12 +638,13 @@
                                     推荐期权合约
                                     <span class="badge badge-success ms-2">基于 Alpha GBM 模型</span>
                                 </h5>
-                                <div id="optionsGrid" class="ag-theme-alpine-dark" style="height: 500px; width: 100%;"></div>
+                                <div id="optionsGrid" class="ag-theme-alpine-dark" style="height: 500px; width: 100%;">
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Loading -->
                 <div id="loading" style="display: none; text-align: center; padding: 3rem;">
                     <div class="spinner-border" style="color: var(--primary);" role="status">
@@ -646,15 +652,16 @@
                     </div>
                     <p style="margin-top: 1rem; color: var(--muted-foreground);">正在分析...</p>
                 </div>
-                
+
                 <!-- Error -->
-                <div id="error" class="card" style="display: none; background: rgba(239, 68, 68, 0.1); border-color: var(--bear);">
+                <div id="error" class="card"
+                    style="display: none; background: rgba(239, 68, 68, 0.1); border-color: var(--bear);">
                     <h6 style="color: var(--bear);">
                         <i class="bi bi-x-circle-fill me-2"></i>分析失败
                     </h6>
                     <p id="errorMessage" style="color: var(--muted-foreground); margin: 0;"></p>
                 </div>
-                
+
                 <!-- 期权投资理念（放在最后）-->
                 <div class="row mb-4">
                     <div class="col-12">
@@ -664,32 +671,42 @@
                                     <i class="bi bi-lightbulb-fill"></i>
                                     <span>Alpha GBM 期权投资理念</span>
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.9rem;">
+                                <div
+                                    style="display: flex; align-items: center; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.9rem;">
                                     <span id="philosophyToggleText">展开</span>
-                                    <i class="bi bi-chevron-down" id="philosophyToggleIcon" style="transition: transform 0.3s;"></i>
+                                    <i class="bi bi-chevron-down" id="philosophyToggleIcon"
+                                        style="transition: transform 0.3s;"></i>
                                 </div>
                             </div>
-                            <div id="philosophyContent" class="philosophy-content" style="max-height: 0; overflow: hidden; opacity: 0; transition: max-height 0.3s ease-out, opacity 0.3s ease-out;">
+                            <div id="philosophyContent" class="philosophy-content"
+                                style="max-height: 0; overflow: hidden; opacity: 0; transition: max-height 0.3s ease-out, opacity 0.3s ease-out;">
                                 <div class="philosophy-section">
                                     <h6><i class="bi bi-shield-check me-2"></i>核心策略：保守期权建仓</h6>
                                     <p>
-                                        我们采用 <span class="philosophy-highlight">卖出现金担保看跌期权 (Cash-Secured Put)</span> 策略，而非投机性买入期权。
+                                        我们采用 <span class="philosophy-highlight">卖出现金担保看跌期权 (Cash-Secured Put)</span>
+                                        策略，而非投机性买入期权。
                                         这是一种 <strong>类债券的保守投资方式</strong>，通过收取期权费（权利金）获得稳定现金流，同时保留以理想价格买入优质股票的权利。
                                     </p>
                                 </div>
-                                
+
                                 <div class="philosophy-section">
                                     <h6><i class="bi bi-diagram-3 me-2"></i>G = B + M 模型指导</h6>
                                     <p>
-                                        基于 <span class="philosophy-highlight">G（收益）</span> = <span class="philosophy-highlight bull">B（基本面）</span> + <span class="philosophy-highlight warning">M（动量）</span> 模型筛选标的：
+                                        基于 <span class="philosophy-highlight">G（收益）</span> = <span
+                                            class="philosophy-highlight bull">B（基本面）</span> + <span
+                                            class="philosophy-highlight warning">M（动量）</span> 模型筛选标的：
                                     </p>
                                     <ul style="color: var(--muted-foreground); line-height: 1.8;">
-                                        <li><strong style="color: var(--bull);">B（基本面优秀）</strong>：营收增长稳定、利润率健康、估值合理的公司</li>
-                                        <li><strong style="color: var(--warning);">M（动量回调）</strong>：技术面短期超跌、市场动量过度悲观，提供更高安全边际</li>
-                                        <li><strong style="color: var(--primary);">G（综合收益）</strong>：70分以上的综合评分，确保长期投资价值</li>
+                                        <li><strong style="color: var(--bull);">B（基本面优秀）</strong>：营收增长稳定、利润率健康、估值合理的公司
+                                        </li>
+                                        <li><strong
+                                                style="color: var(--warning);">M（动量回调）</strong>：技术面短期超跌、市场动量过度悲观，提供更高安全边际
+                                        </li>
+                                        <li><strong style="color: var(--primary);">G（综合收益）</strong>：70分以上的综合评分，确保长期投资价值
+                                        </li>
                                     </ul>
                                 </div>
-                                
+
                                 <div class="philosophy-section">
                                     <h6><i class="bi bi-cash-stack me-2"></i>三大收益来源</h6>
                                     <ul style="color: var(--muted-foreground); line-height: 1.8;">
@@ -698,7 +715,7 @@
                                         <li><strong>折价买入优质股</strong>（期权被行权时）：以低于当前价的行权价买入心仪股票</li>
                                     </ul>
                                 </div>
-                                
+
                                 <div class="philosophy-section">
                                     <h6><i class="bi bi-shield-fill-exclamation me-2"></i>风险控制原则</h6>
                                     <ul style="color: var(--muted-foreground); line-height: 1.8;">
@@ -709,8 +726,9 @@
                                         <li><strong>F差禁入</strong>：基本面评分低于60分的公司不纳入选股池</li>
                                     </ul>
                                 </div>
-                                
-                                <div class="philosophy-section" style="background: rgba(13, 155, 151, 0.1); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+
+                                <div class="philosophy-section"
+                                    style="background: rgba(13, 155, 151, 0.1); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
                                     <p style="color: var(--foreground); margin-bottom: 0;">
                                         <strong><i class="bi bi-info-circle me-2"></i>策略本质：</strong>
                                         这不是高风险投机，而是一种 <strong>进可攻、退可守</strong> 的保守策略。
@@ -724,7 +742,7 @@
                 </div>
             </div>
         </main>
-        
+
         <!-- Footer -->
         <footer class="main-footer">
             <div class="container-main">
@@ -740,21 +758,21 @@
             </div>
         </footer>
     </div>
-    
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <script>
         // 投资理念折叠/展开（默认折叠）
         let philosophyExpanded = false;
-        
+
         function togglePhilosophy() {
             const content = document.getElementById('philosophyContent');
             const icon = document.getElementById('philosophyToggleIcon');
             const text = document.getElementById('philosophyToggleText');
-            
+
             philosophyExpanded = !philosophyExpanded;
-            
+
             if (philosophyExpanded) {
                 content.style.maxHeight = content.scrollHeight + 'px';
                 content.style.overflow = 'hidden';
@@ -778,27 +796,27 @@
                 text.textContent = '展开';
             }
         }
-        
+
         // AG Grid 实例
         let gridApi;
-        
+
         // 表单提交
         document.getElementById('queryForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const symbol = document.getElementById('symbol').value.trim().toUpperCase();
             const targetReturn = parseFloat(document.getElementById('targetReturn').value);
             const riskTolerance = document.getElementById('riskTolerance').value;
-            
+
             // 显示 Loading
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('error').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
-            
+
             try {
                 const response = await fetch(`/api/analyze/${symbol}?target_return=${targetReturn}&risk_tolerance=${riskTolerance}`);
                 const data = await response.json();
-                
+
                 if (response.ok) {
                     updateUI(data);
                 } else {
@@ -810,25 +828,25 @@
                 document.getElementById('errorMessage').textContent = error.message;
             }
         });
-        
+
         // 更新 UI
         function updateUI(data) {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
-            
+
             // 更新 G/B/M 评分
             document.getElementById('pScore').textContent = data.alpha_g_score.G.toFixed(0);
             document.getElementById('fScore').textContent = data.alpha_g_score.B.toFixed(0);
             document.getElementById('sScore').textContent = data.alpha_g_score.M.toFixed(0);
-            
+
             // 更新价格信息
             document.getElementById('currentPrice').textContent = `$${data.current_price.toFixed(2)}`;
             document.getElementById('supportLevel').textContent = data.support_level ? `$${data.support_level.toFixed(2)}` : '--';
-            
+
             // 更新风险指示器
             const riskPercent = ((data.alpha_g_score.G - 40) / 60) * 100;
             document.getElementById('riskIndicator').style.left = `${Math.max(0, Math.min(100, riskPercent))}%`;
-            
+
             // 更新风险警示
             if (data.warnings && data.warnings.length > 0) {
                 document.getElementById('warningSection').style.display = 'block';
@@ -838,16 +856,16 @@
             } else {
                 document.getElementById('warningSection').style.display = 'none';
             }
-            
+
             // 更新期权表格
             updateOptionsGrid(data.recommended_options);
         }
-        
+
         // 更新 AG Grid
         function updateOptionsGrid(options) {
             const columnDefs = [
-                { 
-                    headerName: '策略推荐', 
+                {
+                    headerName: '策略推荐',
                     field: 'signal',
                     cellStyle: params => {
                         if (params.value.includes('安全建仓')) return { color: 'var(--bull)', fontWeight: 'bold' };
@@ -858,8 +876,8 @@
                     },
                     width: 250
                 },
-                { 
-                    headerName: '操作类型', 
+                {
+                    headerName: '操作类型',
                     field: 'option_action',
                     cellStyle: params => {
                         if (params.value === 'Sell Put') return { color: 'var(--bull)', fontWeight: '600' };
@@ -868,8 +886,8 @@
                     },
                     width: 120
                 },
-                { 
-                    headerName: '所需条件', 
+                {
+                    headerName: '所需条件',
                     field: 'required_condition',
                     cellStyle: params => {
                         if (params.value.includes('⚠️')) return { color: 'var(--bear)', fontWeight: 'bold' };
@@ -878,42 +896,42 @@
                     width: 180
                 },
                 { headerName: '到期日', field: 'expiry', width: 120 },
-                { 
-                    headerName: '行权价', 
+                {
+                    headerName: '行权价',
                     field: 'strike',
                     valueFormatter: params => `$${params.value.toFixed(2)}`,
                     width: 110
                 },
-                { 
-                    headerName: '年化收益', 
+                {
+                    headerName: '年化收益',
                     field: 'annualized_return',
                     valueFormatter: params => `${(params.value * 100).toFixed(2)}%`,
-                    cellStyle: params => ({ 
+                    cellStyle: params => ({
                         color: params.value > 0.15 ? 'var(--bull)' : params.value > 0.08 ? 'var(--warning)' : 'var(--foreground)',
                         fontWeight: params.value > 0.15 ? 'bold' : 'normal'
                     }),
                     width: 120
                 },
-                { 
-                    headerName: '安全边际', 
+                {
+                    headerName: '安全边际',
                     field: 'safety_margin',
                     valueFormatter: params => `${(params.value * 100).toFixed(2)}%`,
                     width: 120
                 },
-                { 
-                    headerName: '权利金', 
+                {
+                    headerName: '权利金',
                     field: 'premium',
                     valueFormatter: params => `$${params.value.toFixed(2)}`,
                     width: 110
                 },
-                { 
-                    headerName: 'Delta', 
+                {
+                    headerName: 'Delta',
                     field: 'delta',
                     valueFormatter: params => params.value.toFixed(2),
                     width: 100
                 }
             ];
-            
+
             const gridOptions = {
                 columnDefs: columnDefs,
                 rowData: options,
@@ -925,38 +943,38 @@
                 getRowStyle: params => {
                     const riskLevel = params.data.risk_level;
                     const signal = params.data.signal;
-                    
+
                     // 绿色高亮：Sell Put 安全建仓
                     if (signal.includes('安全建仓')) {
-                        return { 
+                        return {
                             background: 'rgba(16, 185, 129, 0.15)',
                             borderLeft: '4px solid var(--bull)'
                         };
                     }
                     // 黄色高亮：Sell Put 价值挖掘
                     if (signal.includes('价值挖掘')) {
-                        return { 
+                        return {
                             background: 'rgba(251, 191, 36, 0.15)',
                             borderLeft: '4px solid var(--warning)'
                         };
                     }
                     // 蓝色高亮：Sell Call (Covered)
                     if (signal.includes('高位增收')) {
-                        return { 
+                        return {
                             background: 'rgba(13, 155, 151, 0.15)',
                             borderLeft: '4px solid var(--info)'
                         };
                     }
                     // 红色高亮+警告：Sell Call 高风险
                     if (signal.includes('高风险')) {
-                        return { 
+                        return {
                             background: 'rgba(239, 68, 68, 0.15)',
                             borderLeft: '4px solid var(--bear)'
                         };
                     }
                     // 灰色：禁止操作
                     if (signal.includes('禁止')) {
-                        return { 
+                        return {
                             background: 'rgba(100, 100, 100, 0.1)',
                             opacity: '0.6'
                         };
@@ -964,11 +982,12 @@
                     return null;
                 }
             };
-            
+
             const gridDiv = document.getElementById('optionsGrid');
             gridDiv.innerHTML = '';
             gridApi = agGrid.createGrid(gridDiv, gridOptions);
         }
     </script>
 </body>
+
 </html>
