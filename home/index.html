@@ -5,19 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlphaGBM：由 AI 驱动的机构级投资操作系统 | G=B+M 投资模型</title>
-    
+
     <!-- SEO Meta Tags -->
-    <meta name="description" content="AlphaGBM是一款由AI驱动的机构级投资操作系统，融合股票模型(G=B+M)、期权策略与全自动智能体。覆盖美/港/A股，提供深度研报、风险量化、智能仓位管理。注册即送每日5次深度分析。">
+    <meta name="description"
+        content="AlphaGBM是一款由AI驱动的机构级投资操作系统，融合股票模型(G=B+M)、期权策略与全自动智能体。覆盖美/港/A股，提供深度研报、风险量化、智能仓位管理。注册即送每日5次深度分析。">
     <meta name="keywords" content="AlphaGBM,AI投资,股票分析,期权策略,量化投资,G=B+M模型,投资操作系统,机构级投资,风险量化,智能仓位管理,美股分析,港股分析,A股分析,投资智能体">
     <meta name="author" content="AlphaGBM">
     <meta name="robots" content="index, follow">
-    
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="AlphaGBM：由 AI 驱动的机构级投资操作系统">
     <meta property="og:description" content="融合股票模型、期权策略与全自动智能体。基于G=B+M模型，覆盖美/港/A股，提供深度研报、风险量化、智能仓位管理。">
     <meta property="og:site_name" content="AlphaGBM">
-    
+
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="AlphaGBM：由 AI 驱动的机构级投资操作系统">
@@ -391,7 +392,7 @@
                 },
                 portfolio: {
                     title: "Four-Style Portfolio Live Tracking",
-                    description: "Four investment style portfolios (Quality, Value, Growth, Momentum), each with $250K, total $1M live tracking vs S&P 500, NASDAQ, Hang Seng Index & CSI 300",
+                    description: "Four investment style portfolios (Quality, Value, Growth, Momentum), each with $250K, total $1M live tracking",
                     quality: "Quality Portfolio",
                     value: "Value Portfolio",
                     growth: "Growth Portfolio",
@@ -958,11 +959,11 @@
                 // 初始化图表，优先使用API数据
                 fetchProfitLossHistory();
 
-                return () => {
-                    if (window.portfolioChart) {
-                        window.portfolioChart.destroy();
-                    }
-                };
+                // return () => {
+                //     if (window.portfolioChart) {
+                //         window.portfolioChart.destroy();
+                //     }
+                // };
             }, [t]);
 
             return (
@@ -1053,7 +1054,7 @@
                                                 <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
                                             </div>
                                         );
-                                        
+
                                         if (item.link) {
                                             return (
                                                 <a key={idx} href={item.link} className="block no-underline">
