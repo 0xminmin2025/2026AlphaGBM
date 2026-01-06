@@ -355,10 +355,65 @@ def get_gemini_analysis(ticker, style, data, risk_result):
         else:
             prompt += "- **成交量异常**: 成交量异常萎缩\n"
     
-    # 添加财报日期
+    # 添加财报日期（⚠️ 波动率事件 - Binary Event）
     earnings_dates = data.get('earnings_dates', [])
     if earnings_dates and len(earnings_dates) > 0:
-        prompt += f"- **财报日期**: {', '.join(earnings_dates)}\n"
+        from datetime import datetime
+        today = datetime.now().date()
+        earnings_info = []
+        for earnings_date in earnings_dates[:2]:  # 只显示最近2个财报日期
+            try:
+                earnings_dt = datetime.strptime(earnings_date, '%Y-%m-%d').date()
+                days_until = (earnings_dt - today).days
+                if 0 <= days_until < 7:
+                    warning_level = "⚠️ 高危"
+                elif 7 <= days_until <= 14:
+                    warning_level = "⚠️ 中危"
+                else:
+                    warning_level = "低危"
+                earnings_info.append(f"{earnings_date} ({days_until}天后) [{warning_level}]")
+            except:
+                earnings_info.append(earnings_date)
+        
+        if earnings_info:
+            prompt += f"- **⚠️ 财报日期（波动率事件 - Binary Event）**: {', '.join(earnings_info)}\n"
+            # 检查是否有高危财报日期
+            for earnings_date in earnings_dates[:1]:
+                try:
+                    earnings_dt = datetime.strptime(earnings_date, '%Y-%m-%d').date()
+                    days_until = (earnings_dt - today).days
+                    if 0 <= days_until < 7:
+                        prompt += f"  - **⚠️ 高危警告**: 财报将在{earnings_date}发布（{days_until}天后），波动率风险极高，强烈建议在财报前3天避险或减仓\n"
+                    elif 7 <= days_until <= 14:
+                        prompt += f"  - **⚠️ 中危提醒**: 财报将在{earnings_date}发布（{days_until}天后），建议提前规划，考虑在财报前适当减仓\n"
+                except:
+                    pass
+    
+    # 添加IPO与解禁监控（⚠️ 供给侧冲击风险）
+    lockup_data = data.get('lockup_data', {})
+    if lockup_data and lockup_data.get('days_until_lockup') is not None:
+        days_until_lockup = lockup_data['days_until_lockup']
+        lockup_expiry_date = lockup_data.get('lockup_expiry_date', '未知日期')
+        ipo_date = lockup_data.get('ipo_date')
+        
+        if 0 <= days_until_lockup < 14:
+            if days_until_lockup < 7:
+                warning_level = "⚠️ 高危"
+            else:
+                warning_level = "⚠️ 中危"
+            
+            prompt += f"- **⚠️ 解禁期监控（供给侧冲击风险 - Lock-up Expiry）**: 解禁将在{lockup_expiry_date}到来（{days_until_lockup}天后）[{warning_level}]\n"
+            if ipo_date:
+                prompt += f"  - IPO日期: {ipo_date}\n"
+            
+            # A股显示解禁股数和比例
+            if lockup_data.get('lockup_shares_ratio'):
+                prompt += f"  - 解禁股数占总股本比例: {lockup_data['lockup_shares_ratio']:.2f}%\n"
+            
+            if days_until_lockup < 7:
+                prompt += f"  - **⚠️ 高危警告**: 解禁即将到来，抛压风险极高，可能面临巨大抛压，强烈建议提前减仓或避险\n"
+            elif 7 <= days_until_lockup < 14:
+                prompt += f"  - **⚠️ 中危提醒**: 解禁临近，可能面临抛压，建议提前规划\n"
     
     # 添加美联储利率决议
     fed_meetings = macro_data.get('fed_meetings', [])
@@ -673,6 +728,11 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 
 * **目标价格**: 系统计算的目标价格为 {data['currency_symbol']}{data['target_price']:.2f}，当前价格为 {data['currency_symbol']}{data['price']:.2f}。
     {('**注意**：由于当前价格已经大幅超过合理估值，系统已调整目标价格为当前价格的95%作为止盈参考点。原始估值模型计算的目标价格为 ' + data['currency_symbol'] + str(round(data.get('original_target_price', data['target_price']), 2)) + '，这表明当前价格可能被高估。' if data.get('original_target_price') else '')}
+    - **⚠️ 周期定义**：必须明确说明"本目标价格为6-12个月的中期目标价"
+      - 华尔街标准：基于基本面（PEG/PE）的目标价，华尔街的标准通常是12个月
+      - AlphaGBM模型调整：考虑到模型结合了动量（M）维度，我们将目标价周期定义为"6-12个月的中期目标价"
+      - 周期合理性：3-6个月太短，容易受短期噪音影响；基本面价值回归通常需要2个季度以上的验证周期
+      - 提醒投资者：目标价不是短期交易信号，而是基于基本面价值回归的中期预期
     - 如果当前价格 < 目标价格：说明还有上涨空间，可以买入或持有，当价格达到目标价格时考虑止盈
     - 如果当前价格 >= 目标价格：**重要**：当前价格已经达到或超过目标价格，说明已经达到或超过合理估值，**不要建议等待价格达到目标价格再卖出**，应该立即评估是否需要止盈或减仓
     - 如果当前价格超过目标价格5%以上：建议考虑分批减仓（减仓30-50%），保留部分仓位继续观察
@@ -686,6 +746,14 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 * **持有周期**: 根据{style_names.get(style, style)}风格，建议持有多长时间。
 
 * **仓位管理**: 重申建议仓位{risk_result['suggested_position']}%，并说明仓位管理原则。
+
+* **⚠️ 财报日避险检查（强制规则）**:
+  - 如果财报日期 < 7天（高危）：**强烈建议在财报前3天避险或减仓**
+    - 理由：财报是二元事件（Binary Event），可能导致大幅波动，建议提前避险
+    - 避险建议：财报前3天建议减仓30-50%，或全部卖出避险，待财报后再决定是否重新建仓
+  - 如果财报日期 7-14天（中危）：**建议提前规划，考虑在财报前适当减仓**
+  - 如果财报日期 > 14天（低危）：**正常持有，但需关注财报日期**
+  - **例外情况**：如果基本面非常强劲且预期财报利好，可以保留部分仓位，但必须设置止损
 
 **第六部分：卖出策略（⚠️ 必须包含，这是最重要的风险控制部分）**
 
@@ -715,7 +783,14 @@ def get_gemini_analysis(ticker, style, data, risk_result):
   - 市场情绪变化（VIX飙升、市场系统性风险）时如何调整？
 
 * **卖出时机建议**:
-  - 避免在财报发布前卖出（除非有明确风险信号）
+  - **⚠️ 财报日避险（强制规则）**：
+    - **财报前3天强制检查**：如果财报日期 < 7天，必须评估是否在财报前3天避险
+    - **避险建议**：
+      - 如果财报日期 < 7天（高危）：**强烈建议在财报前3天减仓30-50%或全部卖出避险**
+      - 如果财报日期 7-14天（中危）：**建议提前规划，考虑在财报前适当减仓**
+      - 如果财报日期 > 14天（低危）：**正常持有，但需关注财报日期**
+    - **避险理由**：财报是二元事件（Binary Event），可能导致大幅波动，提前避险是风险控制的核心
+    - **例外情况**：如果基本面非常强劲且预期财报利好，可以保留部分仓位，但必须设置止损
   - 避免在期权到期日附近卖出（市场波动可能影响成交价格）
   - 根据重要经济事件（美联储会议、CPI发布等）调整卖出时机
 

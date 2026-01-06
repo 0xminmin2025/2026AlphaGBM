@@ -195,6 +195,134 @@ def get_dynamic_peg_threshold(macro_data=None):
         return base_threshold
 
 
+def get_ipo_lockup_data(info, ticker):
+    """
+    获取IPO与解禁监控数据
+    
+    参数:
+        info: yfinance获取的股票信息
+        ticker: 标准化后的股票代码
+    
+    返回:
+        lockup_data字典，包含：
+        - ipo_date: IPO日期
+        - lockup_expiry_date: 解禁日期
+        - days_until_lockup: 距离解禁期的天数
+        - is_lockup_risk: 是否处于解禁风险期（< 14天）
+        - lockup_shares_ratio: 解禁股数占总股本比例（A股）
+    """
+    lockup_data = {
+        'ipo_date': None,
+        'lockup_expiry_date': None,
+        'days_until_lockup': None,
+        'is_lockup_risk': False,
+        'lockup_shares_ratio': None,
+        'lockup_events': []  # A股解禁事件列表
+    }
+    
+    from datetime import datetime, timedelta
+    
+    # 判断市场类型
+    is_us_market = '.' not in ticker or ticker.endswith(('.US', ''))
+    is_hk_market = ticker.endswith('.HK')
+    is_cn_market = ticker.endswith('.SS') or ticker.endswith('.SZ')
+    
+    # 美股/港股逻辑：IPO日期 + 180天
+    if is_us_market or is_hk_market:
+        try:
+            # 从info获取IPO日期
+            ipo_date_str = info.get('ipoDate')
+            if ipo_date_str:
+                # 处理不同的日期格式
+                if isinstance(ipo_date_str, (int, float)):
+                    # 可能是时间戳
+                    ipo_date = datetime.fromtimestamp(ipo_date_str).date()
+                elif isinstance(ipo_date_str, str):
+                    # 尝试解析日期字符串
+                    try:
+                        ipo_date = datetime.strptime(ipo_date_str, '%Y-%m-%d').date()
+                    except:
+                        try:
+                            ipo_date = datetime.strptime(ipo_date_str, '%Y-%m-%d %H:%M:%S').date()
+                        except:
+                            ipo_date = None
+                else:
+                    ipo_date = None
+                
+                if ipo_date:
+                    # 计算解禁日期（IPO日期 + 180天）
+                    lockup_expiry_date = ipo_date + timedelta(days=180)
+                    today = datetime.now().date()
+                    days_until_lockup = (lockup_expiry_date - today).days
+                    
+                    lockup_data['ipo_date'] = ipo_date.strftime('%Y-%m-%d')
+                    lockup_data['lockup_expiry_date'] = lockup_expiry_date.strftime('%Y-%m-%d')
+                    lockup_data['days_until_lockup'] = days_until_lockup
+                    lockup_data['is_lockup_risk'] = 0 <= days_until_lockup < 14
+        except Exception as e:
+            print(f"获取IPO/解禁数据失败（美股/港股）: {e}")
+    
+    # A股逻辑：使用AkShare数据抓取
+    elif is_cn_market:
+        try:
+            import akshare as ak
+            # 提取A股代码（去掉.SS或.SZ后缀）
+            cn_code = ticker.replace('.SS', '').replace('.SZ', '')
+            
+            # 尝试获取限售股解禁数据
+            try:
+                # 注意：这个接口可能需要特定的参数格式
+                # 如果接口不可用，可以尝试其他方法
+                lockup_summary = ak.stock_restricted_shares_summary_em(symbol=cn_code)
+                
+                if lockup_summary is not None and len(lockup_summary) > 0:
+                    today = datetime.now().date()
+                    lockup_events = []
+                    
+                    for _, row in lockup_summary.iterrows():
+                        try:
+                            expiry_date_str = str(row.get('解禁日期', ''))
+                            if expiry_date_str and expiry_date_str != 'nan':
+                                expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d').date()
+                                days_until = (expiry_date - today).days
+                                
+                                # 只保留未来的解禁日期
+                                if days_until >= 0:
+                                    lockup_shares = row.get('解禁股数', 0)
+                                    lockup_ratio = row.get('解禁股数占总股本比例', 0)
+                                    
+                                    lockup_events.append({
+                                        'expiry_date': expiry_date.strftime('%Y-%m-%d'),
+                                        'days_until': days_until,
+                                        'lockup_shares': lockup_shares,
+                                        'lockup_ratio': lockup_ratio,
+                                        'lockup_type': row.get('解禁类型', '未知')
+                                    })
+                        except:
+                            continue
+                    
+                    # 按日期排序，获取最近的解禁日期
+                    if lockup_events:
+                        lockup_events.sort(key=lambda x: x['days_until'])
+                        next_lockup = lockup_events[0]
+                        
+                        lockup_data['lockup_expiry_date'] = next_lockup['expiry_date']
+                        lockup_data['days_until_lockup'] = next_lockup['days_until']
+                        lockup_data['is_lockup_risk'] = 0 <= next_lockup['days_until'] < 14
+                        lockup_data['lockup_shares_ratio'] = next_lockup.get('lockup_ratio', 0)
+                        lockup_data['lockup_events'] = lockup_events
+            except Exception as e:
+                print(f"获取A股解禁数据失败（AkShare）: {e}")
+                # 如果AkShare接口不可用，尝试从其他数据源获取
+                # 或者使用默认值
+        except ImportError:
+            print("警告: AkShare未安装，无法获取A股解禁数据")
+        except Exception as e:
+            print(f"获取A股解禁数据失败: {e}")
+    
+    return lockup_data
+
+
 def infer_industry_from_name(name, symbol):
     """
     根据公司名称和股票代码推断行业信息
@@ -707,6 +835,9 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
             except:
                 pass
         
+        # 获取IPO与解禁监控数据
+        lockup_data = get_ipo_lockup_data(info, normalized_ticker)
+        
         # 获取市值（如果有）
         market_cap = info.get('marketCap') or info.get('totalAssets') or 0
         try:
@@ -846,6 +977,7 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
             "history_prices": [float(p) for p in history_prices],
             "volume_anomaly": volume_anomaly,
             "earnings_dates": earnings_dates[:2] if earnings_dates else [],  # 只保留最近2个财报日期
+            "lockup_data": lockup_data,  # IPO与解禁监控数据
             "atr": atr_value,  # ATR值，用于动态止损
             "beta": beta  # Beta值，用于调整ATR倍数
         }
@@ -2995,6 +3127,41 @@ def analyze_risk_and_position(style, data):
     if data['margin'] < 0.05:
         risk_score += 1
         risk_flags.append("B: 利润率极低 (<5%)")
+
+    # 财报日风险检测（波动率事件 - Binary Event）
+    earnings_dates = data.get('earnings_dates', [])
+    if earnings_dates:
+        from datetime import datetime
+        today = datetime.now().date()
+        for earnings_date in earnings_dates[:1]:  # 只检查最近一个财报日期
+            try:
+                earnings_dt = datetime.strptime(earnings_date, '%Y-%m-%d').date()
+                days_until = (earnings_dt - today).days
+                if 0 <= days_until < 7:
+                    risk_score += 1
+                    risk_flags.append(f"财报日风险: 财报将在{earnings_date}发布（{days_until}天后），波动率风险极高，建议财报前3天避险")
+                elif 7 <= days_until <= 14:
+                    risk_score += 0.5
+                    risk_flags.append(f"财报日风险: 财报将在{earnings_date}发布（{days_until}天后），建议提前规划")
+            except:
+                pass
+
+    # 解禁期风险检测（供给侧冲击 - Lock-up Expiry）
+    lockup_data = data.get('lockup_data', {})
+    if lockup_data and lockup_data.get('days_until_lockup') is not None:
+        days_until_lockup = lockup_data['days_until_lockup']
+        if 0 <= days_until_lockup < 7:
+            risk_score += 2.5
+            lockup_date = lockup_data.get('lockup_expiry_date', '未知日期')
+            risk_flags.append(f"解禁期风险: 解禁将在{lockup_date}到来（{days_until_lockup}天后），抛压风险极高，可能面临巨大抛压")
+        elif 7 <= days_until_lockup <= 14:
+            risk_score += 1.5
+            lockup_date = lockup_data.get('lockup_expiry_date', '未知日期')
+            risk_flags.append(f"解禁期风险: 解禁将在{lockup_date}到来（{days_until_lockup}天后），可能面临抛压")
+        # 如果解禁期已过（days_until_lockup < 0），不增加风险分，但可以添加提示
+        elif days_until_lockup < 0 and abs(days_until_lockup) <= 30:
+            # 解禁期刚过，可能仍有抛压，但不增加风险分
+            pass
 
     # 技术面 (趋势) - 投机风控
     if data['price'] < data['ma200']:
