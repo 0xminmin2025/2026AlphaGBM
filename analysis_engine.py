@@ -223,7 +223,7 @@ def get_ipo_lockup_data(info, ticker):
     from datetime import datetime, timedelta
     
     # 判断市场类型
-    is_us_market = '.' not in ticker or ticker.endswith(('.US', ''))
+    is_us_market = '.' not in ticker or ticker.endswith(('.US'))
     is_hk_market = ticker.endswith('.HK')
     is_cn_market = ticker.endswith('.SS') or ticker.endswith('.SZ')
     
@@ -821,20 +821,19 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
                 if calendar is not None and len(calendar) > 0:
                     # 获取最近的财报日期
                     if 'Earnings Date' in calendar:
-                        earnings_dates = calendar['Earnings Date'].dropna().tolist()
+                        earnings_dates = [d.strftime('%Y-%m-%d') for d in calendar['Earnings Date']]
         except:
             pass
         
         # 如果没有从calendar获取，尝试从info获取
         if not earnings_dates:
             try:
-                if 'earningsDate' in info and info['earningsDate']:
-                    earnings_dates = info['earningsDate']
-                    if isinstance(earnings_dates, list):
-                        earnings_dates = [str(d) for d in earnings_dates]
+                if 'earningsTimestamp' in info and info['earningsTimestamp']:
+                    if isinstance(info['earningsTimestamp'], list):
+                        earnings_dates = [d.strftime('%Y-%m-%d') for d in info['earningsTimestamp']]
             except:
                 pass
-        
+            
         # 获取IPO与解禁监控数据
         lockup_data = get_ipo_lockup_data(info, normalized_ticker)
         
