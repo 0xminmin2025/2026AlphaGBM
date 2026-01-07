@@ -1,4 +1,5 @@
 import os
+import time
 from dotenv import load_dotenv
 
 # 尝试导入 google.generativeai，如果失败则设置为 None
@@ -834,7 +835,10 @@ def get_gemini_analysis(ticker, style, data, risk_result):
         #     if 'generateContent' in model.supported_generation_methods:
         #         print(f"- {model.name} (支持 generateContent)")
         model = genai.GenerativeModel('models/gemini-2.5-flash')
+        start_time = time.time()
         response = model.generate_content(prompt)
+        elapsed = time.time() - start_time
+        print(f"[Gemini] generate_content 耗时: {elapsed:.2f}s")
         return response.text
     except Exception as e:
         print(f"Gemini API 连接失败: {str(e)}")

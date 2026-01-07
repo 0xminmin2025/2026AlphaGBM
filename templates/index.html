@@ -760,7 +760,7 @@
         try {
             // 创建带超时的fetch请求
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+            const timeoutId = setTimeout(() => controller.abort(), 300000); // 300秒超时
 
             // 获取JWT token
             const token = localStorage.getItem('token');
