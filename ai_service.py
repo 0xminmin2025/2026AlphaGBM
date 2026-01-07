@@ -829,8 +829,11 @@ def get_gemini_analysis(ticker, style, data, risk_result):
 """
 
     try:
-        # 使用 gemini-1.5-flash 模型 (速度快，且免费额度够用)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # models = genai.list_models()
+        # for model in models:
+        #     if 'generateContent' in model.supported_generation_methods:
+        #         print(f"- {model.name} (支持 generateContent)")
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:

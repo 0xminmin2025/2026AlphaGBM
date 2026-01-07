@@ -774,7 +774,7 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
         # 处理历史数据
         if not hist.empty:
             history_dates = hist.index.strftime('%Y-%m-%d').tolist()
-            history_prices = hist['Close'].tolist()
+            history_prices = hist['Close'].dropna().tolist()
             
             # 检测成交量异常（最近5天平均成交量 vs 过去30天平均成交量）
             if 'Volume' in hist.columns and len(hist) >= 30:
