@@ -121,6 +121,24 @@ db = SQLAlchemy(app) if SQLAlchemy else None
 jwt = JWTManager(app) if JWTManager else None
 mail = Mail(app) if Mail else None
 
+# 初始化支付模块（如果依赖可用）
+try:
+    from payment_module import (
+        create_payment_models, 
+        PaymentService, 
+        payment_bp, 
+        init_payment_routes,
+        init_decorators
+    )
+    from payment_module.decorators import check_quota
+    PAYMENT_MODULE_AVAILABLE = True
+    logger.info("支付模块已加载")
+except ImportError as e:
+    PAYMENT_MODULE_AVAILABLE = False
+    logger.warning(f"支付模块未加载: {e}")
+    payment_bp = None
+    check_quota = lambda *args, **kwargs: lambda f: f  # 降级为无操作装饰器
+
 # 如果缺少必要依赖，记录警告
 if not SQLAlchemy or not JWTManager:
     logger.warning("缺少依赖库: flask_sqlalchemy 或 flask_jwt_extended")
@@ -140,6 +158,13 @@ if SQLAlchemy:
         created_at = db.Column(db.DateTime, default=datetime.now)
         last_login = db.Column(db.DateTime, nullable=True)
         is_email_verified = db.Column(db.Boolean, default=False)  # 添加邮箱验证状态字段
+        
+        # 支付模块扩展字段
+        stripe_customer_id = db.Column(db.String(255), index=True, nullable=True)
+        referrer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+        
+        # 关联
+        referrer = db.relationship('User', remote_side=[id], backref='referrals')
         
         def set_password(self, password):
             self.password_hash = generate_password_hash(password)
@@ -545,6 +570,43 @@ def initialize_app():
             db.create_all()
             logging.info("数据库表创建成功")
             
+            # 初始化支付模块（如果可用）
+            if PAYMENT_MODULE_AVAILABLE and SQLAlchemy:
+                try:
+                    # 创建支付模块的数据库模型
+                    PaymentModels = create_payment_models(db)
+                    Subscription = PaymentModels['Subscription']
+                    Transaction = PaymentModels['Transaction']
+                    CreditLedger = PaymentModels['CreditLedger']
+                    UsageLog = PaymentModels['UsageLog']
+                    
+                    # 创建支付模块的表
+                    db.create_all()
+                    
+                    # 初始化支付服务
+                    payment_service = PaymentService(
+                        db=db,
+                        User=User,
+                        Subscription=Subscription,
+                        Transaction=Transaction,
+                        CreditLedger=CreditLedger,
+                        UsageLog=UsageLog,
+                        DailyQueryCount=DailyQueryCount
+                    )
+                    
+                    # 初始化路由和装饰器
+                    init_payment_routes(payment_service, get_user_info_from_token)
+                    init_decorators(payment_service, get_user_info_from_token)
+                    
+                    # 注册蓝图
+                    app.register_blueprint(payment_bp)
+                    
+                    logger.info("支付模块初始化成功")
+                except Exception as e:
+                    logger.error(f"支付模块初始化失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
             # 启动定时任务
             schedule_daily_profit_loss_calculation()  
     except Exception as e:
@@ -555,6 +617,11 @@ def initialize_app():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/pricing')
+def pricing():
+    """定价页面"""
+    return render_template('pricing.html')
 
 @app.route('/demo')
 def demo():
@@ -1133,6 +1200,7 @@ def get_stock_price():
 
 @app.route('/api/analyze', methods=['POST'])
 @jwt_required()
+@check_quota(service_type='stock_analysis', amount=1)  # 支付模块：自动检查并扣减额度
 def analyze():
     # 获取用户信息
     user_info = get_user_info_from_token()

@@ -215,15 +215,7 @@ def get_pricing():
                 'price': 29,
                 'currency': 'cny',
                 'credits': 100,
-                'validity': '永久有效'
-            },
-            '500': {
-                'name': '额度加油包（500次）',
-                'price': 129,
-                'currency': 'cny',
-                'credits': 500,
-                'validity': '永久有效',
-                'savings': '节省10%'
+                'validity': '3个月有效'
             }
         }
     }), 200

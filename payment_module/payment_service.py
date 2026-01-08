@@ -8,7 +8,11 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import jsonify, request
 from sqlalchemy import and_, or_, func
-from sqlalchemy.orm import with_for_update
+try:
+    from sqlalchemy.orm import with_for_update
+except ImportError:
+    # SQLAlchemy 2.0+ 使用不同的方式
+    with_for_update = None
 
 # 导入模型枚举
 from .models import ServiceType, CreditSource, PlanTier, SubscriptionStatus, TransactionStatus
@@ -28,8 +32,7 @@ class PaymentService:
         'plus_yearly': os.getenv('STRIPE_PRICE_PLUS_YEARLY', ''),
         'pro_monthly': os.getenv('STRIPE_PRICE_PRO_MONTHLY', ''),
         'pro_yearly': os.getenv('STRIPE_PRICE_PRO_YEARLY', ''),
-        'topup_100': os.getenv('STRIPE_PRICE_TOPUP_100', ''),
-        'topup_500': os.getenv('STRIPE_PRICE_TOPUP_500', ''),
+        'topup_100': os.getenv('STRIPE_PRICE_TOPUP_100', ''),  # 仅支持100次，3个月有效
     }
     
     # 类属性：订阅计划配置
@@ -172,14 +175,14 @@ class PaymentService:
             
             # 2. 发放额度
             if 'topup' in price_key:
-                # 一次性充值
-                amount = 100 if '100' in price_key else 500
+                # 一次性充值（仅支持100次，3个月有效）
+                amount = 100
                 self.add_credits(
                     user_id=user_id,
                     amount=amount,
                     source=CreditSource.TOP_UP.value,
                     service_type=ServiceType.STOCK_ANALYSIS.value,
-                    days_valid=3650  # 10年不过期（视为永久有效）
+                    days_valid=90  # 3个月有效
                 )
             else:
                 # 订阅逻辑
@@ -355,7 +358,7 @@ class PaymentService:
             return True, "使用每日免费额度", self.get_total_credits(user_id, service_type)
         
         # 2. 查找有效额度（FIFO：先过期的先用）
-        valid_credits = self.CreditLedger.query.filter(
+        query = self.CreditLedger.query.filter(
             and_(
                 self.CreditLedger.user_id == user_id,
                 self.CreditLedger.service_type == service_type,
@@ -367,7 +370,14 @@ class PaymentService:
             )
         ).order_by(
             self.CreditLedger.expires_at.asc().nullslast()  # 先过期的先用，永久有效的最后
-        ).with_for_update().first()  # 行锁防止并发
+        )
+        
+        # 行锁防止并发（with_for_update是Query对象的方法，不是导入的）
+        try:
+            valid_credits = query.with_for_update().first()
+        except (AttributeError, TypeError):
+            # 如果with_for_update不可用，直接查询（生产环境建议使用数据库级别的锁）
+            valid_credits = query.first()
         
         if not valid_credits:
             total = self.get_total_credits(user_id, service_type)
@@ -408,7 +418,7 @@ class PaymentService:
         Returns:
             bool: 是否可以使用免费额度
         """
-            free_quota = self.DAILY_FREE_QUOTA.get(service_type, 0)
+        free_quota = self.DAILY_FREE_QUOTA.get(service_type, 0)
         if free_quota == 0:
             return False
         
