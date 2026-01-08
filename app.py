@@ -594,6 +594,9 @@ def initialize_app():
                         DailyQueryCount=DailyQueryCount
                     )
                     
+                    # 将payment_service保存到app实例，方便其他路由访问
+                    app.payment_service = payment_service
+                    
                     # 初始化路由和装饰器
                     init_payment_routes(payment_service, get_user_info_from_token)
                     init_decorators(payment_service, get_user_info_from_token)
@@ -627,6 +630,11 @@ def pricing():
 def agent():
     """AI智能体页面"""
     return render_template('agent.html')
+
+@app.route('/profile')
+def profile():
+    """我的账户页面"""
+    return render_template('profile.html')
 
 @app.route('/demo')
 def demo():
@@ -1501,6 +1509,280 @@ def submit_feedback():
         db.session.rollback()
         logger.error(f"处理反馈时出错: {str(e)}")
         return jsonify({'success': False, 'error': f"服务器错误: {str(e)}"}), 500
+
+# ==================== 用户资料API ====================
+
+@app.route('/api/profile', methods=['GET'])
+@jwt_required()
+def get_profile():
+    """获取用户资料"""
+    try:
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'error': '请先登录'}), 401
+        
+        user_id = user_info['user_id']
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': '用户不存在'}), 404
+        
+        # 获取订阅信息
+        plan_tier = 'free'
+        if hasattr(app, 'payment_service') and app.payment_service:
+            subscription = app.payment_service.Subscription.query.filter_by(
+                user_id=user_id,
+                status='active'
+            ).first()
+            if subscription:
+                plan_tier = subscription.plan_tier
+        
+        # 统计使用次数
+        total_usage = 0
+        if hasattr(app, 'payment_service') and app.payment_service:
+            total_usage = app.payment_service.UsageLog.query.filter_by(user_id=user_id).count()
+        
+        # 统计剩余额度
+        remaining_credits = 0
+        if hasattr(app, 'payment_service') and app.payment_service:
+            remaining_credits = app.payment_service.get_total_credits(user_id, 'stock_analysis')
+        
+        # 统计总消费
+        total_spent = 0
+        if hasattr(app, 'payment_service') and app.payment_service:
+            transactions = app.payment_service.Transaction.query.filter_by(
+                user_id=user_id,
+                status='succeeded'
+            ).all()
+            total_spent = sum(t.amount for t in transactions) / 100.0  # 转换为元
+        
+        # 统计邀请人数
+        referral_count = 0
+        if SQLAlchemy:
+            referral_count = User.query.filter_by(referrer_id=user_id).count()
+        
+        return jsonify({
+            'username': user.username,
+            'email': user.email,
+            'created_at': user.created_at.isoformat() if user.created_at else None,
+            'last_login': user.last_login.isoformat() if user.last_login else None,
+            'plan_tier': plan_tier,
+            'total_usage': total_usage,
+            'remaining_credits': remaining_credits,
+            'total_spent': total_spent,
+            'referral_count': referral_count
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取用户资料失败: {e}")
+        return jsonify({'error': '获取用户资料失败'}), 500
+
+@app.route('/api/profile/credits', methods=['GET'])
+@jwt_required()
+def get_profile_credits():
+    """获取用户额度列表"""
+    try:
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'error': '请先登录'}), 401
+        
+        user_id = user_info['user_id']
+        
+        if not hasattr(app, 'payment_service') or not app.payment_service:
+            return jsonify({'credits': []}), 200
+        
+        credits = app.payment_service.CreditLedger.query.filter_by(
+            user_id=user_id
+        ).order_by(app.payment_service.CreditLedger.created_at.desc()).limit(20).all()
+        
+        credits_data = [{
+            'id': c.id,
+            'source': c.source,
+            'service_type': c.service_type,
+            'amount_initial': c.amount_initial,
+            'amount_remaining': c.amount_remaining,
+            'expires_at': c.expires_at.isoformat() if c.expires_at else None,
+            'created_at': c.created_at.isoformat() if c.created_at else None
+        } for c in credits]
+        
+        return jsonify({'credits': credits_data}), 200
+        
+    except Exception as e:
+        logger.error(f"获取额度列表失败: {e}")
+        return jsonify({'error': '获取额度列表失败'}), 500
+
+@app.route('/api/profile/usage', methods=['GET'])
+@jwt_required()
+def get_profile_usage():
+    """获取使用历史"""
+    try:
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'error': '请先登录'}), 401
+        
+        user_id = user_info['user_id']
+        page = request.args.get('page', 1, type=int)
+        filter_type = request.args.get('filter', 'all')
+        per_page = 20
+        
+        if not hasattr(app, 'payment_service') or not app.payment_service:
+            return jsonify({'usage': [], 'total_pages': 0}), 200
+        
+        query = app.payment_service.UsageLog.query.filter_by(user_id=user_id)
+        
+        if filter_type != 'all':
+            query = query.filter_by(service_type=filter_type)
+        
+        pagination = query.order_by(
+            app.payment_service.UsageLog.created_at.desc()
+        ).paginate(page=page, per_page=per_page, error_out=False)
+        
+        usage_data = [{
+            'id': u.id,
+            'service_type': u.service_type,
+            'ticker': u.ticker,
+            'amount_used': u.amount_used,
+            'created_at': u.created_at.isoformat() if u.created_at else None
+        } for u in pagination.items]
+        
+        return jsonify({
+            'usage': usage_data,
+            'total_pages': pagination.pages,
+            'current_page': page
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取使用历史失败: {e}")
+        return jsonify({'error': '获取使用历史失败'}), 500
+
+@app.route('/api/profile/payments', methods=['GET'])
+@jwt_required()
+def get_profile_payments():
+    """获取付费记录"""
+    try:
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'error': '请先登录'}), 401
+        
+        user_id = user_info['user_id']
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        
+        if not hasattr(app, 'payment_service') or not app.payment_service:
+            return jsonify({'payments': [], 'total_pages': 0}), 200
+        
+        # 获取交易记录
+        transactions = app.payment_service.Transaction.query.filter_by(
+            user_id=user_id
+        ).order_by(
+            app.payment_service.Transaction.created_at.desc()
+        ).paginate(page=page, per_page=per_page, error_out=False)
+        
+        payments_data = []
+        for t in transactions.items:
+            # 判断类型
+            payment_type = 'other'
+            description = t.description or '支付'
+            
+            # 检查是否是订阅
+            if t.stripe_checkout_session_id:
+                subscription = app.payment_service.Subscription.query.filter_by(
+                    user_id=user_id
+                ).first()
+                if subscription:
+                    payment_type = 'subscription'
+                    description = f"{subscription.plan_tier.upper()}会员订阅"
+                else:
+                    payment_type = 'top_up'
+                    description = '额度充值'
+            
+            payments_data.append({
+                'id': t.id,
+                'type': payment_type,
+                'amount': t.amount,
+                'currency': t.currency,
+                'status': t.status,
+                'description': description,
+                'created_at': t.created_at.isoformat() if t.created_at else None
+            })
+        
+        return jsonify({
+            'payments': payments_data,
+            'total_pages': transactions.pages,
+            'current_page': page
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取付费记录失败: {e}")
+        return jsonify({'error': '获取付费记录失败'}), 500
+
+@app.route('/api/profile/subscription', methods=['GET'])
+@jwt_required()
+def get_profile_subscription():
+    """获取订阅信息"""
+    try:
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'error': '请先登录'}), 401
+        
+        user_id = user_info['user_id']
+        
+        if not hasattr(app, 'payment_service') or not app.payment_service:
+            return jsonify({'subscription': None}), 200
+        
+        subscription = app.payment_service.Subscription.query.filter_by(
+            user_id=user_id,
+            status='active'
+        ).first()
+        
+        if not subscription:
+            return jsonify({'subscription': None}), 200
+        
+        return jsonify({
+            'subscription': {
+                'id': subscription.id,
+                'plan_tier': subscription.plan_tier,
+                'status': subscription.status,
+                'current_period_start': subscription.current_period_start.isoformat() if subscription.current_period_start else None,
+                'current_period_end': subscription.current_period_end.isoformat() if subscription.current_period_end else None,
+                'cancel_at_period_end': subscription.cancel_at_period_end
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取订阅信息失败: {e}")
+        return jsonify({'error': '获取订阅信息失败'}), 500
+
+@app.route('/api/profile/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    """修改密码"""
+    try:
+        user_info = get_user_info_from_token()
+        if not user_info or 'user_id' not in user_info:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+        
+        user_id = user_info['user_id']
+        data = request.json
+        
+        if not data.get('old_password') or not data.get('new_password'):
+            return jsonify({'success': False, 'error': '请提供旧密码和新密码'}), 400
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': '用户不存在'}), 404
+        
+        if not user.check_password(data['old_password']):
+            return jsonify({'success': False, 'error': '旧密码错误'}), 400
+        
+        user.set_password(data['new_password'])
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '密码修改成功'}), 200
+        
+    except Exception as e:
+        logger.error(f"修改密码失败: {e}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': '修改密码失败'}), 500
 
 
 if __name__ == '__main__':

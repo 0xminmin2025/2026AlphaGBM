@@ -1,0 +1,996 @@
+{% extends "base.html" %}
+
+{% block title %}我的账户 - AlphaGBM{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+<style>
+    /* 我的页面样式 - 符合设计系统 */
+    .profile-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+
+    .profile-header {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+    }
+
+    .profile-avatar {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: var(--primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: var(--primary-foreground);
+        flex-shrink: 0;
+    }
+
+    .profile-info {
+        flex: 1;
+    }
+
+    .profile-name {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--foreground);
+        margin-bottom: 0.5rem;
+    }
+
+    .profile-email {
+        color: var(--muted-foreground);
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .profile-meta {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .meta-label {
+        font-size: 0.75rem;
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .meta-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--foreground);
+    }
+
+    .profile-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .badge-free {
+        background: var(--muted);
+        color: var(--muted-foreground);
+    }
+
+    .badge-plus {
+        background: rgba(59, 130, 246, 0.2);
+        color: #3b82f6;
+        border: 1px solid #3b82f6;
+    }
+
+    .badge-pro {
+        background: rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+        border: 1px solid #f59e0b;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: all 0.2s;
+    }
+
+    .stat-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+    }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--foreground);
+    }
+
+    .stat-change {
+        font-size: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .stat-change.positive {
+        color: var(--success);
+    }
+
+    .stat-change.negative {
+        color: var(--error);
+    }
+
+    .section {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--foreground);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .section-action {
+        color: var(--primary);
+        text-decoration: none;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: color 0.2s;
+    }
+
+    .section-action:hover {
+        color: var(--accent);
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .data-table thead {
+        background: var(--muted);
+    }
+
+    .data-table th {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .data-table td {
+        padding: 1rem;
+        border-top: 1px solid var(--border);
+        color: var(--foreground);
+        font-size: 0.9rem;
+    }
+
+    .data-table tbody tr:hover {
+        background: var(--muted);
+    }
+
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .status-active {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--success);
+    }
+
+    .status-pending {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--warning);
+    }
+
+    .status-canceled {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--error);
+    }
+
+    .status-succeeded {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--success);
+    }
+
+    .status-failed {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--error);
+    }
+
+    .credit-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+    }
+
+    .credit-item:hover {
+        border-color: var(--primary);
+        background: var(--muted);
+    }
+
+    .credit-info {
+        flex: 1;
+    }
+
+    .credit-source {
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+        margin-bottom: 0.25rem;
+    }
+
+    .credit-amount {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--foreground);
+    }
+
+    .credit-meta {
+        font-size: 0.75rem;
+        color: var(--muted-foreground);
+        margin-top: 0.25rem;
+    }
+
+    .credit-expiry {
+        text-align: right;
+        font-size: 0.875rem;
+    }
+
+    .expiry-date {
+        color: var(--muted-foreground);
+    }
+
+    .expiry-warning {
+        color: var(--warning);
+    }
+
+    .expiry-expired {
+        color: var(--error);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--muted-foreground);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state p {
+        font-size: 0.95rem;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-action {
+        padding: 0.75rem 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--muted);
+        color: var(--foreground);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .btn-action:hover {
+        background: var(--accent);
+        border-color: var(--primary);
+        color: var(--foreground);
+    }
+
+    .btn-primary-action {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+    }
+
+    .btn-primary-action:hover {
+        background: var(--accent);
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .pagination-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--muted);
+        color: var(--foreground);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+        background: var(--accent);
+        border-color: var(--primary);
+    }
+
+    .pagination-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pagination-btn.active {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-color: var(--primary);
+    }
+
+    @media (max-width: 768px) {
+        .profile-header {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .profile-meta {
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <!-- 用户信息头部 -->
+    <div class="profile-header">
+        <div class="profile-avatar">
+            <i class="bi bi-person-fill"></i>
+        </div>
+        <div class="profile-info">
+            <div class="profile-name" id="userName">加载中...</div>
+            <div class="profile-email" id="userEmail">加载中...</div>
+            <div class="profile-meta">
+                <div class="meta-item">
+                    <span class="meta-label">注册时间</span>
+                    <span class="meta-value" id="createdAt">-</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">最后登录</span>
+                    <span class="meta-value" id="lastLogin">-</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">会员等级</span>
+                    <span class="meta-value">
+                        <span class="profile-badge" id="planBadge">免费版</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">总使用次数</div>
+            <div class="stat-value" id="totalUsage">0</div>
+            <div class="stat-change" id="usageChange"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">剩余额度</div>
+            <div class="stat-value" id="remainingCredits">0</div>
+            <div class="stat-change" id="creditsChange"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">总消费</div>
+            <div class="stat-value" id="totalSpent">¥0</div>
+            <div class="stat-change" id="spentChange"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">邀请人数</div>
+            <div class="stat-value" id="referralCount">0</div>
+            <div class="stat-change" id="referralChange"></div>
+        </div>
+    </div>
+
+    <!-- 额度详情 -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">
+                <i class="bi bi-wallet2"></i>
+                我的额度
+            </h3>
+            <a href="/pricing" class="section-action">
+                充值额度
+                <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
+        <div id="creditsList">
+            <div class="empty-state">
+                <i class="bi bi-wallet2"></i>
+                <p>暂无额度记录</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 使用历史 -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">
+                <i class="bi bi-clock-history"></i>
+                使用历史
+            </h3>
+            <div class="action-buttons">
+                <button class="btn-action" onclick="filterUsage('all')">
+                    <i class="bi bi-list-ul"></i> 全部
+                </button>
+                <button class="btn-action" onclick="filterUsage('stock_analysis')">
+                    <i class="bi bi-graph-up"></i> 股票分析
+                </button>
+                <button class="btn-action" onclick="filterUsage('option_analysis')">
+                    <i class="bi bi-graph-up-arrow"></i> 期权分析
+                </button>
+            </div>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>服务类型</th>
+                        <th>股票代码</th>
+                        <th>消耗额度</th>
+                    </tr>
+                </thead>
+                <tbody id="usageHistoryTable">
+                    <tr>
+                        <td colspan="4" class="empty-state">
+                            <i class="bi bi-clock-history"></i>
+                            <p>暂无使用记录</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination" id="usagePagination"></div>
+    </div>
+
+    <!-- 付费记录 -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">
+                <i class="bi bi-receipt"></i>
+                付费记录
+            </h3>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>类型</th>
+                        <th>金额</th>
+                        <th>状态</th>
+                        <th>描述</th>
+                    </tr>
+                </thead>
+                <tbody id="paymentHistoryTable">
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <i class="bi bi-receipt"></i>
+                            <p>暂无付费记录</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination" id="paymentPagination"></div>
+    </div>
+
+    <!-- 订阅管理 -->
+    <div class="section" id="subscriptionSection" style="display: none;">
+        <div class="section-header">
+            <h3 class="section-title">
+                <i class="bi bi-credit-card"></i>
+                订阅管理
+            </h3>
+        </div>
+        <div id="subscriptionInfo">
+            <!-- 订阅信息将在这里显示 -->
+        </div>
+    </div>
+
+    <!-- 账户设置 -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">
+                <i class="bi bi-gear"></i>
+                账户设置
+            </h3>
+        </div>
+        <div class="action-buttons">
+            <button class="btn-action" onclick="changePassword()">
+                <i class="bi bi-key"></i> 修改密码
+            </button>
+            <button class="btn-action" onclick="exportData()">
+                <i class="bi bi-download"></i> 导出数据
+            </button>
+            <a href="/pricing" class="btn-action btn-primary-action">
+                <i class="bi bi-star"></i> 升级会员
+            </a>
+            <button class="btn-action" onclick="logout()" style="color: var(--error);">
+                <i class="bi bi-box-arrow-right"></i> 退出登录
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentUsageFilter = 'all';
+    let currentUsagePage = 1;
+    let currentPaymentPage = 1;
+
+    // 页面加载时获取数据
+    window.onload = async function() {
+        await loadUserProfile();
+        await loadCredits();
+        await loadUsageHistory();
+        await loadPaymentHistory();
+        await loadSubscription();
+    };
+
+    // 加载用户信息
+    async function loadUserProfile() {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/';
+                return;
+            }
+
+            const response = await fetch('/api/profile', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                    return;
+                }
+                throw new Error('获取用户信息失败');
+            }
+
+            const data = await response.json();
+            
+            document.getElementById('userName').textContent = data.username || data.email;
+            document.getElementById('userEmail').textContent = data.email;
+            document.getElementById('createdAt').textContent = formatDate(data.created_at);
+            document.getElementById('lastLogin').textContent = data.last_login ? formatDate(data.last_login) : '从未登录';
+            
+            // 更新会员等级
+            const planTier = data.plan_tier || 'free';
+            const badge = document.getElementById('planBadge');
+            badge.textContent = planTier === 'plus' ? 'Plus会员' : planTier === 'pro' ? 'Pro会员' : '免费版';
+            badge.className = 'profile-badge ' + (planTier === 'plus' ? 'badge-plus' : planTier === 'pro' ? 'badge-pro' : 'badge-free');
+
+            // 更新统计
+            document.getElementById('totalUsage').textContent = data.total_usage || 0;
+            document.getElementById('remainingCredits').textContent = data.remaining_credits || 0;
+            document.getElementById('totalSpent').textContent = '¥' + (data.total_spent || 0).toFixed(2);
+            document.getElementById('referralCount').textContent = data.referral_count || 0;
+
+        } catch (error) {
+            console.error('加载用户信息失败:', error);
+            alert('加载用户信息失败，请刷新页面重试');
+        }
+    }
+
+    // 加载额度信息
+    async function loadCredits() {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/profile/credits', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const creditsList = document.getElementById('creditsList');
+            
+            if (!data.credits || data.credits.length === 0) {
+                creditsList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-wallet2"></i>
+                        <p>暂无额度记录</p>
+                    </div>
+                `;
+                return;
+            }
+
+            creditsList.innerHTML = data.credits.map(credit => {
+                const expiryClass = credit.expires_at ? 
+                    (new Date(credit.expires_at) < new Date() ? 'expiry-expired' : 
+                     (new Date(credit.expires_at) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'expiry-warning' : 'expiry-date')) : 
+                    'expiry-date';
+                
+                const sourceText = {
+                    'subscription': '订阅发放',
+                    'top_up': '充值购买',
+                    'referral': '邀请奖励',
+                    'free_daily': '每日免费'
+                }[credit.source] || credit.source;
+
+                return `
+                    <div class="credit-item">
+                        <div class="credit-info">
+                            <div class="credit-source">${sourceText}</div>
+                            <div class="credit-amount">剩余 ${credit.amount_remaining} / 总计 ${credit.amount_initial}</div>
+                            <div class="credit-meta">${credit.service_type === 'stock_analysis' ? '股票分析' : credit.service_type === 'option_analysis' ? '期权分析' : '深度研报'}</div>
+                        </div>
+                        <div class="credit-expiry">
+                            ${credit.expires_at ? 
+                                `<div class="${expiryClass}">${formatDate(credit.expires_at)}</div>` : 
+                                '<div class="expiry-date">永久有效</div>'
+                            }
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (error) {
+            console.error('加载额度信息失败:', error);
+        }
+    }
+
+    // 加载使用历史
+    async function loadUsageHistory(page = 1) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/profile/usage?page=${page}&filter=${currentUsageFilter}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const tableBody = document.getElementById('usageHistoryTable');
+            
+            if (!data.usage || data.usage.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="empty-state">
+                            <i class="bi bi-clock-history"></i>
+                            <p>暂无使用记录</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tableBody.innerHTML = data.usage.map(item => `
+                <tr>
+                    <td>${formatDateTime(item.created_at)}</td>
+                    <td>${item.service_type === 'stock_analysis' ? '股票分析' : item.service_type === 'option_analysis' ? '期权分析' : '深度研报'}</td>
+                    <td>${item.ticker || '-'}</td>
+                    <td>${item.amount_used}</td>
+                </tr>
+            `).join('');
+
+            // 更新分页
+            updatePagination('usagePagination', page, data.total_pages || 1, loadUsageHistory);
+            currentUsagePage = page;
+
+        } catch (error) {
+            console.error('加载使用历史失败:', error);
+        }
+    }
+
+    // 加载付费记录
+    async function loadPaymentHistory(page = 1) {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/api/profile/payments?page=${page}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const tableBody = document.getElementById('paymentHistoryTable');
+            
+            if (!data.payments || data.payments.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <i class="bi bi-receipt"></i>
+                            <p>暂无付费记录</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tableBody.innerHTML = data.payments.map(item => {
+                const statusClass = {
+                    'succeeded': 'status-succeeded',
+                    'pending': 'status-pending',
+                    'failed': 'status-failed',
+                    'refunded': 'status-canceled'
+                }[item.status] || 'status-pending';
+
+                const statusText = {
+                    'succeeded': '成功',
+                    'pending': '处理中',
+                    'failed': '失败',
+                    'refunded': '已退款'
+                }[item.status] || item.status;
+
+                const typeText = item.type === 'subscription' ? '订阅' : item.type === 'top_up' ? '充值' : '其他';
+
+                return `
+                    <tr>
+                        <td>${formatDateTime(item.created_at)}</td>
+                        <td>${typeText}</td>
+                        <td>¥${(item.amount / 100).toFixed(2)}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>${item.description || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // 更新分页
+            updatePagination('paymentPagination', page, data.total_pages || 1, loadPaymentHistory);
+            currentPaymentPage = page;
+
+        } catch (error) {
+            console.error('加载付费记录失败:', error);
+        }
+    }
+
+    // 加载订阅信息
+    async function loadSubscription() {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/profile/subscription', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            
+            if (data.subscription) {
+                document.getElementById('subscriptionSection').style.display = 'block';
+                const subscriptionInfo = document.getElementById('subscriptionInfo');
+                
+                const statusClass = {
+                    'active': 'status-active',
+                    'past_due': 'status-pending',
+                    'canceled': 'status-canceled'
+                }[data.subscription.status] || 'status-pending';
+
+                const statusText = {
+                    'active': '生效中',
+                    'past_due': '逾期',
+                    'canceled': '已取消'
+                }[data.subscription.status] || data.subscription.status;
+
+                subscriptionInfo.innerHTML = `
+                    <div class="credit-item">
+                        <div class="credit-info">
+                            <div class="credit-source">${data.subscription.plan_tier === 'plus' ? 'Plus会员' : 'Pro会员'}</div>
+                            <div class="credit-amount">${statusText}</div>
+                            <div class="credit-meta">
+                                周期结束: ${formatDate(data.subscription.current_period_end)}
+                            </div>
+                        </div>
+                        <div class="credit-expiry">
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('加载订阅信息失败:', error);
+        }
+    }
+
+    // 过滤使用历史
+    function filterUsage(filter) {
+        currentUsageFilter = filter;
+        currentUsagePage = 1;
+        loadUsageHistory(1);
+    }
+
+    // 更新分页
+    function updatePagination(containerId, currentPage, totalPages, loadFunction) {
+        const container = document.getElementById(containerId);
+        if (totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+        if (currentPage > 1) {
+            html += `<button class="pagination-btn" onclick="${loadFunction.name}(${currentPage - 1})">上一页</button>`;
+        }
+        
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${loadFunction.name}(${i})">${i}</button>`;
+            } else if (i === currentPage - 2 || i === currentPage + 2) {
+                html += `<span class="pagination-btn" style="border: none; background: transparent;">...</span>`;
+            }
+        }
+        
+        if (currentPage < totalPages) {
+            html += `<button class="pagination-btn" onclick="${loadFunction.name}(${currentPage + 1})">下一页</button>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // 修改密码
+    function changePassword() {
+        const oldPassword = prompt('请输入当前密码:');
+        if (!oldPassword) return;
+
+        const newPassword = prompt('请输入新密码:');
+        if (!newPassword) return;
+
+        const confirmPassword = prompt('请确认新密码:');
+        if (newPassword !== confirmPassword) {
+            alert('两次输入的密码不一致');
+            return;
+        }
+
+        // 调用API修改密码
+        const token = localStorage.getItem('token');
+        fetch('/api/profile/change-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                old_password: oldPassword,
+                new_password: newPassword
+            })
+        }).then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('密码修改成功');
+            } else {
+                alert('密码修改失败: ' + (data.error || '未知错误'));
+            }
+        }).catch(error => {
+            console.error('修改密码失败:', error);
+            alert('修改密码失败，请重试');
+        });
+    }
+
+    // 导出数据
+    function exportData() {
+        alert('数据导出功能开发中...');
+    }
+
+    // 退出登录
+    function logout() {
+        if (confirm('确定要退出登录吗？')) {
+            localStorage.removeItem('token');
+            window.location.href = '/';
+        }
+    }
+
+    // 格式化日期
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+    }
+
+    // 格式化日期时间
+    function formatDateTime(dateString) {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+</script>
+{% endblock %}
