@@ -22,7 +22,7 @@ AlphaGBM 支付模块是一个基于"点数/额度（Credits）"的账本系统�
 1. 当日免费额度（每日重置）
 2. 即将过期的赠送额度（如邀请奖励）
 3. 订阅月度额度（月底清零）
-4. 充值额度（永久有效）
+4. 充值额度（3个月有效）
 
 ### 4. 服务类型分离
 - **股票分析** (`stock_analysis`)
@@ -187,7 +187,7 @@ if not success:
 
 1. **每日免费额度**：优先使用，每天重置
 2. **即将过期的额度**：按过期时间升序（先过期的先用）
-3. **永久有效额度**：最后使用
+3. **充值额度**：3个月有效期，按过期时间排序
 
 查询SQL示例：
 ```sql
@@ -261,8 +261,7 @@ STRIPE_PRICE_PLUS_MONTHLY=price_...
 STRIPE_PRICE_PLUS_YEARLY=price_...
 STRIPE_PRICE_PRO_MONTHLY=price_...
 STRIPE_PRICE_PRO_YEARLY=price_...
-STRIPE_PRICE_TOPUP_100=price_...
-STRIPE_PRICE_TOPUP_500=price_...
+STRIPE_PRICE_TOPUP_100=price_...  # 仅支持100次，3个月有效
 ```
 
 ### Stripe Dashboard设置
@@ -272,8 +271,7 @@ STRIPE_PRICE_TOPUP_500=price_...
    - Plus年度订阅：¥3990/年
    - Pro月度订阅：¥999/月
    - Pro年度订阅：¥9990/年
-   - 额度加油包100次：¥29
-   - 额度加油包500次：¥129
+   - 额度加油包100次：¥29（3个月有效，仅限付费用户）
 
 2. **配置Webhook**：
    - URL: `https://yourdomain.com/api/payment/webhook`
