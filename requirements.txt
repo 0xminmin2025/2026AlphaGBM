@@ -17,4 +17,5 @@ requests
 akshare
 alpha_vantage
 apscheduler
+stripe
 
