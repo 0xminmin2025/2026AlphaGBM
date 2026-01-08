@@ -623,6 +623,11 @@ def pricing():
     """定价页面"""
     return render_template('pricing.html')
 
+@app.route('/agent')
+def agent():
+    """AI智能体页面"""
+    return render_template('agent.html')
+
 @app.route('/demo')
 def demo():
     """设计系统演示页面"""

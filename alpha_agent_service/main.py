@@ -8,13 +8,14 @@ from app.api.routes import router as agent_router
 from app.config import settings
 import uvicorn
 
-# 验证配置
+# 验证配置（开发环境可以跳过，但会显示警告）
 try:
     settings.validate()
 except ValueError as e:
-    print(f"配置错误: {e}")
-    print("请检查 .env 文件中的环境变量配置")
-    exit(1)
+    print(f"⚠️  配置警告: {e}")
+    print("⚠️  某些功能可能无法使用，但服务仍可启动（用于测试）")
+    print("⚠️  生产环境请务必配置完整的环境变量")
+    # 开发环境不退出，允许部分功能测试
 
 # 创建FastAPI应用
 app = FastAPI(

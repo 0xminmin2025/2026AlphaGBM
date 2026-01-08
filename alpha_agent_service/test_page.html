@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaGBM 智能体测试页面</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+        }
+        .chat-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .message {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .message.user {
+            background: rgba(59, 130, 246, 0.2);
+            border-left: 3px solid #3b82f6;
+        }
+        .message.assistant {
+            background: rgba(16, 185, 129, 0.2);
+            border-left: 3px solid #10b981;
+        }
+        .message.system {
+            background: rgba(148, 163, 184, 0.2);
+            border-left: 3px solid #94a3b8;
+            font-size: 0.9rem;
+        }
+        .typing-indicator {
+            display: none;
+        }
+        .typing-indicator.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-400">
+            🤖 AlphaGBM 智能体测试
+        </h1>
+        <p class="text-slate-400 mb-6">基于 G=B+M 模型的AI投资分析智能体</p>
+
+        <!-- 配置区域 -->
+        <div class="bg-slate-800 rounded-lg p-4 mb-6">
+            <h2 class="text-lg font-semibold mb-3">配置</h2>
+            <div class="space-y-2">
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">服务地址</label>
+                    <input type="text" id="serviceUrl" value="http://localhost:8001" 
+                           class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Bearer Token (可选，用于鉴权)</label>
+                    <input type="text" id="bearerToken" placeholder="Bearer token..." 
+                           class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                </div>
+            </div>
+        </div>
+
+        <!-- 聊天区域 -->
+        <div class="bg-slate-800 rounded-lg p-4 mb-4">
+            <div class="chat-container" id="chatContainer">
+                <div class="message system">
+                    <strong>系统:</strong> 智能体服务已连接。你可以开始提问了！
+                    <br><small>提示：输入股票代码（如 AAPL、600519）或发送新闻链接进行分析</small>
+                </div>
+            </div>
+            
+            <div class="typing-indicator" id="typingIndicator">
+                <div class="message assistant">
+                    <span class="inline-flex items-center">
+                        <span class="animate-pulse">●</span>
+                        <span class="ml-2">智能体正在思考...</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="bg-slate-800 rounded-lg p-4">
+            <div class="flex gap-2">
+                <input type="text" id="messageInput" 
+                       placeholder="输入问题，如：分析一下AAPL" 
+                       class="flex-1 bg-slate-700 border border-slate-600 rounded px-4 py-2 text-white"
+                       onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button onclick="sendMessage()" 
+                        class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-semibold">
+                    发送
+                </button>
+            </div>
+            <div class="mt-3 flex gap-2 flex-wrap">
+                <button onclick="quickQuestion('分析一下AAPL')" 
+                        class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">
+                    📊 分析AAPL
+                </button>
+                <button onclick="quickQuestion('对比茅台和五粮液')" 
+                        class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">
+                    🔍 对比股票
+                </button>
+                <button onclick="quickQuestion('查询SOL链上的代币')" 
+                        class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">
+                    🪙 查询代币
+                </button>
+            </div>
+        </div>
+
+        <!-- 状态信息 -->
+        <div class="mt-4 text-center text-sm text-slate-400">
+            <span id="statusText">就绪</span>
+        </div>
+    </div>
+
+    <script>
+        const serviceUrl = document.getElementById('serviceUrl');
+        const bearerToken = document.getElementById('bearerToken');
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const statusText = document.getElementById('statusText');
+
+        let messages = [];
+
+        function addMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            if (role === 'user') {
+                messageDiv.innerHTML = `<strong>你:</strong> ${content}`;
+            } else if (role === 'assistant') {
+                messageDiv.innerHTML = `<strong>智能体:</strong> ${content}`;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function quickQuestion(question) {
+            messageInput.value = question;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // 添加用户消息
+            addMessage('user', message);
+            messages.push({ role: 'user', content: message });
+            messageInput.value = '';
+
+            // 显示输入指示器
+            typingIndicator.classList.add('active');
+            statusText.textContent = '正在连接智能体...';
+
+            try {
+                const url = serviceUrl.value + '/api/v1/chat';
+                const token = bearerToken.value.trim();
+
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                if (token) {
+                    headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+                }
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ messages: messages })
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error('鉴权失败，请检查Token');
+                    } else if (response.status === 402) {
+                        throw new Error('额度不足，请升级到Pro会员');
+                    } else {
+                        const errorText = await response.text();
+                        throw new Error(`请求失败 (${response.status}): ${errorText}`);
+                    }
+                }
+
+                // 处理流式响应
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                let assistantMessage = '';
+                let assistantDiv = null;
+
+                statusText.textContent = '智能体正在回复...';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.content) {
+                                    if (!assistantDiv) {
+                                        assistantDiv = document.createElement('div');
+                                        assistantDiv.className = 'message assistant';
+                                        assistantDiv.innerHTML = '<strong>智能体:</strong> ';
+                                        chatContainer.appendChild(assistantDiv);
+                                        typingIndicator.classList.remove('active');
+                                    }
+                                    
+                                    assistantMessage += data.content;
+                                    assistantDiv.innerHTML = `<strong>智能体:</strong> ${assistantMessage}`;
+                                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                                } else if (data.done) {
+                                    statusText.textContent = '回复完成';
+                                    if (assistantMessage) {
+                                        messages.push({ role: 'assistant', content: assistantMessage });
+                                    }
+                                } else if (data.error) {
+                                    throw new Error(data.error);
+                                }
+                            } catch (e) {
+                                // 忽略JSON解析错误
+                            }
+                        }
+                    }
+                }
+
+                typingIndicator.classList.remove('active');
+                statusText.textContent = '就绪';
+
+            } catch (error) {
+                typingIndicator.classList.remove('active');
+                statusText.textContent = '错误';
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'message system';
+                errorDiv.innerHTML = `<strong>错误:</strong> ${error.message}`;
+                chatContainer.appendChild(errorDiv);
+                
+                console.error('错误:', error);
+            }
+        }
+
+        // 检查服务健康状态
+        async function checkHealth() {
+            try {
+                const response = await fetch(serviceUrl.value + '/api/v1/health');
+                const data = await response.json();
+                statusText.textContent = `服务状态: ${data.status}`;
+            } catch (error) {
+                statusText.textContent = '无法连接到服务';
+            }
+        }
+
+        // 页面加载时检查健康状态
+        window.onload = () => {
+            checkHealth();
+        };
+    </script>
+</body>
+</html>
