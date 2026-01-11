@@ -41,36 +41,7 @@ try:
 except ImportError:
     logger.warning("未安装 python-dotenv 模块，无法加载环境变量")
 
-# Supabase Auth Middleware
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not supabase:
-             return jsonify({'error': 'Supabase client not initialized'}), 500
-             
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'error': 'Missing Authorization header'}), 401
-            
-        try:
-            # Format: "Bearer <token>"
-            token = auth_header.split(' ')[1]
-            # Verify token using Supabase Auth
-            user_response = supabase.auth.get_user(token)
-            
-            if not user_response or not user_response.user:
-                return jsonify({'error': 'Invalid token'}), 401
-                
-            # Store user info in flask global (g)
-            g.user_id = user_response.user.id
-            g.user_email = user_response.user.email
-            
-        except Exception as e:
-            logger.error(f"Auth error: {e}")
-            return jsonify({'error': 'Unauthorized'}), 401
-            
-        return f(*args, **kwargs)
-    return decorated
+from auth_middleware import require_auth, get_user_info_from_token, supabase
 
 # Mock JWT functions for compatibility if needed, or remove them
 # We will replace usages of @jwt_required with @require_auth
@@ -130,19 +101,7 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(db_dir, "alphag.db")}'
     logger.info("使用 SQLite 数据库 (Fallback)")
 
-# 初始化 Supabase Client
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY') or os.getenv('SUPABASE_KEY')
-
-supabase: Client = None
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        logger.info("Supabase 客户端初始化成功")
-    except Exception as e:
-        logger.error(f"Supabase 客户端初始化失败: {e}")
-else:
-    logger.warning("未配置 SUPABASE_URL 或 SUPABASE_KEY")
+# Supabase Client is initialized in auth_middleware
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', '')
@@ -310,16 +269,7 @@ if SQLAlchemy:
         style_profit_loss = db.Column(db.Float, nullable=False)  # 该风格的总盈亏
         style_profit_loss_percent = db.Column(db.Float, nullable=False)  # 该风格的总盈亏比例
 
-# 辅助函数：从Flask全局变量获取用户信息 (Supabase Auth)
-def get_user_info_from_token():
-    """从g.user_id获取用户ID"""
-    try:
-        from flask import g
-        if hasattr(g, 'user_id'):
-            return {'user_id': g.user_id}
-        return None
-    except Exception:
-        return None
+# get_user_info_from_token is imported from auth_middleware
 
 # 特定用户ID的每日最大查询次数配置
 # 格式: USER_<USER_ID>_MAX_QUERIES=次数

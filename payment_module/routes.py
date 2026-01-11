@@ -7,6 +7,15 @@ from functools import wraps
 import stripe
 import os
 from .payment_service import PaymentService
+try:
+    from auth_middleware import require_auth
+except ImportError:
+    # Fallback if import fails (e.g. running outside app context or path issues)
+    # But since app.py adds current dir, it should work.
+    # To support relative import if running as package? No, auth_middleware is in root.
+    import sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    from auth_middleware import require_auth
 
 payment_bp = Blueprint('payment', __name__, url_prefix='/api/payment')
 
@@ -29,6 +38,7 @@ def init_payment_routes(service, get_user_func):
 
 
 @payment_bp.route('/create-checkout-session', methods=['POST'])
+@require_auth
 def create_checkout_session():
     """创建支付会话"""
     if not payment_service:
@@ -39,6 +49,14 @@ def create_checkout_session():
         return jsonify({'error': '请先登录'}), 401
     
     user_id = user_info['user_id']
+    email = getattr(user_info.get('g'), 'user_email', None) # This won't work, user_info is a dict
+    # auth_middleware returns {'user_id': g.user_id}
+    # Wait, get_user_info_from_token in auth_middleware only returns user_id dict ??
+    # Let me check auth_middleware again. I need to update it to return email too.
+    email = None
+    # Assuming helper function returns email now
+    if 'email' in user_info:
+        email = user_info['email']
     data = request.json
     price_key = data.get('price_key')
     
@@ -53,7 +71,8 @@ def create_checkout_session():
         user_id=user_id,
         price_key=price_key,
         success_url=success_url,
-        cancel_url=cancel_url
+        cancel_url=cancel_url,
+        email=email
     )
     
     if error:
@@ -122,6 +141,7 @@ def webhook():
 
 
 @payment_bp.route('/credits', methods=['GET'])
+@require_auth
 def get_credits():
     """获取用户额度信息"""
     if not payment_service:

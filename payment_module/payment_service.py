@@ -75,7 +75,7 @@ class PaymentService:
         self.UsageLog = UsageLog
         self.DailyQueryCount = DailyQueryCount
     
-    def create_checkout_session(self, user_id, price_key, success_url, cancel_url):
+    def create_checkout_session(self, user_id, price_key, success_url, cancel_url, email=None):
         """
         创建Stripe Checkout Session
         
@@ -93,7 +93,22 @@ class PaymentService:
         
         user = self.User.query.get(user_id)
         if not user:
-            return None, "用户不存在"
+            # Lazy creation if email is provided (Supabase Sync)
+            if email:
+                try:
+                    user = self.User(
+                        id=user_id,
+                        email=email,
+                        username=email.split('@')[0],
+                        last_login=datetime.now()
+                    )
+                    self.db.session.add(user)
+                    self.db.session.commit()
+                except Exception as e:
+                    self.db.session.rollback()
+                    return None, f"自动创建用户失败: {str(e)}"
+            else:
+                return None, "用户不存在且未提供邮箱"
         
         # 获取或创建Stripe Customer
         stripe_customer_id = getattr(user, 'stripe_customer_id', None)
@@ -117,7 +132,7 @@ class PaymentService:
         try:
             checkout_session = stripe.checkout.Session.create(
                 customer=stripe_customer_id,
-                payment_method_types=['card', 'alipay', 'wechat_pay'],  # 支持支付宝/微信
+                payment_method_types=['card'],  # 支持支付宝/微信
                 line_items=[{
                     'price': self.PRICES[price_key],
                     'quantity': 1,
