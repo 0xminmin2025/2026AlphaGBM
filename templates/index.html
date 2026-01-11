@@ -762,24 +762,21 @@
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 300000); // 300秒超时
 
-            // 获取JWT token
-            const token = localStorage.getItem('token');
+            // 获取Supabase认证头
+            const headers = await window.getAuthHeaders();
 
-            // 检查是否有token，没有则显示登录模态框
-            if (!token) {
+            // 如果没有Authorization头，说明未登录
+            if (!headers.Authorization) {
                 clearTimeout(timeoutId);
                 document.getElementById('loading').style.display = 'none';
                 alert('请先登录以使用分析功能');
-                showLoginModal();
+                window.showLoginModal();
                 return;
             }
 
             const res = await fetch('/api/analyze', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` // 添加JWT token认证
-                },
+                headers: headers,
                 body: JSON.stringify({ ticker, style }),
                 signal: controller.signal
             });
@@ -793,11 +790,9 @@
             if (!res.ok) {
                 // 特殊处理401未授权错误（token无效或过期）
                 if (res.status === 401) {
-                    // 清除本地存储的token
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('username');
-                    // 更新登录状态UI
-                    checkLoginStatus();
+                    // Supabase session可能过期
+                    await window.supabaseClient.auth.signOut(); // 触发注销流程
+                    // UI update handled by listener
                     clearTimeout(timeoutId);
                     document.getElementById('loading').style.display = 'none';
                     alert('登录状态已过期，请重新登录');

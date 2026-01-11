@@ -52,7 +52,7 @@ def create_payment_models(db):
         __tablename__ = 'subscriptions'
         
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
         stripe_subscription_id = db.Column(db.String(255), unique=True, index=True)
         plan_tier = db.Column(db.String(50), nullable=False)  # 'plus', 'pro'
         status = db.Column(db.String(50), nullable=False)  # 'active', 'past_due', 'canceled'
@@ -73,7 +73,7 @@ def create_payment_models(db):
         __tablename__ = 'transactions'
         
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
         stripe_payment_intent_id = db.Column(db.String(255), unique=True, index=True)  # 幂等键
         stripe_checkout_session_id = db.Column(db.String(255), unique=True, index=True, nullable=True)
         amount = db.Column(db.Integer, nullable=False)  # 单位：分
@@ -93,7 +93,7 @@ def create_payment_models(db):
         __tablename__ = 'credit_ledger'
         
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
         service_type = db.Column(db.String(50), default=ServiceType.STOCK_ANALYSIS.value)
         source = db.Column(db.String(50), nullable=False)  # subscription, top_up, referral, free_daily
         
@@ -131,7 +131,7 @@ def create_payment_models(db):
         __tablename__ = 'usage_logs'
         
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
         credit_ledger_id = db.Column(db.Integer, db.ForeignKey('credit_ledger.id'), nullable=True)
         service_type = db.Column(db.String(50), nullable=False)
         amount_used = db.Column(db.Integer, default=1)  # 消耗的额度数量

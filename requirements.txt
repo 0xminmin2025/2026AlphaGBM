@@ -18,4 +18,6 @@ akshare
 alpha_vantage
 apscheduler
 stripe
+supabase
+psycopg2-binary
 

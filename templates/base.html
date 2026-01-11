@@ -260,10 +260,10 @@
                             <i class="bi bi-graph-up"></i>
                             <span>股票分析</span>
                         </a>
-                        <a href="#" class="module-nav-item disabled">
+                        <a href="{{ url_for('options_page') }}"
+                            class="module-nav-item {% if request.path == '/options' %}active{% endif %}">
                             <i class="bi bi-pie-chart"></i>
                             <span>期权研究</span>
-                            <span class="coming-soon-badge">敬请期待</span>
                         </a>
                         <a href="#" class="module-nav-item disabled" onclick="return false;">
                             <i class="bi bi-robot"></i>
@@ -313,6 +313,14 @@
                         <button type="button" class="btn-close btn-close-white close"></button>
                     </div>
                     <div class=" modal-body">
+                        <!-- Google Login Button -->
+                        <div class="d-grid gap-2 mb-3">
+                            <button type="button" class="btn btn-outline-light" onclick="handleGoogleLogin()">
+                                <i class="bi bi-google me-2"></i> 使用 Google 登录
+                            </button>
+                        </div>
+                        <div class="text-center text-muted mb-3">- 或者 -</div>
+
                         <form id="loginForm">
                             <div class="mb-3">
                                 <label for="loginEmail" class="form-label">邮箱</label>
@@ -360,14 +368,7 @@
                                 <label for="registerEmail" class="form-label">邮箱</label>
                                 <input type="email" class="form-control" id="registerEmail" required>
                             </div>
-                            <div class="mb-3">
-                                <label for="registerCode" class="form-label">验证码</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="registerCode" required>
-                                    <button type="button" class="btn btn-secondary" id="sendCodeBtn"
-                                        onclick="requestVerificationCode()">获取验证码</button>
-                                </div>
-                            </div>
+                            <!-- Verification Code removed as Supabase handles it via email link -->
                             <div class="mb-3">
                                 <label for="registerPassword" class="form-label">密码</label>
                                 <input type="password" class="form-control" id="registerPassword" required>
@@ -441,6 +442,157 @@
                 $(this).remove();
             });
         }
+    </script>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        // Initialize Supabase
+        const supabaseUrl = '{{ SUPABASE_URL }}';
+        const supabaseKey = '{{ SUPABASE_ANON_KEY }}';
+        const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Expose to window for other scripts
+        window.supabaseClient = _supabase;
+
+        // Auth State Listener
+        _supabase.auth.onAuthStateChange((event, session) => {
+            console.log("Auth Event:", event);
+            if (session) {
+                updateUIForLogin(session.user);
+            } else {
+                updateUIForLogout();
+            }
+        });
+
+        // Update UI when logged in
+        function updateUIForLogin(user) {
+            $('#authButtons #userInfo').show();
+            // Try to get display name from metadata or email
+            const displayName = user.user_metadata.full_name || user.user_metadata.username || user.email.split('@')[0];
+            $('#usernameDisplay').text(`用户: ${displayName}`);
+            $('#loginBtn').hide();
+            $('#logoutBtn').show();
+
+            // Store token for API calls
+            localStorage.setItem('access_token', user.access_token);
+        }
+
+        // Update UI when logged out
+        function updateUIForLogout() {
+            $('#authButtons #userInfo').hide();
+            $('#loginBtn').show();
+            $('#logoutBtn').hide();
+            localStorage.removeItem('access_token');
+        }
+
+        // Global Handlers
+        window.handleLogin = async () => {
+            const email = $('#loginEmail').val();
+            const password = $('#loginPassword').val();
+
+            try {
+                const { data, error } = await _supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) throw error;
+
+                hideModals();
+                showToast('登录成功', 'success');
+            } catch (error) {
+                $('#loginMessage').html(`<div class="alert alert-danger">${error.message}</div>`);
+            }
+        };
+
+        window.handleGoogleLogin = async () => {
+            try {
+                const { data, error } = await _supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: window.location.origin
+                    }
+                });
+                if (error) throw error;
+            } catch (error) {
+                $('#loginMessage').html(`<div class="alert alert-danger">${error.message}</div>`);
+            }
+        };
+
+        window.handleRegister = async () => {
+            const email = $('#registerEmail').val();
+            const password = $('#registerPassword').val();
+            const username = $('#registerUsername').val();
+
+            try {
+                // Sign up
+                const { data, error } = await _supabase.auth.signUp({
+                    email: email,
+                    password: password,
+                    options: {
+                        data: {
+                            username: username
+                        }
+                    }
+                });
+
+                if (error) throw error;
+
+                if (data.user && !data.session) {
+                    $('#registerMessage').html(`<div class="alert alert-success">注册成功！请检查您的邮箱完成验证。</div>`);
+                } else {
+                    hideModals();
+                    showToast('注册成功并已登录', 'success');
+                }
+            } catch (error) {
+                $('#registerMessage').html(`<div class="alert alert-danger">${error.message}</div>`);
+            }
+        };
+
+        window.handleLogout = async () => {
+            const { error } = await _supabase.auth.signOut();
+            if (!error) {
+                showToast('已退出登录', 'info');
+                // Refresh page or UI update handled by listener
+            }
+        };
+
+        // Modal helpers
+        window.showLoginModal = () => $('#loginModal').show();
+        window.showRegisterModal = () => $('#registerModal').show();
+        window.showForgotPasswordModal = () => showToast('请使用 Supabase 提供的重置密码功能 (TODO)', 'warning');
+        window.hideModals = () => $('.modal').hide();
+
+        // Close modals on click outside or close button
+        $('.close, .btn-close').click(hideModals);
+        $(window).click((event) => {
+            if ($(event.target).hasClass('modal')) hideModals();
+        });
+
+        // Check initial session
+        _supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                updateUIForLogin(session.user);
+            } else {
+                updateUIForLogout();
+            }
+        });
+
+        // Helper to get headers for API calls
+        window.getAuthHeaders = async () => {
+            const { data: { session } } = await _supabase.auth.getSession();
+            if (session) {
+                return {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
+                };
+            }
+            return {
+                'Content-Type': 'application/json'
+            };
+        };
     </script>
 
     <!-- 页面特定脚本 -->

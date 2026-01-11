@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, g
 from datetime import datetime, timedelta, time
+from functools import wraps
 from flask_cors import CORS
 import random
 import string
@@ -13,7 +14,10 @@ import smtplib
 from analysis_engine import get_market_data, get_ticker_price, analyze_risk_and_position, calculate_market_sentiment, calculate_target_price, calculate_atr_stop_loss
 from ai_service import get_gemini_analysis
 from apscheduler.schedulers.background import BackgroundScheduler
+from ai_service import get_gemini_analysis
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from supabase import create_client, Client
 
 # 配置日志
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -37,30 +41,48 @@ try:
 except ImportError:
     logger.warning("未安装 python-dotenv 模块，无法加载环境变量")
 
+# Supabase Auth Middleware
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not supabase:
+             return jsonify({'error': 'Supabase client not initialized'}), 500
+             
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'Missing Authorization header'}), 401
+            
+        try:
+            # Format: "Bearer <token>"
+            token = auth_header.split(' ')[1]
+            # Verify token using Supabase Auth
+            user_response = supabase.auth.get_user(token)
+            
+            if not user_response or not user_response.user:
+                return jsonify({'error': 'Invalid token'}), 401
+                
+            # Store user info in flask global (g)
+            g.user_id = user_response.user.id
+            g.user_email = user_response.user.email
+            
+        except Exception as e:
+            logger.error(f"Auth error: {e}")
+            return jsonify({'error': 'Unauthorized'}), 401
+            
+        return f(*args, **kwargs)
+    return decorated
+
+# Mock JWT functions for compatibility if needed, or remove them
+# We will replace usages of @jwt_required with @require_auth
+
 # 尝试导入数据库和JWT相关模块
 try:
     from flask_sqlalchemy import SQLAlchemy
 except ImportError:
     SQLAlchemy = None
     
-try:
-    from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-except ImportError:
-    JWTManager = None
-    create_access_token = None
-    jwt_required = lambda: lambda f: f  # 降级为无操作装饰器
-    get_jwt_identity = None
-
-try:
-    from werkzeug.security import generate_password_hash, check_password_hash
-except ImportError:
-    def generate_password_hash(password):
-        import hashlib
-        return hashlib.sha256(password.encode()).hexdigest()
-        
-    def check_password_hash(password_hash, password):
-        import hashlib
-        return password_hash == hashlib.sha256(password.encode()).hexdigest()
+# JWTManager and related functions are removed as Supabase handles auth
+# werkzeug.security is also removed as Supabase handles password hashing
 
 try:
     from flask_mail import Mail, Message
@@ -77,29 +99,50 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 # 初始化定时任务调度器
 scheduler = BackgroundScheduler()
 
-# 配置数据库和JWT
-# 临时使用 SQLite 进行测试（方便开发）
-# 生产环境请使用 MySQL
-USE_SQLITE = os.getenv('USE_SQLITE', 'true').lower() == 'true'
+# 配置数据库 - 使用 Supabase Postgres/MySQL
+# 优先使用 POSTGRES_URL (Supabase Connection Pooler)
+# 如果没有，尝试使用 SQLALCHEMY_DATABASE_URI
+database_url = os.getenv('POSTGRES_URL') or os.getenv('SQLALCHEMY_DATABASE_URI')
 
-if USE_SQLITE:
-    # SQLite 配置
+if database_url:
+    # 确保 url scheme 是 postgresql (SQLAlchemy 识别)
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    
+    # Remove 'supa' param (invalid for psycopg2)
+    try:
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+        u = urlparse(database_url)
+        q = parse_qs(u.query)
+        if 'supa' in q:
+            del q['supa']
+            u = u._replace(query=urlencode(q, doseq=True))
+            database_url = urlunparse(u)
+    except Exception as e:
+        logger.warning(f"Failed to sanitize database URL: {e}")
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    logger.info("使用数据库: " + database_url.split('@')[-1]) # 仅记录 host/db 名以保护凭据
+else:
+    # Fallback for dev
     db_dir = os.path.join(os.path.dirname(__file__), 'data')
     os.makedirs(db_dir, exist_ok=True)
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(db_dir, "alphag.db")}'
-    logger.info("使用 SQLite 数据库")
+    logger.info("使用 SQLite 数据库 (Fallback)")
+
+# 初始化 Supabase Client
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY') or os.getenv('SUPABASE_KEY')
+
+supabase: Client = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logger.info("Supabase 客户端初始化成功")
+    except Exception as e:
+        logger.error(f"Supabase 客户端初始化失败: {e}")
 else:
-    # MySQL数据库连接配置 - 从环境变量读取
-    DB_USER = os.getenv('DB_USER', 'root')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-    DB_HOST = os.getenv('DB_HOST', 'localhost')
-    DB_PORT = os.getenv('DB_PORT', '3306')
-    DB_NAME = os.getenv('DB_NAME', 'alphag_db')
-    
-    # 对密码进行URL编码，以处理特殊字符
-    encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
-    logger.info(f"使用 MySQL 数据库: {DB_NAME}")
+    logger.warning("未配置 SUPABASE_URL 或 SUPABASE_KEY")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', '')
@@ -118,7 +161,7 @@ REGULAR_USER_DAILY_MAX_QUERIES = int(os.getenv('REGULAR_USER_DAILY_MAX_QUERIES',
 
 # 初始化扩展
 db = SQLAlchemy(app) if SQLAlchemy else None
-jwt = JWTManager(app) if JWTManager else None
+
 mail = Mail(app) if Mail else None
 
 # 初始化支付模块（如果依赖可用）
@@ -140,37 +183,45 @@ except ImportError as e:
     check_quota = lambda *args, **kwargs: lambda f: f  # 降级为无操作装饰器
 
 # 如果缺少必要依赖，记录警告
-if not SQLAlchemy or not JWTManager:
-    logger.warning("缺少依赖库: flask_sqlalchemy 或 flask_jwt_extended")
-    logger.warning("认证功能将不可用，请安装所需依赖: pip install -r requirements.txt")
+# 如果缺少必要依赖，记录警告
+if not SQLAlchemy:
+    logger.warning("缺少依赖库: flask_sqlalchemy")
+    logger.warning("数据库功能将不可用")
     
 if not Mail:
     logger.warning("缺少依赖库: flask_mail")
     logger.warning("邮箱验证码功能将不可用，请安装所需依赖: pip install -r requirements.txt")
 
+    logger.warning("邮箱验证码功能将不可用，请安装所需依赖: pip install -r requirements.txt")
+
+# Register Options Blueprint from new backend
+try:
+    from new_options_module import options_bp
+    app.register_blueprint(options_bp, url_prefix='/api/options')
+    logger.info("Options Module Blueprint registered at /api/options")
+except Exception as e:
+    logger.error(f"Failed to register Options Blueprint: {e}")
+
 # 用户模型
 if SQLAlchemy:
     class User(db.Model):
-        id = db.Column(db.Integer, primary_key=True)
-        username = db.Column(db.String(80), unique=True, nullable=False)
-        email = db.Column(db.String(120), unique=True, nullable=False, index=True)  # 添加索引优化查询性能
-        password_hash = db.Column(db.String(200), nullable=False)
+        # Supabase uses UUID for user ID
+        id = db.Column(db.String(36), primary_key=True) 
+        email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+        # Username defaults to email part or can be updated
+        username = db.Column(db.String(80), nullable=True) 
         created_at = db.Column(db.DateTime, default=datetime.now)
         last_login = db.Column(db.DateTime, nullable=True)
-        is_email_verified = db.Column(db.Boolean, default=False)  # 添加邮箱验证状态字段
         
         # 支付模块扩展字段
         stripe_customer_id = db.Column(db.String(255), index=True, nullable=True)
-        referrer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+        # Referrer ID also needs to be String(36)
+        referrer_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=True)
         
         # 关联
         referrer = db.relationship('User', remote_side=[id], backref='referrals')
         
-        def set_password(self, password):
-            self.password_hash = generate_password_hash(password)
-            
-        def check_password(self, password):
-            return check_password_hash(self.password_hash, password)
+        # Remove password methods as Supabase handles auth
     
     # 邮箱验证码模型
     class EmailVerification(db.Model):
@@ -184,7 +235,7 @@ if SQLAlchemy:
     # 分析请求记录表
     class AnalysisRequest(db.Model):
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)  # 允许匿名用户，添加索引优化查询性能
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=True, index=True)  # 允许匿名用户，添加索引优化查询性能
         ticker = db.Column(db.String(20), nullable=False)
         style = db.Column(db.String(20), nullable=False)
         status = db.Column(db.String(20), nullable=False, default='success')  # success/failed
@@ -197,7 +248,7 @@ if SQLAlchemy:
     # 用户反馈模型
     class Feedback(db.Model):
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
         type = db.Column(db.String(50), nullable=False)  # 反馈类型
         content = db.Column(db.Text, nullable=False)  # 反馈内容
         ticker = db.Column(db.String(20), nullable=True)  # 相关股票代码（如果有）
@@ -210,7 +261,7 @@ if SQLAlchemy:
     # 每日查询统计模型
     class DailyQueryCount(db.Model):
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)  # 添加索引优化查询性能
+        user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)  # 添加索引优化查询性能
         date = db.Column(db.Date, nullable=False)  # 查询日期
         query_count = db.Column(db.Integer, default=0)  # 已使用查询次数
         max_queries = db.Column(db.Integer, default=5)  # 每日最大查询次数（默认5次）
@@ -229,6 +280,7 @@ if SQLAlchemy:
         shares = db.Column(db.Integer, nullable=False)  # 持仓数量
         buy_price = db.Column(db.Float, nullable=False)  # 买入价格
         style = db.Column(db.String(20), nullable=False, index=True)  # 投资风格(quality, value, growth, momentum)
+        user_id = db.Column(db.String(36), nullable=True, index=True) # Added user_id for multi-user support
         currency = db.Column(db.String(3), nullable=False)  # 货币单位
         created_at = db.Column(db.DateTime, default=datetime.now)
         updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
@@ -243,6 +295,7 @@ if SQLAlchemy:
         total_market_value = db.Column(db.Float, nullable=False)  # 总市值
         total_profit_loss = db.Column(db.Float, nullable=False)  # 总盈亏金额
         total_profit_loss_percent = db.Column(db.Float, nullable=False)  # 总盈亏比例
+        user_id = db.Column(db.String(36), nullable=True, index=True) # Added user_id
         created_at = db.Column(db.DateTime, default=datetime.now)
 
     # 投资风格盈亏记录模型
@@ -257,15 +310,14 @@ if SQLAlchemy:
         style_profit_loss = db.Column(db.Float, nullable=False)  # 该风格的总盈亏
         style_profit_loss_percent = db.Column(db.Float, nullable=False)  # 该风格的总盈亏比例
 
-# 辅助函数：从JWT令牌获取用户信息
+# 辅助函数：从Flask全局变量获取用户信息 (Supabase Auth)
 def get_user_info_from_token():
-    """从JWT令牌获取并转换用户ID"""
+    """从g.user_id获取用户ID"""
     try:
-        if not JWTManager or not get_jwt_identity:
-            return None
-        user_id_str = get_jwt_identity()
-        user_id = int(user_id_str) if user_id_str else None
-        return {'user_id': user_id}
+        from flask import g
+        if hasattr(g, 'user_id'):
+            return {'user_id': g.user_id}
+        return None
     except Exception:
         return None
 
@@ -617,6 +669,13 @@ def initialize_app():
         raise
 
 
+@app.context_processor
+def inject_supabase_and_user():
+    return dict(
+        SUPABASE_URL=os.getenv('SUPABASE_URL', ''),
+        SUPABASE_ANON_KEY=os.getenv('SUPABASE_ANON_KEY') or os.getenv('SUPABASE_KEY', '')
+    )
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -625,6 +684,10 @@ def index():
 def pricing():
     """定价页面"""
     return render_template('pricing.html')
+
+@app.route('/options')
+def options_page():
+    return render_template('options.html')
 
 @app.route('/agent')
 def agent():
@@ -641,325 +704,12 @@ def demo():
     """设计系统演示页面"""
     return render_template('demo.html')
 
-# 用户注册API端点 - 第一步：请求验证码
-@app.route('/api/register/request-code', methods=['POST'])
-def request_verification_code():
-    # 如果缺少必要依赖，返回友好错误
-    if not SQLAlchemy or not Mail:
-        return jsonify({'error': '验证码模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
-        
-    try:
-        data = request.json
-        
-        # 验证输入参数
-        if 'email' not in data:
-            return jsonify({'error': '缺少邮箱参数'}), 400
-        
-        email = data['email'].strip()
-        
-        # 验证邮箱格式
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_pattern, email):
-            return jsonify({'error': '邮箱格式不正确'}), 400
-        
-        # 检查邮箱是否已存在且已验证
-        existing_user = User.query.filter_by(email=email).first()
-        if existing_user and existing_user.is_email_verified:
-            return jsonify({'error': '该邮箱已被注册并验证'}), 409
-        
-        # 生成验证码
-        code = generate_verification_code()
-        expires_at = datetime.now() + timedelta(minutes=5)
-        
-        # 删除该邮箱之前的验证码
-        EmailVerification.query.filter_by(email=email).delete()
-        
-        # 保存新验证码
-        verification = EmailVerification(
-            email=email,
-            verification_code=code,
-            expires_at=expires_at
-        )
-        db.session.add(verification)
-        db.session.commit()
-        
-        # 发送验证码邮件
-        if send_verification_email(email, code):
-            return jsonify({
-                'message': '验证码已发送至您的邮箱，请查收',
-                'email': email
-            }), 200
-        else:
-            return jsonify({'error': '发送验证码失败，请稍后重试'}), 500
-            
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"发送验证码请求失败: {e}")
-        return jsonify({'error': '请求处理过程中发生错误'}), 500
-
-# 用户注册API端点 - 第二步：提交验证码和注册信息
-@app.route('/api/register', methods=['POST'])
-def register():
-    # 如果缺少必要依赖，返回友好错误
-    if not SQLAlchemy or not JWTManager:
-        return jsonify({'error': '认证模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
-        
-    try:
-        data = request.json
-        
-        # 验证输入参数
-        required_fields = ['username', 'email', 'password', 'verification_code']
-        if not all(k in data for k in required_fields):
-            return jsonify({'error': '缺少必要参数，请提供用户名、邮箱、密码和验证码'}), 400
-        
-        username = data['username'].strip()
-        email = data['email'].strip()
-        password = data['password']
-        code = data['verification_code'].strip()
-        
-        # 验证用户名格式
-        if len(username) < 3 or len(username) > 20:
-            return jsonify({'error': '用户名长度必须在3-20个字符之间'}), 400
-        
-        # 验证邮箱格式
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_pattern, email):
-            return jsonify({'error': '邮箱格式不正确'}), 400
-        
-        # 验证密码强度
-        if len(password) < 6:
-            return jsonify({'error': '密码长度至少为6个字符'}), 400
-        
-        # 验证验证码
-        verification = EmailVerification.query.filter_by(
-            email=email,
-            verification_code=code,
-            is_used=False
-        ).first()
-        
-        if not verification:
-            return jsonify({'error': '验证码无效或已过期'}), 400
-        
-        if datetime.now() > verification.expires_at:
-            return jsonify({'error': '验证码已过期，请重新获取'}), 400
-        
-        # 检查用户名是否已存在
-        if User.query.filter_by(username=username).first():
-            return jsonify({'error': '用户名已存在'}), 409
-        
-        # 标记验证码为已使用
-        verification.is_used = True
-        
-        # 创建或更新用户
-        user = User.query.filter_by(email=email).first()
-        if user:
-            # 如果用户存在但未验证，则更新信息
-            user.username = username
-            user.set_password(password)
-            user.is_email_verified = True
-            user.last_login = datetime.now()
-        else:
-            # 创建新用户
-            user = User(username=username, email=email, is_email_verified=True, last_login=datetime.now())
-            user.set_password(password)
-            db.session.add(user)
-        
-        db.session.commit()
-        
-        logger.info(f"新用户注册成功: {username}")
-        
-        # 创建访问令牌
-        access_token = create_access_token(identity=str(user.id))
-        
-        return jsonify({
-            'message': '注册成功',
-            'user_id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'access_token': access_token
-        }), 201
-        
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"用户注册失败: {e}")
-        return jsonify({'error': '注册过程中发生错误'}), 500
-
-# 用户登录API端点
-@app.route('/api/login', methods=['POST'])
-def login():
-    # 如果缺少必要依赖，返回友好错误
-    if not SQLAlchemy or not JWTManager:
-        return jsonify({'error': '认证模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
-        
-    try:
-        data = request.json
-        
-        # 验证输入参数
-        if not all(k in data for k in ['email', 'password']):
-            return jsonify({'error': '缺少必要参数'}), 400
-        
-        email = data['email'].strip()
-        password = data['password']
-        
-        # 通过邮箱查找用户
-        user = User.query.filter_by(email=email).first()
-        
-        # 验证用户是否存在且密码正确
-        if not user or not user.check_password(password):
-            return jsonify({'error': '邮箱或密码错误'}), 401
-        
-        # 检查邮箱是否已验证
-        if not user.is_email_verified:
-            return jsonify({'error': '邮箱尚未验证，请先验证邮箱'}), 403
-        
-        # 更新最后登录时间
-        user.last_login = datetime.now()
-        db.session.commit()
-        
-        logger.info(f"用户登录成功: {user.username} (ID: {user.id})")
-        
-        # 创建访问令牌
-        access_token = create_access_token(identity=str(user.id))
-        
-        return jsonify({
-            'message': '登录成功',
-            'user_id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'access_token': access_token
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"用户登录失败: {e}")
-        return jsonify({'error': '登录过程中发生错误'}), 500
-
-
-# 用户忘记密码API端点 - 第一步：请求重置密码验证码
-@app.route('/api/forgot-password/request-code', methods=['POST'])
-def request_password_reset_code():
-    # 如果缺少必要依赖，返回友好错误
-    if not SQLAlchemy or not Mail:
-        return jsonify({'error': '验证码模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
-        
-    try:
-        data = request.json
-        
-        # 验证输入参数
-        if 'email' not in data:
-            return jsonify({'error': '缺少邮箱参数'}), 400
-        
-        email = data['email'].strip()
-        
-        # 验证邮箱格式
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_pattern, email):
-            return jsonify({'error': '邮箱格式不正确'}), 400
-        
-        # 检查邮箱是否已注册
-        existing_user = User.query.filter_by(email=email).first()
-        if not existing_user:
-            return jsonify({'error': '该邮箱未注册，请先注册'}), 404
-        
-        # 生成验证码
-        code = generate_verification_code()
-        expires_at = datetime.now() + timedelta(minutes=5)
-        
-        # 删除该邮箱之前的验证码
-        EmailVerification.query.filter_by(email=email).delete()
-        
-        # 保存新验证码
-        verification = EmailVerification(
-            email=email,
-            verification_code=code,
-            expires_at=expires_at
-        )
-        db.session.add(verification)
-        db.session.commit()
-        
-        # 发送验证码邮件
-        if send_verification_email(email, code):
-            return jsonify({
-                'message': '验证码已发送至您的邮箱，请查收',
-                'email': email
-            }), 200
-        else:
-            return jsonify({'error': '发送验证码失败，请稍后重试'}), 500
-            
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"发送密码重置验证码请求失败: {e}")
-        return jsonify({'error': '请求处理过程中发生错误'}), 500
-
-# 用户忘记密码API端点 - 第二步：验证验证码并重置密码
-@app.route('/api/forgot-password/reset', methods=['POST'])
-def reset_password():
-    # 如果缺少必要依赖，返回友好错误
-    if not SQLAlchemy:
-        return jsonify({'error': '认证模块未启用，请安装所需依赖: pip install -r requirements.txt'}), 503
-        
-    try:
-        data = request.json
-        
-        # 验证输入参数
-        required_fields = ['email', 'verification_code', 'new_password']
-        if not all(k in data for k in required_fields):
-            return jsonify({'error': '缺少必要参数，请提供邮箱、验证码和新密码'}), 400
-        
-        email = data['email'].strip()
-        code = data['verification_code'].strip()
-        new_password = data['new_password']
-        
-        # 验证邮箱格式
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_pattern, email):
-            return jsonify({'error': '邮箱格式不正确'}), 400
-        
-        # 验证密码强度
-        if len(new_password) < 6:
-            return jsonify({'error': '密码长度至少为6个字符'}), 400
-        
-        # 验证验证码
-        verification = EmailVerification.query.filter_by(
-            email=email,
-            verification_code=code,
-            is_used=False
-        ).first()
-        
-        if not verification:
-            return jsonify({'error': '验证码无效或已过期'}), 400
-        
-        if datetime.now() > verification.expires_at:
-            return jsonify({'error': '验证码已过期，请重新获取'}), 400
-        
-        # 查找用户
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            return jsonify({'error': '用户不存在'}), 404
-        
-        # 标记验证码为已使用
-        verification.is_used = True
-        
-        # 更新用户密码
-        user.set_password(new_password)
-        
-        # 提交更改
-        db.session.commit()
-        
-        logger.info(f"用户密码重置成功: {email}")
-        
-        return jsonify({
-            'message': '密码重置成功，请使用新密码登录'
-        }), 200
-            
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"密码重置失败: {e}")
-        return jsonify({'error': '密码重置过程中发生错误'}), 500
+# Legacy auth routes removed (Supabase Auth handles this on frontend)
 
 
 # 查询次数限制相关辅助函数
 @app.route('/api/query_count', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_query_count():
     """获取用户每日查询次数信息"""
     # 获取用户信息
@@ -1212,7 +962,7 @@ def get_stock_price():
 
 
 @app.route('/api/analyze', methods=['POST'])
-@jwt_required()
+@require_auth
 @check_quota(service_type='stock_analysis', amount=1)  # 支付模块：自动检查并扣减额度
 def analyze():
     # 获取用户信息
@@ -1466,7 +1216,7 @@ def analyze():
 
 
 @app.route('/api/feedback', methods=['POST'])
-@jwt_required()
+@require_auth
 def submit_feedback():
     """接收用户反馈"""
     try:
@@ -1513,7 +1263,7 @@ def submit_feedback():
 # ==================== 用户资料API ====================
 
 @app.route('/api/profile', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_profile():
     """获取用户资料"""
     try:
@@ -1577,7 +1327,7 @@ def get_profile():
         return jsonify({'error': '获取用户资料失败'}), 500
 
 @app.route('/api/profile/credits', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_profile_credits():
     """获取用户额度列表"""
     try:
@@ -1611,7 +1361,7 @@ def get_profile_credits():
         return jsonify({'error': '获取额度列表失败'}), 500
 
 @app.route('/api/profile/usage', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_profile_usage():
     """获取使用历史"""
     try:
@@ -1655,7 +1405,7 @@ def get_profile_usage():
         return jsonify({'error': '获取使用历史失败'}), 500
 
 @app.route('/api/profile/payments', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_profile_payments():
     """获取付费记录"""
     try:
@@ -1716,7 +1466,7 @@ def get_profile_payments():
         return jsonify({'error': '获取付费记录失败'}), 500
 
 @app.route('/api/profile/subscription', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_profile_subscription():
     """获取订阅信息"""
     try:
@@ -1753,7 +1503,7 @@ def get_profile_subscription():
         return jsonify({'error': '获取订阅信息失败'}), 500
 
 @app.route('/api/profile/change-password', methods=['POST'])
-@jwt_required()
+@require_auth
 def change_password():
     """修改密码"""
     try:

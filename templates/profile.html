@@ -607,7 +607,7 @@
     let currentPaymentPage = 1;
 
     // 页面加载时获取数据
-    window.onload = async function() {
+    window.onload = async function () {
         await loadUserProfile();
         await loadCredits();
         await loadUsageHistory();
@@ -618,21 +618,19 @@
     // 加载用户信息
     async function loadUserProfile() {
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
+            const headers = await window.getAuthHeaders();
+            if (!headers.Authorization) {
                 window.location.href = '/';
                 return;
             }
 
             const response = await fetch('/api/profile', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: headers
             });
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    localStorage.removeItem('token');
+                    await window.supabaseClient.auth.signOut();
                     window.location.href = '/';
                     return;
                 }
@@ -640,12 +638,12 @@
             }
 
             const data = await response.json();
-            
+
             document.getElementById('userName').textContent = data.username || data.email;
             document.getElementById('userEmail').textContent = data.email;
             document.getElementById('createdAt').textContent = formatDate(data.created_at);
             document.getElementById('lastLogin').textContent = data.last_login ? formatDate(data.last_login) : '从未登录';
-            
+
             // 更新会员等级
             const planTier = data.plan_tier || 'free';
             const badge = document.getElementById('planBadge');
@@ -667,18 +665,16 @@
     // 加载额度信息
     async function loadCredits() {
         try {
-            const token = localStorage.getItem('token');
+            const headers = await window.getAuthHeaders();
             const response = await fetch('/api/profile/credits', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: headers
             });
 
             if (!response.ok) return;
 
             const data = await response.json();
             const creditsList = document.getElementById('creditsList');
-            
+
             if (!data.credits || data.credits.length === 0) {
                 creditsList.innerHTML = `
                     <div class="empty-state">
@@ -690,11 +686,11 @@
             }
 
             creditsList.innerHTML = data.credits.map(credit => {
-                const expiryClass = credit.expires_at ? 
-                    (new Date(credit.expires_at) < new Date() ? 'expiry-expired' : 
-                     (new Date(credit.expires_at) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'expiry-warning' : 'expiry-date')) : 
+                const expiryClass = credit.expires_at ?
+                    (new Date(credit.expires_at) < new Date() ? 'expiry-expired' :
+                        (new Date(credit.expires_at) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'expiry-warning' : 'expiry-date')) :
                     'expiry-date';
-                
+
                 const sourceText = {
                     'subscription': '订阅发放',
                     'top_up': '充值购买',
@@ -710,10 +706,10 @@
                             <div class="credit-meta">${credit.service_type === 'stock_analysis' ? '股票分析' : credit.service_type === 'option_analysis' ? '期权分析' : '深度研报'}</div>
                         </div>
                         <div class="credit-expiry">
-                            ${credit.expires_at ? 
-                                `<div class="${expiryClass}">${formatDate(credit.expires_at)}</div>` : 
-                                '<div class="expiry-date">永久有效</div>'
-                            }
+                            ${credit.expires_at ?
+                        `<div class="${expiryClass}">${formatDate(credit.expires_at)}</div>` :
+                        '<div class="expiry-date">永久有效</div>'
+                    }
                         </div>
                     </div>
                 `;
@@ -726,18 +722,16 @@
     // 加载使用历史
     async function loadUsageHistory(page = 1) {
         try {
-            const token = localStorage.getItem('token');
+            const headers = await window.getAuthHeaders();
             const response = await fetch(`/api/profile/usage?page=${page}&filter=${currentUsageFilter}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: headers
             });
 
             if (!response.ok) return;
 
             const data = await response.json();
             const tableBody = document.getElementById('usageHistoryTable');
-            
+
             if (!data.usage || data.usage.length === 0) {
                 tableBody.innerHTML = `
                     <tr>
@@ -771,18 +765,16 @@
     // 加载付费记录
     async function loadPaymentHistory(page = 1) {
         try {
-            const token = localStorage.getItem('token');
+            const headers = await window.getAuthHeaders();
             const response = await fetch(`/api/profile/payments?page=${page}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: headers
             });
 
             if (!response.ok) return;
 
             const data = await response.json();
             const tableBody = document.getElementById('paymentHistoryTable');
-            
+
             if (!data.payments || data.payments.length === 0) {
                 tableBody.innerHTML = `
                     <tr>
@@ -835,21 +827,19 @@
     // 加载订阅信息
     async function loadSubscription() {
         try {
-            const token = localStorage.getItem('token');
+            const headers = await window.getAuthHeaders();
             const response = await fetch('/api/profile/subscription', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: headers
             });
 
             if (!response.ok) return;
 
             const data = await response.json();
-            
+
             if (data.subscription) {
                 document.getElementById('subscriptionSection').style.display = 'block';
                 const subscriptionInfo = document.getElementById('subscriptionInfo');
-                
+
                 const statusClass = {
                     'active': 'status-active',
                     'past_due': 'status-pending',
@@ -901,7 +891,7 @@
         if (currentPage > 1) {
             html += `<button class="pagination-btn" onclick="${loadFunction.name}(${currentPage - 1})">上一页</button>`;
         }
-        
+
         for (let i = 1; i <= totalPages; i++) {
             if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
                 html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${loadFunction.name}(${i})">${i}</button>`;
@@ -909,7 +899,7 @@
                 html += `<span class="pagination-btn" style="border: none; background: transparent;">...</span>`;
             }
         }
-        
+
         if (currentPage < totalPages) {
             html += `<button class="pagination-btn" onclick="${loadFunction.name}(${currentPage + 1})">下一页</button>`;
         }
@@ -918,10 +908,7 @@
     }
 
     // 修改密码
-    function changePassword() {
-        const oldPassword = prompt('请输入当前密码:');
-        if (!oldPassword) return;
-
+    async function changePassword() {
         const newPassword = prompt('请输入新密码:');
         if (!newPassword) return;
 
@@ -931,29 +918,17 @@
             return;
         }
 
-        // 调用API修改密码
-        const token = localStorage.getItem('token');
-        fetch('/api/profile/change-password', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                old_password: oldPassword,
-                new_password: newPassword
-            })
-        }).then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('密码修改成功');
-            } else {
-                alert('密码修改失败: ' + (data.error || '未知错误'));
-            }
-        }).catch(error => {
+        try {
+            const { data, error } = await window.supabaseClient.auth.updateUser({
+                password: newPassword
+            });
+
+            if (error) throw error;
+            alert('密码修改成功');
+        } catch (error) {
             console.error('修改密码失败:', error);
-            alert('修改密码失败，请重试');
-        });
+            alert('修改密码失败: ' + error.message);
+        }
     }
 
     // 导出数据
@@ -962,9 +937,9 @@
     }
 
     // 退出登录
-    function logout() {
+    async function logout() {
         if (confirm('确定要退出登录吗？')) {
-            localStorage.removeItem('token');
+            await window.supabaseClient.auth.signOut();
             window.location.href = '/';
         }
     }
