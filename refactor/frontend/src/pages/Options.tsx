@@ -246,6 +246,8 @@ export default function Options() {
     const [strategy, setStrategy] = useState<Strategy>('sell_put');
     const [stockPrice, setStockPrice] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState('analysis');
+    const [historicalChain, setHistoricalChain] = useState<OptionChainResponse | null>(null);
+    const [isHistoricalView, setIsHistoricalView] = useState(false);
 
     // Fetch Expirations
     const fetchExpirations = async () => {
@@ -275,6 +277,10 @@ export default function Options() {
         if (!ticker || !expiry) return;
         setLoading(true);
         setError('');
+
+        // Clear historical view when fetching new data
+        setIsHistoricalView(false);
+        setHistoricalChain(null);
 
         try {
             const response = await api.get(`/options/chain/${ticker}/${expiry}`);
@@ -320,21 +326,21 @@ export default function Options() {
 
     // Filter and sort options based on strategy
     const getFilteredOptions = (): OptionData[] => {
-        if (!chain) {
+        if (!displayChain) {
             console.log('No chain data');
             return [];
         }
 
-        console.log('Chain:', chain);
-        console.log('Calls array:', chain.calls);
-        console.log('Puts array:', chain.puts);
+        console.log('Chain:', displayChain);
+        console.log('Calls array:', displayChain.calls);
+        console.log('Puts array:', displayChain.puts);
 
         let options: OptionData[] = [];
 
         if (strategy === 'sell_put' || strategy === 'buy_put') {
-            options = Array.isArray(chain.puts) ? [...chain.puts] : [];
+            options = Array.isArray(displayChain.puts) ? [...displayChain.puts] : [];
         } else {
-            options = Array.isArray(chain.calls) ? [...chain.calls] : [];
+            options = Array.isArray(displayChain.calls) ? [...displayChain.calls] : [];
         }
 
         console.log('Filtered options:', options.length);
@@ -381,6 +387,10 @@ export default function Options() {
             </div>
         );
     }
+
+    // Use historical chain data if viewing history, otherwise use current chain
+    const displayChain = isHistoricalView ? historicalChain : chain;
+    const displayStockPrice = isHistoricalView ? (historicalChain?.real_stock_price || stockPrice) : stockPrice;
 
     const filteredOptions = getFilteredOptions();
     const topRecommendations = filteredOptions.filter(o => getOptionScore(o) >= 60).slice(0, 5);
@@ -435,8 +445,8 @@ export default function Options() {
                 </div>
             </div>
 
-            {activeTab === 'analysis' && (
-                <div>
+            {/* Options Analysis Tab */}
+            <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
                     {/* Header */}
                     <div className="header-section">
                         <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>期权智能分析</h1>
@@ -515,22 +525,55 @@ export default function Options() {
                 </div>
             )}
 
+            {/* Historical Analysis Indicator */}
+            {isHistoricalView && historicalChain && (
+                <div className="card shadow-lg mb-4" style={{
+                    padding: '1rem 1.5rem',
+                    background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.1) 0%, rgba(13, 155, 151, 0.05) 100%)',
+                    border: '1px solid rgba(13, 155, 151, 0.3)'
+                }}>
+                    <div className="flex items-center gap-3">
+                        <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
+                        <div>
+                            <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
+                                历史期权分析报告
+                            </span>
+                            <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
+                                查看历史数据
+                            </span>
+                        </div>
+                        <div className="ml-auto">
+                            <span className="badge-primary">
+                                <i className="bi bi-archive mr-1"></i>
+                                历史数据
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Results */}
-            {chain && !loading && (
+            {displayChain && !loading && (
                 <div className="space-y-6">
                     {/* Results Header */}
                     <div className="card p-4">
                         <div className="flex justify-between items-center mb-4">
                             <div>
                                 <h2 style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                                    分析结果: <span style={{ color: 'var(--primary)' }}>{chain.symbol}</span>
+                                    分析结果: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
                                 </h2>
                                 <div style={{ color: 'var(--muted-foreground)', marginTop: '0.5rem' }}>
-                                    当前价格: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>${stockPrice?.toFixed(2) || '-'}</span>
+                                    当前价格: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
                                     <span className="mx-3">|</span>
-                                    到期日: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{selectedExpiry}</span>
+                                    到期日: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
                                     <span className="mx-3">|</span>
                                     策略: <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{strategyLabels[strategy]}</span>
+                                    {isHistoricalView && (
+                                        <>
+                                            <span className="mx-3">|</span>
+                                            <span style={{ color: 'var(--primary)', fontWeight: 600 }}>历史数据</span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -639,16 +682,16 @@ export default function Options() {
             )}
 
             {/* Empty State */}
-            {!chain && !loading && (
+            {!displayChain && !loading && (
                 <div className="text-center py-20" style={{ color: 'var(--muted-foreground)' }}>
                     <i className="bi bi-graph-down text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
                     <p>输入股票代码，加载日期，选择到期日开始分析</p>
                 </div>
             )}
-                </div>
-            )}
+            </div>
 
-            {activeTab === 'history' && (
+            {/* Analysis History Tab - Always Mounted but Hidden when Not Active */}
+            <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
                 <OptionAnalysisHistory
                     onSelectHistory={(historyItem) => {
                         setTicker(historyItem.symbol);
@@ -658,9 +701,25 @@ export default function Options() {
                             fetchChain(historyItem.expiryDate);
                         }
                     }}
+                    onViewFullReport={(optionData) => {
+                        // Display historical option analysis data directly
+                        console.log('Displaying historical option analysis:', optionData);
+                        setHistoricalChain(optionData);
+                        setIsHistoricalView(true);
+                        setActiveTab('analysis');
+                        // Extract ticker and other info from historical data
+                        if (optionData.symbol) {
+                            setTicker(optionData.symbol);
+                        }
+                        if (optionData.real_stock_price) {
+                            setStockPrice(optionData.real_stock_price);
+                        }
+                        // Scroll to the top to show the analysis
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     symbolFilter={ticker}
                 />
-            )}
+            </div>
         </div>
     );
 }

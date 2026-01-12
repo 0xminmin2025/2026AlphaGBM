@@ -13,11 +13,13 @@ interface OptionAnalysisHistoryItem {
 
 interface OptionAnalysisHistoryProps {
   onSelectHistory?: (item: OptionAnalysisHistoryItem) => void;
+  onViewFullReport?: (optionData: any) => void;
   symbolFilter?: string;
 }
 
 const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
   onSelectHistory,
+  onViewFullReport,
   symbolFilter
 }) => {
   const [history, setHistory] = useState<OptionAnalysisHistoryItem[]>([]);
@@ -280,6 +282,25 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                     >
                       <i className="bi bi-arrow-repeat mr-1"></i>
                       重新分析
+                    </Button>
+                  )}
+                  {onViewFullReport && item.data && (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewFullReport(item.data);
+                      }}
+                      style={{
+                        background: 'var(--primary)',
+                        border: '1px solid var(--primary)',
+                        color: 'white',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        fontSize: '0.85rem'
+                      }}
+                    >
+                      <i className="bi bi-file-text mr-1"></i>
+                      查看完整报告
                     </Button>
                   )}
                 </div>
