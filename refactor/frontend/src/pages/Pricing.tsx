@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Check, Loader2, Sparkles, Zap, Crown } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 // Modern pricing page styles
 const styles = `
@@ -166,6 +167,7 @@ export default function Pricing() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const { t } = useTranslation();
     const { pricing, credits, pricingLoading, creditsLoading } = useUserData();
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [currentPlan, setCurrentPlan] = useState<string>('free');
@@ -222,10 +224,10 @@ export default function Pricing() {
             {/* Header */}
             <div className="text-center mb-16">
                 <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-                    选择适合您的方案
+                    {t('pricing.title')}
                 </h1>
                 <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-                    无论您是刚入门还是专业投资者，我们都有适合您的智能分析工具
+                    {t('pricing.subtitle')}
                 </p>
             </div>
 
@@ -236,8 +238,8 @@ export default function Pricing() {
                         <Check className="w-5 h-5 text-green-500" />
                     </div>
                     <div>
-                        <div className="font-semibold text-green-400">订阅成功！</div>
-                        <div className="text-sm text-slate-400">您的会员已激活，感谢您的支持</div>
+                        <div className="font-semibold text-green-400">{t('pricing.subscriptionSuccess')}</div>
+                        <div className="text-sm text-slate-400">{t('pricing.subscriptionSuccessDesc')}</div>
                     </div>
                 </div>
             )}
@@ -246,14 +248,14 @@ export default function Pricing() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
                 {/* Free Plan */}
                 <div className={`pricing-card ${currentPlan === 'free' ? 'current' : ''}`}>
-                    {currentPlan === 'free' && <div className="current-badge">当前方案</div>}
+                    {currentPlan === 'free' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
                     <div className="flex items-center gap-3 mb-6 mt-2">
                         <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center">
                             <Sparkles className="w-6 h-6 text-slate-400" />
                         </div>
                         <div>
                             <h3 className="text-xl font-bold">{pricing.plans.free.name}</h3>
-                            <p className="text-sm text-slate-500">免费体验</p>
+                            <p className="text-sm text-slate-500">{t('pricing.free.desc')}</p>
                         </div>
                     </div>
 
@@ -274,16 +276,16 @@ export default function Pricing() {
                     </div>
 
                     <button className="subscribe-btn outline" disabled>
-                        {currentPlan === 'free' ? '当前方案' : '免费版'}
+                        {currentPlan === 'free' ? t('pricing.currentPlan') : t('pricing.free.name')}
                     </button>
                 </div>
 
                 {/* Plus Plan - Featured */}
                 <div className={`pricing-card featured ${currentPlan === 'plus' ? 'current' : ''}`}>
                     {currentPlan === 'plus' ? (
-                        <div className="current-badge">当前方案</div>
+                        <div className="current-badge">{t('pricing.currentPlan')}</div>
                     ) : (
-                        <div className="featured-badge">🔥 最受欢迎</div>
+                        <div className="featured-badge">{t('pricing.mostPopular')}</div>
                     )}
                     <div className="flex items-center gap-3 mb-6 mt-2">
                         <div className="w-12 h-12 rounded-xl bg-[#0D9B97]/20 flex items-center justify-center">
@@ -291,13 +293,13 @@ export default function Pricing() {
                         </div>
                         <div>
                             <h3 className="text-xl font-bold">{pricing.plans.plus.name}</h3>
-                            <p className="text-sm text-slate-500">适合认真投资者</p>
+                            <p className="text-sm text-slate-500">{t('pricing.plus.desc')}</p>
                         </div>
                     </div>
 
                     <div className="mb-6">
                         <span className="price-tag">¥{pricing.plans.plus.monthly.price}</span>
-                        <span className="text-slate-500 ml-2">/月</span>
+                        <span className="text-slate-500 ml-2">{t('pricing.perMonth')}</span>
                     </div>
 
                     <div className="space-y-1 mb-8">
@@ -312,7 +314,7 @@ export default function Pricing() {
                     </div>
 
                     {currentPlan === 'plus' ? (
-                        <button className="subscribe-btn outline" disabled>当前方案</button>
+                        <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
                     ) : (
                         <Button
                             className="subscribe-btn primary"
@@ -320,27 +322,27 @@ export default function Pricing() {
                             disabled={!!checkoutLoading}
                         >
                             {checkoutLoading === 'plus_monthly' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            立即订阅
+                            {t('pricing.subscribe')}
                         </Button>
                     )}
                 </div>
 
                 {/* Pro Plan */}
                 <div className={`pricing-card ${currentPlan === 'pro' ? 'current' : ''}`}>
-                    {currentPlan === 'pro' && <div className="current-badge">当前方案</div>}
+                    {currentPlan === 'pro' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
                     <div className="flex items-center gap-3 mb-6 mt-2">
                         <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
                             <Crown className="w-6 h-6 text-amber-500" />
                         </div>
                         <div>
                             <h3 className="text-xl font-bold">{pricing.plans.pro.name}</h3>
-                            <p className="text-sm text-slate-500">专业级体验</p>
+                            <p className="text-sm text-slate-500">{t('pricing.pro.desc')}</p>
                         </div>
                     </div>
 
                     <div className="mb-6">
                         <span className="price-tag">¥{pricing.plans.pro.monthly.price}</span>
-                        <span className="text-slate-500 ml-2">/月</span>
+                        <span className="text-slate-500 ml-2">{t('pricing.perMonth')}</span>
                     </div>
 
                     <div className="space-y-1 mb-8">
@@ -355,7 +357,7 @@ export default function Pricing() {
                     </div>
 
                     {currentPlan === 'pro' ? (
-                        <button className="subscribe-btn outline" disabled>当前方案</button>
+                        <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
                     ) : (
                         <Button
                             className="subscribe-btn primary"
@@ -363,7 +365,7 @@ export default function Pricing() {
                             disabled={!!checkoutLoading}
                         >
                             {checkoutLoading === 'pro_monthly' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            立即订阅
+                            {t('pricing.subscribe')}
                         </Button>
                     )}
                 </div>
@@ -371,7 +373,7 @@ export default function Pricing() {
 
             {/* Top-up Section */}
             <div className="max-w-2xl mx-auto">
-                <h2 className="text-2xl font-bold text-center mb-6">按量充值</h2>
+                <h2 className="text-2xl font-bold text-center mb-6">{t('pricing.topUpTitle')}</h2>
                 <div className="topup-card">
                     <div>
                         <div className="font-semibold text-lg">{pricing.topups['100'].name}</div>
@@ -386,7 +388,7 @@ export default function Pricing() {
                             className="border-[#0D9B97] text-[#0D9B97] hover:bg-[#0D9B97]/10"
                         >
                             {checkoutLoading === 'topup_100' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            充值
+                            {t('pricing.topUp')}
                         </Button>
                     </div>
                 </div>

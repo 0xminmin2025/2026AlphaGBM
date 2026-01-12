@@ -136,7 +136,7 @@ class PaymentService:
                 amount=session['amount_total'],
                 currency=session['currency'],
                 status=TransactionStatus.SUCCEEDED.value,
-                description=f"购买: {price_key}"
+                description=f"{price_key}"
             )
             db.session.add(transaction)
             

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from 'react-i18next';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -14,6 +15,7 @@ export default function Login() {
     const [isResetPassword, setIsResetPassword] = useState(false);
     const [resetEmailSent, setResetEmailSent] = useState(false);
     const navigate = useNavigate();
+    const { t } = useTranslation();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -97,16 +99,16 @@ export default function Login() {
                 <CardHeader>
                     <CardTitle>
                         {isResetPassword
-                            ? 'Reset Password'
+                            ? t('auth.resetPassword')
                             : isSignUp
-                            ? 'Sign Up'
-                            : 'Login'}
+                            ? t('auth.signup')
+                            : t('auth.login')}
                     </CardTitle>
                     <CardDescription>
                         {isResetPassword
-                            ? 'Enter your email address and we\'ll send you a reset link'
+                            ? t('auth.sendResetEmail')
                             : isSignUp
-                            ? 'Create a new account'
+                            ? t('auth.signup')
                             : 'Welcome back to AlphaG'}
                     </CardDescription>
                 </CardHeader>
@@ -120,7 +122,7 @@ export default function Login() {
                                 Check your email for a password reset link. The link will expire in 1 hour.
                             </p>
                             <Button variant="outline" onClick={resetForm} className="w-full">
-                                Back to Login
+                                {t('auth.backToLogin')}
                             </Button>
                         </div>
                     ) : (
@@ -128,7 +130,7 @@ export default function Login() {
                             <form onSubmit={isResetPassword ? handleResetPassword : handleAuth}>
                                 <div className="grid w-full items-center gap-4">
                                     <div className="flex flex-col space-y-1.5">
-                                        <Label htmlFor="email">Email</Label>
+                                        <Label htmlFor="email">{t('auth.email')}</Label>
                                         <Input
                                             id="email"
                                             type="email"
@@ -141,7 +143,7 @@ export default function Login() {
                                     {!isResetPassword && (
                                         <div className="flex flex-col space-y-1.5">
                                             <div className="flex justify-between items-center">
-                                                <Label htmlFor="password">Password</Label>
+                                                <Label htmlFor="password">{t('auth.password')}</Label>
                                                 {!isSignUp && (
                                                     <Button
                                                         type="button"
@@ -149,7 +151,7 @@ export default function Login() {
                                                         className="p-0 h-auto text-xs text-blue-600"
                                                         onClick={() => setIsResetPassword(true)}
                                                     >
-                                                        Forgot password?
+                                                        {t('auth.forgotPassword')}
                                                     </Button>
                                                 )}
                                             </div>
@@ -167,7 +169,7 @@ export default function Login() {
                             {!isResetPassword && (
                                 <div className="mt-4">
                                     <Button variant="outline" className="w-full" onClick={handleGoogleLogin} type="button">
-                                        Sign in with Google
+                                        {t('auth.signInWithGoogle')}
                                     </Button>
                                 </div>
                             )}
@@ -183,20 +185,20 @@ export default function Login() {
                                 disabled={loading}
                             >
                                 {loading
-                                    ? 'Processing...'
+                                    ? t('auth.processing')
                                     : isResetPassword
-                                    ? 'Send Reset Email'
+                                    ? t('auth.sendResetEmail')
                                     : isSignUp
-                                    ? 'Sign Up'
-                                    : 'Login'}
+                                    ? t('auth.signup')
+                                    : t('auth.login')}
                             </Button>
                             {isResetPassword ? (
                                 <Button variant="link" onClick={() => setIsResetPassword(false)}>
-                                    Back to Login
+                                    {t('auth.backToLogin')}
                                 </Button>
                             ) : (
                                 <Button variant="link" onClick={() => setIsSignUp(!isSignUp)}>
-                                    {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign Up"}
+                                    {isSignUp ? t('auth.alreadyHaveAccount') : t('auth.dontHaveAccount')}
                                 </Button>
                             )}
                         </>

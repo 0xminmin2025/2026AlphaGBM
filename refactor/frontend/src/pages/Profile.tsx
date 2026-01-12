@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 type UsageLog = {
     id: number;
@@ -30,6 +31,7 @@ const serviceTypeLabels: Record<string, string> = {
 
 export default function Profile() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const {
         credits,
         transactions,
@@ -48,13 +50,13 @@ export default function Profile() {
 
     if (!user) return (
         <div className="flex items-center justify-center min-h-[50vh] text-slate-400">
-            请先登录
+            {t('common.pleaseLogin')}
         </div>
     );
 
     return (
         <div className="space-y-8 animate-in fade-in">
-            <h1 className="text-3xl font-bold tracking-tight">账户中心</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{t('profile.title')}</h1>
 
             <div className="grid gap-6 md:grid-cols-2">
                 {/* User Details Card */}
@@ -63,15 +65,15 @@ export default function Profile() {
                         <div className="w-10 h-10 rounded-full bg-[#0D9B97]/20 flex items-center justify-center">
                             <User className="w-5 h-5 text-[#0D9B97]" />
                         </div>
-                        <CardTitle>用户信息</CardTitle>
+                        <CardTitle>{t('profile.userInfo')}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <div className="flex justify-between items-center py-2 border-b border-white/5">
-                            <span className="text-slate-500">邮箱</span>
+                            <span className="text-slate-500">{t('common.email')}</span>
                             <span className="font-medium">{user.email}</span>
                         </div>
                         <div className="flex justify-between items-center py-2">
-                            <span className="text-slate-500">用户ID</span>
+                            <span className="text-slate-500">ID</span>
                             <span className="font-mono text-sm text-slate-400">{user.id?.substring(0, 8)}...</span>
                         </div>
                     </CardContent>
@@ -83,18 +85,18 @@ export default function Profile() {
                         <div className="w-10 h-10 rounded-full bg-[#0D9B97]/20 flex items-center justify-center">
                             <CreditCard className="w-5 h-5 text-[#0D9B97]" />
                         </div>
-                        <CardTitle>订阅与额度</CardTitle>
+                        <CardTitle>{t('profile.subscriptionAndCredits')}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {creditsLoading ? (
                             <div className="text-slate-500 flex items-center gap-2">
                                 <RefreshCcw className="w-4 h-4 animate-spin" />
-                                加载中...
+                                {t('profile.loading')}
                             </div>
                         ) : credits ? (
                             <>
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                    <span className="text-slate-500">当前方案</span>
+                                    <span className="text-slate-500">{t('profile.currentPlan')}</span>
                                     <Badge
                                         variant={credits.subscription.has_subscription ? 'default' : 'secondary'}
                                         className={credits.subscription.has_subscription ? 'bg-[#0D9B97]' : ''}
@@ -103,11 +105,11 @@ export default function Profile() {
                                     </Badge>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                    <span className="text-slate-500">剩余额度</span>
+                                    <span className="text-slate-500">{t('profile.remainingCredits')}</span>
                                     <span className="font-bold text-2xl text-[#0D9B97]">{credits.total_credits}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                    <span className="text-slate-500">每日免费额度</span>
+                                    <span className="text-slate-500">{t('profile.dailyFreeCredits')}</span>
                                     <span className="text-slate-300">
                                         {credits.daily_free.remaining} / {credits.daily_free.quota}
                                     </span>
@@ -121,12 +123,12 @@ export default function Profile() {
                                         className="w-full"
                                     >
                                         <RefreshCcw className={`w-4 h-4 mr-2 ${creditsLoading ? 'animate-spin' : ''}`} />
-                                        刷新额度
+                                        {t('profile.refreshCredits')}
                                     </Button>
                                 </div>
                             </>
                         ) : (
-                            <div className="text-slate-500">加载失败，请刷新重试</div>
+                            <div className="text-slate-500">{t('common.error')}</div>
                         )}
                     </CardContent>
                 </Card>
@@ -140,8 +142,8 @@ export default function Profile() {
                             <Activity className="w-5 h-5 text-amber-500" />
                         </div>
                         <div>
-                            <CardTitle>使用记录</CardTitle>
-                            <p className="text-sm text-slate-500">共 {usagePagination.total_records} 条记录</p>
+                            <CardTitle>{t('profile.usageHistory')}</CardTitle>
+                            <p className="text-sm text-slate-500">{t('profile.totalRecords', { count: usagePagination.total_records })}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -178,9 +180,9 @@ export default function Profile() {
                     <Table>
                         <TableHeader>
                             <TableRow className="border-white/5">
-                                <TableHead>时间</TableHead>
-                                <TableHead>服务类型</TableHead>
-                                <TableHead className="text-right">消耗额度</TableHead>
+                                <TableHead>{t('profile.time')}</TableHead>
+                                <TableHead>{t('profile.serviceType')}</TableHead>
+                                <TableHead className="text-right">{t('profile.creditsUsed')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -189,7 +191,7 @@ export default function Profile() {
                                     <TableCell colSpan={3} className="text-center text-slate-500 py-8">
                                         <div className="flex items-center justify-center gap-2">
                                             <RefreshCcw className="w-4 h-4 animate-spin" />
-                                            加载中...
+                                            {t('profile.loading')}
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -217,7 +219,7 @@ export default function Profile() {
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={3} className="text-center text-slate-500 py-8">
-                                        暂无使用记录
+                                        {t('profile.noUsageRecords')}
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -233,7 +235,7 @@ export default function Profile() {
                         <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
                             <History className="w-5 h-5 text-green-500" />
                         </div>
-                        <CardTitle>交易记录</CardTitle>
+                        <CardTitle>{t('profile.transactionHistory')}</CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
@@ -269,10 +271,10 @@ export default function Profile() {
                     <Table>
                         <TableHeader>
                             <TableRow className="border-white/5">
-                                <TableHead>日期</TableHead>
-                                <TableHead>描述</TableHead>
-                                <TableHead>金额</TableHead>
-                                <TableHead>状态</TableHead>
+                                <TableHead>{t('profile.date')}</TableHead>
+                                <TableHead>{t('profile.description')}</TableHead>
+                                <TableHead>{t('profile.amount')}</TableHead>
+                                <TableHead>{t('profile.status')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -281,24 +283,24 @@ export default function Profile() {
                                     <TableCell colSpan={4} className="text-center text-slate-500 py-8">
                                         <div className="flex items-center justify-center gap-2">
                                             <RefreshCcw className="w-4 h-4 animate-spin" />
-                                            加载中...
+                                            {t('profile.loading')}
                                         </div>
                                     </TableCell>
                                 </TableRow>
                             ) : transactions.length > 0 ? (
-                                transactions.map((t, i) => (
+                                transactions.map((transaction, i) => (
                                     <TableRow key={i} className="border-white/5">
                                         <TableCell className="text-slate-400">
-                                            {new Date(t.date).toLocaleDateString('zh-CN')}
+                                            {new Date(transaction.date).toLocaleDateString('zh-CN')}
                                         </TableCell>
-                                        <TableCell>{t.description}</TableCell>
+                                        <TableCell>{transaction.description}</TableCell>
                                         <TableCell className="font-medium">
-                                            {t.currency.toUpperCase()} {t.amount}
+                                            {transaction.currency.toUpperCase()} {transaction.amount}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant={t.status === 'succeeded' ? 'default' : 'destructive'}
-                                                className={t.status === 'succeeded' ? 'bg-green-600' : ''}>
-                                                {t.status === 'succeeded' ? '成功' : t.status}
+                                            <Badge variant={transaction.status === 'succeeded' ? 'default' : 'destructive'}
+                                                className={transaction.status === 'succeeded' ? 'bg-green-600' : ''}>
+                                                {transaction.status === 'succeeded' ? t('profile.successful') : transaction.status}
                                             </Badge>
                                         </TableCell>
                                     </TableRow>
@@ -306,7 +308,7 @@ export default function Profile() {
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={4} className="text-center text-slate-500 py-8">
-                                        暂无交易记录
+                                        {t('profile.noTransactionRecords')}
                                     </TableCell>
                                 </TableRow>
                             )}
