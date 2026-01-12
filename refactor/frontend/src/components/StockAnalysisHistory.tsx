@@ -30,46 +30,78 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
   onViewFullReport,
   tickerFilter
 }) => {
-  const [history, setHistory] = useState<CompleteAnalysisData[]>([]);  // Now stores complete data
-  const [loading, setLoading] = useState(true);
+  const [allHistory, setAllHistory] = useState<CompleteAnalysisData[]>([]);  // Cache all loaded data
+  const [filteredHistory, setFilteredHistory] = useState<CompleteAnalysisData[]>([]);  // Filtered data for display
+  const [loading, setLoading] = useState(false);  // Start as false, load on demand
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);  // Track if data has been loaded
   const [searchTicker, setSearchTicker] = useState(tickerFilter || '');
-  const [selectedDetail, setSelectedDetail] = useState<any>(null);
-  const [showDetail, setShowDetail] = useState(false);
 
-  const loadHistory = async (pageNum: number = 1, reset: boolean = false) => {
+  // Load all historical data (only when user explicitly requests or first time)
+  const loadAllHistory = async (forceRefresh: boolean = false) => {
+    if (isDataLoaded && !forceRefresh) {
+      console.log('History already loaded, skipping network request');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        per_page: '10'
-      });
+      // Load a large amount of data to minimize requests (get more at once)
+      const allData: CompleteAnalysisData[] = [];
+      let currentPage = 1;
+      let hasMoreData = true;
 
-      if (searchTicker) {
-        params.append('ticker', searchTicker.toUpperCase());
+      while (hasMoreData && currentPage <= 10) { // Limit to prevent infinite loading
+        const params = new URLSearchParams({
+          page: currentPage.toString(),
+          per_page: '50'  // Get 50 items per page for efficient loading
+        });
+
+        const response = await api.get(`/stock/history?${params}`);
+
+        if (response.data.success) {
+          const newItems = response.data.data.items;
+          allData.push(...newItems);
+          hasMoreData = response.data.data.pagination.has_next;
+          currentPage++;
+
+          console.log(`Loaded page ${currentPage - 1}, items: ${newItems.length}, total: ${allData.length}`);
+        } else {
+          throw new Error(response.data.error || 'Failed to load history');
+        }
       }
 
-      const response = await api.get(`/stock/history?${params}`);
+      setAllHistory(allData);
+      setIsDataLoaded(true);
+      console.log(`Completed loading history: ${allData.length} total items`);
 
-      if (response.data.success) {
-        // Backend now returns complete analysis data for each item
-        const newItems = response.data.data.items;
-        console.log('Loaded complete analysis history:', newItems.length, 'items');
+      // Apply current search filter
+      performLocalSearch(allData, searchTicker);
 
-        setHistory(reset ? newItems : [...history, ...newItems]);
-        setHasMore(response.data.data.pagination.has_next);
-      } else {
-        setError(response.data.error || 'Failed to load history');
-      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load analysis history');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Perform local search on cached data (real-time, no network request)
+  const performLocalSearch = (dataToSearch: CompleteAnalysisData[], searchQuery: string) => {
+    if (!searchQuery.trim()) {
+      setFilteredHistory(dataToSearch);
+      return;
+    }
+
+    const query = searchQuery.toUpperCase().trim();
+    const filtered = dataToSearch.filter(analysisData => {
+      const ticker = analysisData.history_metadata?.ticker || '';
+      return ticker.toUpperCase().includes(query);
+    });
+
+    setFilteredHistory(filtered);
+    console.log(`Local search for "${searchQuery}": ${filtered.length} results found`);
   };
 
   // Extract display info from complete analysis data
@@ -103,11 +135,17 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
     }
   };
 
-  const handleSearch = () => {
-    setPage(1);
-    setHistory([]);
-    setHasMore(true);
-    loadHistory(1, true);
+  // Handle real-time search input changes
+  const handleSearchChange = (newSearchValue: string) => {
+    setSearchTicker(newSearchValue);
+    // Perform local search immediately on cached data
+    performLocalSearch(allHistory, newSearchValue);
+  };
+
+  // Manual refresh function
+  const handleRefresh = () => {
+    console.log('User requested data refresh');
+    loadAllHistory(true);  // Force refresh
   };
 
   const getRiskClass = (riskLevel: string | null): string => {
@@ -137,17 +175,30 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
     return new Date(dateString).toLocaleString();
   };
 
+  // Only load data when first opening the component
   useEffect(() => {
-    loadHistory(1, true);
+    if (!isDataLoaded) {
+      console.log('First time loading history data');
+      loadAllHistory(false);
+    }
   }, []);
 
+  // Handle initial search filter from props
   useEffect(() => {
-    if (tickerFilter !== searchTicker) {
-      setSearchTicker(tickerFilter || '');
+    if (tickerFilter && isDataLoaded) {
+      setSearchTicker(tickerFilter);
+      performLocalSearch(allHistory, tickerFilter);
     }
-  }, [tickerFilter]);
+  }, [tickerFilter, isDataLoaded]);
 
-  if (loading && history.length === 0) {
+  // Apply search when allHistory changes
+  useEffect(() => {
+    if (isDataLoaded) {
+      performLocalSearch(allHistory, searchTicker);
+    }
+  }, [allHistory, isDataLoaded]);
+
+  if (loading && !isDataLoaded) {
     return (
       <div className="card shadow-lg" style={{ padding: '2rem' }}>
         <div className="text-center">
@@ -166,15 +217,14 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
           分析历史
         </h5>
 
-        {/* Search */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 mb-4">
+        {/* Real-time Search & Refresh */}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 mb-4">
           <input
             type="text"
             className="form-control"
-            placeholder="搜索股票代码..."
+            placeholder="搜索股票代码... (实时搜索)"
             value={searchTicker}
-            onChange={(e) => setSearchTicker(e.target.value.toUpperCase())}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            onChange={(e) => handleSearchChange(e.target.value.toUpperCase())}
             style={{
               background: 'var(--muted)',
               border: '1px solid var(--border)',
@@ -184,20 +234,24 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
             }}
           />
           <Button
-            onClick={handleSearch}
-            className="btn-primary"
+            onClick={handleRefresh}
+            disabled={loading}
             style={{
-              background: 'var(--primary)',
-              border: '1px solid var(--primary)',
-              color: 'white',
+              background: loading ? 'var(--muted)' : 'var(--warning)',
+              border: `1px solid ${loading ? 'var(--border)' : 'var(--warning)'}`,
+              color: loading ? 'var(--muted-foreground)' : 'white',
               padding: '0.75rem 1.5rem',
               borderRadius: '8px',
               fontWeight: 500
             }}
           >
-            <i className="bi bi-search mr-2"></i>
-            搜索
+            <i className={`bi ${loading ? 'bi-arrow-repeat' : 'bi-arrow-clockwise'} mr-2 ${loading ? 'spinner' : ''}`}></i>
+            {loading ? '加载中...' : '刷新'}
           </Button>
+          <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.9rem', padding: '0.5rem' }}>
+            <i className="bi bi-database"></i>
+            <span>{filteredHistory.length}/{allHistory.length} 项</span>
+          </div>
         </div>
 
         {error && (
@@ -206,14 +260,23 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
           </div>
         )}
 
-        {history.length === 0 && !loading ? (
+        {!isDataLoaded ? (
+          <div className="text-center py-20 text-muted">
+            <i className="bi bi-download text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
+            <p>点击"刷新"按钮开始加载历史分析数据</p>
+            <Button onClick={handleRefresh} className="btn-primary mt-3">
+              <i className="bi bi-arrow-clockwise mr-2"></i>
+              加载历史数据
+            </Button>
+          </div>
+        ) : filteredHistory.length === 0 ? (
           <div className="text-center py-20 text-muted">
             <i className="bi bi-inbox text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
             <p>暂无分析历史记录</p>
           </div>
         ) : (
           <div style={{ maxHeight: '600px', overflow: 'auto' }}>
-            {history.map((analysisData) => {
+            {filteredHistory.map((analysisData) => {
               const item = extractDisplayInfo(analysisData);  // Extract display info from complete data
 
               return (
@@ -332,135 +395,9 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                 </div>
               );
             })}
-
-            {hasMore && (
-              <div className="text-center pt-4">
-                <Button
-                  onClick={() => {
-                    const nextPage = page + 1;
-                    setPage(nextPage);
-                    loadHistory(nextPage);
-                  }}
-                  disabled={loading}
-                  style={{
-                    background: 'var(--muted)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--foreground)',
-                    padding: '0.75rem 2rem',
-                    borderRadius: '8px'
-                  }}
-                >
-                  {loading ? (
-                    <>
-                      <div className="spinner" style={{ width: '16px', height: '16px', marginRight: '0.5rem' }}></div>
-                      加载中...
-                    </>
-                  ) : (
-                    '加载更多'
-                  )}
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </div>
-
-      {/* Detail Modal */}
-      {showDetail && selectedDetail && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setShowDetail(false)}
-        >
-          <div
-            className="card shadow-lg"
-            style={{
-              width: '90vw',
-              maxWidth: '800px',
-              maxHeight: '80vh',
-              overflow: 'auto',
-              padding: '2rem',
-              margin: '2rem'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h4 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--primary)' }}>
-                {selectedDetail.ticker} 分析详情
-              </h4>
-              <button
-                onClick={() => setShowDetail(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--muted-foreground)',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer'
-                }}
-              >
-                <i className="bi bi-x"></i>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <div className="metric-label">当前价格</div>
-                <div className="metric-value" style={{ color: 'var(--foreground)' }}>
-                  {formatCurrency(selectedDetail.current_price)}
-                </div>
-              </div>
-              <div>
-                <div className="metric-label">目标价格</div>
-                <div className="metric-value" style={{ color: 'var(--bull)' }}>
-                  {formatCurrency(selectedDetail.target_price)}
-                </div>
-              </div>
-              <div>
-                <div className="metric-label">止损价格</div>
-                <div className="metric-value" style={{ color: 'var(--bear)' }}>
-                  {formatCurrency(selectedDetail.stop_loss_price)}
-                </div>
-              </div>
-              <div>
-                <div className="metric-label">市场情绪</div>
-                <div className="metric-value" style={{ color: 'var(--foreground)' }}>
-                  {selectedDetail.market_sentiment?.toFixed(1) || 'N/A'}
-                </div>
-              </div>
-              <div>
-                <div className="metric-label">风险评分</div>
-                <div className={`metric-value ${getRiskClass(selectedDetail.risk_level)}`}>
-                  {selectedDetail.risk_score?.toFixed(1) || 'N/A'}
-                </div>
-              </div>
-              <div>
-                <div className="metric-label">EV评分</div>
-                <div className="metric-value" style={{ color: 'var(--primary)' }}>
-                  {selectedDetail.ev_weighted_pct?.toFixed(1) || 'N/A'}%
-                </div>
-              </div>
-            </div>
-
-            {selectedDetail.ai_summary && (
-              <div>
-                <h5 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--foreground)' }}>
-                  AI分析摘要
-                </h5>
-                <div
-                  style={{
-                    background: 'var(--muted)',
-                    padding: '1rem',
-                    borderRadius: '8px',
-                    color: 'var(--muted-foreground)',
-                    lineHeight: 1.6
-                  }}
-                >
-                  {selectedDetail.ai_summary}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </>
   );
 };

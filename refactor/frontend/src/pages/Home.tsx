@@ -592,9 +592,9 @@ export default function Home() {
                 </div>
             </div>
 
-            {activeTab === 'analysis' && (
-                <div>
-                    {/* 股票查询表单 */}
+            {/* Stock Analysis Tab */}
+            <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
+                {/* 股票查询表单 */}
             <div className="card shadow-lg mb-4" style={{ padding: '1.5rem' }}>
                 <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                     <i className="bi bi-search"></i>
@@ -1151,10 +1151,10 @@ export default function Home() {
                     <p>输入股票代码开始分析</p>
                 </div>
             )}
-                </div>
-            )}
+            </div>
 
-            {activeTab === 'history' && (
+            {/* Analysis History Tab - Always Mounted but Hidden when Not Active */}
+            <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
                 <StockAnalysisHistory
                     onSelectHistory={(ticker, style) => {
                         // Set ticker and style for re-analysis
@@ -1173,7 +1173,7 @@ export default function Home() {
                     }}
                     tickerFilter={ticker}
                 />
-            )}
+            </div>
         </div>
     );
 }
