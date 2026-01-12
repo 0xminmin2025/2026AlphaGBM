@@ -20,4 +20,8 @@ apscheduler
 stripe
 supabase
 psycopg2-binary
+pydantic
+scipy
+tigeropen
+gunicorn
 
