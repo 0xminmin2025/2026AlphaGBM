@@ -11,6 +11,8 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSignUp, setIsSignUp] = useState(false);
+    const [isResetPassword, setIsResetPassword] = useState(false);
+    const [resetEmailSent, setResetEmailSent] = useState(false);
     const navigate = useNavigate();
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -54,54 +56,151 @@ export default function Login() {
         }
     };
 
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email) {
+            alert('Please enter your email address');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const redirectUrl = `${window.location.origin}/reset-password`;
+            console.log('Sending password reset to:', email, 'with redirect:', redirectUrl);
+
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: redirectUrl,
+            });
+
+            if (error) throw error;
+
+            setResetEmailSent(true);
+        } catch (error: any) {
+            console.error('Password reset error:', error);
+            alert(`Reset failed: ${error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const resetForm = () => {
+        setIsSignUp(false);
+        setIsResetPassword(false);
+        setResetEmailSent(false);
+        setEmail('');
+        setPassword('');
+    };
+
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
             <Card className="w-[350px]">
                 <CardHeader>
-                    <CardTitle>{isSignUp ? 'Sign Up' : 'Login'}</CardTitle>
+                    <CardTitle>
+                        {isResetPassword
+                            ? 'Reset Password'
+                            : isSignUp
+                            ? 'Sign Up'
+                            : 'Login'}
+                    </CardTitle>
                     <CardDescription>
-                        {isSignUp ? 'Create a new account' : 'Welcome back to AlphaG'}
+                        {isResetPassword
+                            ? 'Enter your email address and we\'ll send you a reset link'
+                            : isSignUp
+                            ? 'Create a new account'
+                            : 'Welcome back to AlphaG'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleAuth}>
-                        <div className="grid w-full items-center gap-4">
-                            <div className="flex flex-col space-y-1.5">
-                                <Label htmlFor="email">Email</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="name@example.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                />
+                    {resetEmailSent ? (
+                        <div className="text-center py-4">
+                            <div className="text-green-600 mb-4">
+                                ✅ Password reset email sent!
                             </div>
-                            <div className="flex flex-col space-y-1.5">
-                                <Label htmlFor="password">Password</Label>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                />
-                            </div>
+                            <p className="text-sm text-gray-600 mb-4">
+                                Check your email for a password reset link. The link will expire in 1 hour.
+                            </p>
+                            <Button variant="outline" onClick={resetForm} className="w-full">
+                                Back to Login
+                            </Button>
                         </div>
-                    </form>
-                    <div className="mt-4">
-                        <Button variant="outline" className="w-full" onClick={handleGoogleLogin} type="button">
-                            Sign in with Google
-                        </Button>
-                    </div>
+                    ) : (
+                        <>
+                            <form onSubmit={isResetPassword ? handleResetPassword : handleAuth}>
+                                <div className="grid w-full items-center gap-4">
+                                    <div className="flex flex-col space-y-1.5">
+                                        <Label htmlFor="email">Email</Label>
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            placeholder="name@example.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    {!isResetPassword && (
+                                        <div className="flex flex-col space-y-1.5">
+                                            <div className="flex justify-between items-center">
+                                                <Label htmlFor="password">Password</Label>
+                                                {!isSignUp && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="link"
+                                                        className="p-0 h-auto text-xs text-blue-600"
+                                                        onClick={() => setIsResetPassword(true)}
+                                                    >
+                                                        Forgot password?
+                                                    </Button>
+                                                )}
+                                            </div>
+                                            <Input
+                                                id="password"
+                                                type="password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </form>
+                            {!isResetPassword && (
+                                <div className="mt-4">
+                                    <Button variant="outline" className="w-full" onClick={handleGoogleLogin} type="button">
+                                        Sign in with Google
+                                    </Button>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
-                    <Button className="w-full" onClick={handleAuth} disabled={loading}>
-                        {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Login')}
-                    </Button>
-                    <Button variant="link" onClick={() => setIsSignUp(!isSignUp)}>
-                        {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign Up"}
-                    </Button>
+                    {!resetEmailSent && (
+                        <>
+                            <Button
+                                className="w-full"
+                                onClick={isResetPassword ? handleResetPassword : handleAuth}
+                                disabled={loading}
+                            >
+                                {loading
+                                    ? 'Processing...'
+                                    : isResetPassword
+                                    ? 'Send Reset Email'
+                                    : isSignUp
+                                    ? 'Sign Up'
+                                    : 'Login'}
+                            </Button>
+                            {isResetPassword ? (
+                                <Button variant="link" onClick={() => setIsResetPassword(false)}>
+                                    Back to Login
+                                </Button>
+                            ) : (
+                                <Button variant="link" onClick={() => setIsSignUp(!isSignUp)}>
+                                    {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign Up"}
+                                </Button>
+                            )}
+                        </>
+                    )}
                 </CardFooter>
             </Card>
         </div>

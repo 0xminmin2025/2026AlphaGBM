@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useUserData } from '@/components/auth/UserDataProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Check, Loader2, Sparkles, Zap, Crown } from 'lucide-react';
@@ -165,27 +166,25 @@ export default function Pricing() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const [pricing, setPricing] = useState<any>(null);
+    const { pricing, credits, pricingLoading, creditsLoading } = useUserData();
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [currentPlan, setCurrentPlan] = useState<string>('free');
 
     const success = searchParams.get('success');
 
+    // Update current plan based on credits data
     useEffect(() => {
-        api.get('/payment/pricing').then(res => setPricing(res.data));
-
-        // Fetch current subscription plan
-        if (user) {
-            api.get('/payment/credits').then(res => {
-                const subscription: SubscriptionInfo = res.data.subscription;
-                if (subscription?.has_subscription) {
-                    setCurrentPlan(subscription.plan_tier);
-                } else {
-                    setCurrentPlan('free');
-                }
-            }).catch(() => setCurrentPlan('free'));
+        if (credits?.subscription) {
+            if (credits.subscription.has_subscription) {
+                setCurrentPlan(credits.subscription.plan_tier);
+            } else {
+                setCurrentPlan('free');
+            }
+        } else if (!creditsLoading && user) {
+            // Only set to free if we're not loading and user exists but no credits data
+            setCurrentPlan('free');
         }
-    }, [user]);
+    }, [credits, creditsLoading, user]);
 
     const handleSubscribe = async (priceKey: string) => {
         if (!user) {
@@ -208,7 +207,7 @@ export default function Pricing() {
         }
     };
 
-    if (!pricing) {
+    if (pricingLoading || !pricing) {
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
                 <Loader2 className="w-8 h-8 animate-spin text-[#0D9B97]" />

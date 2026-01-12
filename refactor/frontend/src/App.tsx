@@ -5,6 +5,7 @@ import Options from '@/pages/Options';
 import Pricing from '@/pages/Pricing';
 import Profile from '@/pages/Profile';
 import Login from '@/pages/Login';
+import ResetPassword from '@/pages/ResetPassword';
 import Landing from '@/pages/Landing';
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<Landing />} />
         <Route element={<MainLayout />}>
           <Route path="/stock" element={<Home />} />

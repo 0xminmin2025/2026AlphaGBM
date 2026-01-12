@@ -17,6 +17,27 @@ class Config:
     
     # Database
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Database Connection Pool Configuration
+    # Optimized for PostgreSQL/Supabase performance
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        # Connection Pool Settings
+        'pool_size': 20,                    # Number of connections to maintain in pool
+        'max_overflow': 30,                 # Additional connections beyond pool_size
+        'pool_timeout': 30,                 # Seconds to wait for connection from pool
+        'pool_recycle': 3600,               # Recycle connections after 1 hour
+        'pool_pre_ping': True,              # Verify connections before use
+
+        # Connection Settings for PostgreSQL/Supabase
+        'connect_args': {
+            'connect_timeout': 10,          # Connection timeout in seconds
+            'application_name': 'AlphaG-Backend',  # App name for monitoring
+            'options': '-c statement_timeout=30000'  # Statement timeout (30 seconds)
+        },
+
+        # Echo SQL queries in debug mode
+        'echo': os.getenv('DATABASE_DEBUG', 'false').lower() == 'true'
+    }
     
     # 优先使用 POSTGRES_URL (Supabase Connection Pooler)
     # 如果没有，尝试使用 SQLALCHEMY_DATABASE_URI
@@ -45,6 +66,23 @@ class Config:
         db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
         os.makedirs(db_dir, exist_ok=True)
         SQLALCHEMY_DATABASE_URI = f'sqlite:///{os.path.join(db_dir, "alphag.db")}'
+
+        # Override connection pool settings for SQLite (different requirements)
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_size': 5,                     # Smaller pool for SQLite
+            'max_overflow': 10,                 # Limited overflow for SQLite
+            'pool_timeout': 20,                 # Shorter timeout for SQLite
+            'pool_recycle': 1800,               # 30 minutes for SQLite
+            'pool_pre_ping': False,             # SQLite doesn't need pre-ping
+
+            # SQLite-specific settings
+            'connect_args': {
+                'timeout': 20,                  # SQLite timeout
+                'check_same_thread': False,     # Allow SQLite multi-threading
+            },
+
+            'echo': os.getenv('DATABASE_DEBUG', 'false').lower() == 'true'
+        }
     
     # Supabase
     SUPABASE_URL = os.getenv('SUPABASE_URL')

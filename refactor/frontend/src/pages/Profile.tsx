@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import api from '@/lib/api';
+import { useUserData } from '@/components/auth/UserDataProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw } from 'lucide-react';
 
 type UsageLog = {
     id: number;
@@ -30,45 +30,21 @@ const serviceTypeLabels: Record<string, string> = {
 
 export default function Profile() {
     const { user } = useAuth();
-    const [credits, setCredits] = useState<any>(null);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
-    const [usagePage, setUsagePage] = useState(1);
-    const [usagePages, setUsagePages] = useState(1);
-    const [usageTotal, setUsageTotal] = useState(0);
-    const [transactionPage, setTransactionPage] = useState(1);
-    const [transactionPages, setTransactionPages] = useState(1);
-
-    useEffect(() => {
-        if (user) {
-            api.get('/payment/credits').then(res => setCredits(res.data));
-            fetchTransactions(1);
-            fetchUsageHistory(1);
-        }
-    }, [user]);
-
-    const fetchTransactions = async (page: number) => {
-        try {
-            const res = await api.get(`/payment/transactions?page=${page}&per_page=10`);
-            setTransactions(res.data.transactions);
-            setTransactionPages(res.data.pages);
-            setTransactionPage(page);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const fetchUsageHistory = async (page: number) => {
-        try {
-            const res = await api.get(`/payment/usage-history?page=${page}&per_page=10`);
-            setUsageLogs(res.data.usage_logs);
-            setUsagePages(res.data.pages);
-            setUsageTotal(res.data.total);
-            setUsagePage(page);
-        } catch (err) {
-            console.error(err);
-        }
-    };
+    const {
+        credits,
+        transactions,
+        usageLogs,
+        transactionPagination,
+        usagePagination,
+        creditsLoading,
+        transactionsLoading,
+        usageLoading,
+        fetchTransactionsPage,
+        fetchUsagePage,
+        refreshCredits,
+        refreshTransactions,
+        refreshUsageHistory,
+    } = useUserData();
 
     if (!user) return (
         <div className="flex items-center justify-center min-h-[50vh] text-slate-400">
@@ -110,7 +86,12 @@ export default function Profile() {
                         <CardTitle>订阅与额度</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {credits ? (
+                        {creditsLoading ? (
+                            <div className="text-slate-500 flex items-center gap-2">
+                                <RefreshCcw className="w-4 h-4 animate-spin" />
+                                加载中...
+                            </div>
+                        ) : credits ? (
                             <>
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
                                     <span className="text-slate-500">当前方案</span>
@@ -125,15 +106,27 @@ export default function Profile() {
                                     <span className="text-slate-500">剩余额度</span>
                                     <span className="font-bold text-2xl text-[#0D9B97]">{credits.total_credits}</span>
                                 </div>
-                                <div className="flex justify-between items-center py-2">
+                                <div className="flex justify-between items-center py-2 border-b border-white/5">
                                     <span className="text-slate-500">每日免费额度</span>
                                     <span className="text-slate-300">
                                         {credits.daily_free.remaining} / {credits.daily_free.quota}
                                     </span>
                                 </div>
+                                <div className="pt-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={refreshCredits}
+                                        disabled={creditsLoading}
+                                        className="w-full"
+                                    >
+                                        <RefreshCcw className={`w-4 h-4 mr-2 ${creditsLoading ? 'animate-spin' : ''}`} />
+                                        刷新额度
+                                    </Button>
+                                </div>
                             </>
                         ) : (
-                            <div className="text-slate-500">加载中...</div>
+                            <div className="text-slate-500">加载失败，请刷新重试</div>
                         )}
                     </CardContent>
                 </Card>
@@ -148,28 +141,36 @@ export default function Profile() {
                         </div>
                         <div>
                             <CardTitle>使用记录</CardTitle>
-                            <p className="text-sm text-slate-500">共 {usageTotal} 条记录</p>
+                            <p className="text-sm text-slate-500">共 {usagePagination.total_records} 条记录</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => fetchUsageHistory(usagePage - 1)}
-                            disabled={usagePage <= 1}
+                            onClick={() => fetchUsagePage(usagePagination.current_page - 1)}
+                            disabled={!usagePagination.has_prev || usageLoading}
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </Button>
                         <span className="text-sm text-slate-500">
-                            {usagePage} / {usagePages || 1}
+                            {usagePagination.current_page} / {usagePagination.total_pages}
                         </span>
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => fetchUsageHistory(usagePage + 1)}
-                            disabled={usagePage >= usagePages}
+                            onClick={() => fetchUsagePage(usagePagination.current_page + 1)}
+                            disabled={!usagePagination.has_next || usageLoading}
                         >
                             <ChevronRight className="w-4 h-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => refreshUsageHistory()}
+                            disabled={usageLoading}
+                        >
+                            <RefreshCcw className={`w-4 h-4 ${usageLoading ? 'animate-spin' : ''}`} />
                         </Button>
                     </div>
                 </CardHeader>
@@ -183,7 +184,16 @@ export default function Profile() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {usageLogs.length > 0 ? (
+                            {usageLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={3} className="text-center text-slate-500 py-8">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <RefreshCcw className="w-4 h-4 animate-spin" />
+                                            加载中...
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : usageLogs.length > 0 ? (
                                 usageLogs.map((log) => (
                                     <TableRow key={log.id} className="border-white/5">
                                         <TableCell className="text-slate-400">
@@ -229,21 +239,29 @@ export default function Profile() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => fetchTransactions(transactionPage - 1)}
-                            disabled={transactionPage <= 1}
+                            onClick={() => fetchTransactionsPage(transactionPagination.current_page - 1)}
+                            disabled={!transactionPagination.has_prev || transactionsLoading}
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </Button>
                         <span className="text-sm text-slate-500">
-                            {transactionPage} / {transactionPages || 1}
+                            {transactionPagination.current_page} / {transactionPagination.total_pages}
                         </span>
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => fetchTransactions(transactionPage + 1)}
-                            disabled={transactionPage >= transactionPages}
+                            onClick={() => fetchTransactionsPage(transactionPagination.current_page + 1)}
+                            disabled={!transactionPagination.has_next || transactionsLoading}
                         >
                             <ChevronRight className="w-4 h-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => refreshTransactions()}
+                            disabled={transactionsLoading}
+                        >
+                            <RefreshCcw className={`w-4 h-4 ${transactionsLoading ? 'animate-spin' : ''}`} />
                         </Button>
                     </div>
                 </CardHeader>
@@ -258,7 +276,16 @@ export default function Profile() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {transactions.length > 0 ? (
+                            {transactionsLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center text-slate-500 py-8">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <RefreshCcw className="w-4 h-4 animate-spin" />
+                                            加载中...
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : transactions.length > 0 ? (
                                 transactions.map((t, i) => (
                                     <TableRow key={i} className="border-white/5">
                                         <TableCell className="text-slate-400">
