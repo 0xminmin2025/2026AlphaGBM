@@ -44,6 +44,24 @@ def require_auth(f):
             g.user_id = user_response.user.id
             if hasattr(user_response.user, 'email'):
                 g.user_email = user_response.user.email
+
+            # Ensure user exists in local database
+            from ..models import db, User
+            existing_user = User.query.filter_by(id=user_response.user.id).first()
+            if not existing_user:
+                # Create user record if it doesn't exist
+                new_user = User(
+                    id=user_response.user.id,
+                    email=user_response.user.email if hasattr(user_response.user, 'email') else f"{user_response.user.id}@unknown.com"
+                )
+                db.session.add(new_user)
+                db.session.commit()
+                logger.info(f"Created new user record for {user_response.user.id}")
+            else:
+                # Update last login
+                from datetime import datetime
+                existing_user.last_login = datetime.utcnow()
+                db.session.commit()
             
         except Exception as e:
             logger.error(f"Auth error: {e}")

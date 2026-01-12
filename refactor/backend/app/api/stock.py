@@ -1,14 +1,18 @@
 from flask import Blueprint, request, jsonify, g
 from ..services import analysis_engine, ev_model, ai_service
 from ..utils.auth import require_auth
+from ..utils.decorators import check_quota
+from ..models import db, ServiceType, StockAnalysisHistory
 import yfinance as yf
 import logging
+import json
+from datetime import datetime
 
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
 logger = logging.getLogger(__name__)
 
 @stock_bp.route('/analyze', methods=['POST'])
-@require_auth
+@check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
 def analyze_stock():
     """
     Stock Analysis Endpoint - Matching original app.py implementation
@@ -132,7 +136,76 @@ def analyze_stock():
             'risk': risk_result,
             'report': ai_report
         }
-        
+
+        # 7. Save analysis results to history
+        if not only_history:  # Only save history for full analysis, not just chart data
+            try:
+                # Check if user_id is available
+                if not hasattr(g, 'user_id') or not g.user_id:
+                    logger.error(f"No user_id available in Flask globals for history saving")
+                    return jsonify(response)  # Return response without saving history
+
+                # Extract key data for storage
+                ev_result = market_data.get('ev_model', {})
+
+                logger.info(f"Preparing to save analysis history for {ticker} (user: {g.user_id})")
+
+                # Extract summary from AI report for quick preview (first 1000 chars)
+                ai_summary = None
+                if isinstance(ai_report, dict):
+                    ai_summary = ai_report.get('summary', '')[:1000] if ai_report.get('summary') else None
+                elif isinstance(ai_report, str):
+                    ai_summary = ai_report[:1000] if ai_report else None
+
+                # Store the COMPLETE backend response as-is for perfect recreation
+                # This ensures 100% compatibility with frontend display logic
+                complete_analysis_data = {
+                    'original_request': {
+                        'ticker': ticker,
+                        'style': style,
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'user_id': g.user_id
+                    },
+                    'complete_response': response,  # Store the exact response sent to frontend
+                    'version': '1.0'  # Version for future compatibility
+                }
+
+                analysis_history = StockAnalysisHistory(
+                    user_id=g.user_id,
+                    ticker=ticker,
+                    style=style,
+                    # Extract key fields for indexing and quick display
+                    current_price=market_data.get('price'),
+                    target_price=market_data.get('target_price'),
+                    stop_loss_price=market_data.get('stop_loss_price'),
+                    market_sentiment=market_data.get('market_sentiment'),
+                    risk_score=risk_result.get('score'),
+                    risk_level=risk_result.get('level'),
+                    position_size=risk_result.get('suggested_position'),
+                    ev_score=ev_result.get('ev_score'),
+                    ev_weighted_pct=ev_result.get('ev_weighted_pct'),
+                    recommendation_action=ev_result.get('recommendation', {}).get('action'),
+                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),
+                    ai_summary=ai_summary,
+                    # Store the COMPLETE response for perfect frontend recreation
+                    full_analysis_data=json.loads(json.dumps(complete_analysis_data, default=str, ensure_ascii=False))
+                )
+
+                logger.info(f"Adding analysis history to database session...")
+                db.session.add(analysis_history)
+
+                logger.info(f"Committing analysis history to database...")
+                db.session.commit()
+
+                logger.info(f"Successfully saved analysis history for {ticker} (user: {g.user_id}, id: {analysis_history.id})")
+
+            except Exception as e:
+                logger.error(f"Failed to save analysis history for {ticker}: {str(e)}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                # Don't fail the entire request if history saving fails
+                db.session.rollback()
+
         return jsonify(response)
 
     except Exception as e:
@@ -140,3 +213,204 @@ def analyze_stock():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': f'分析过程中发生错误: {str(e)}'}), 500
+
+
+@stock_bp.route('/history', methods=['GET'])
+@require_auth
+def get_analysis_history():
+    """
+    Get user's stock analysis history
+    Query parameters:
+    - page: Page number (default 1)
+    - per_page: Items per page (default 10, max 50)
+    - ticker: Filter by ticker (optional)
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 10, type=int), 50)  # Max 50 per page
+        ticker_filter = request.args.get('ticker', '').upper()
+
+        query = StockAnalysisHistory.query.filter_by(user_id=g.user_id)
+
+        if ticker_filter:
+            query = query.filter(StockAnalysisHistory.ticker == ticker_filter)
+
+        query = query.order_by(StockAnalysisHistory.created_at.desc())
+
+        paginated = query.paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+
+        history_items = []
+        for item in paginated.items:
+            # Check if we have complete analysis data
+            if item.full_analysis_data and 'complete_response' in item.full_analysis_data:
+                # Use the stored complete response data
+                complete_analysis = item.full_analysis_data['complete_response'].copy()
+
+                # Add history metadata for list display
+                complete_analysis['history_metadata'] = {
+                    'id': item.id,
+                    'created_at': item.created_at.isoformat(),
+                    'is_from_history': True,
+                    'ticker': item.ticker,
+                    'style': item.style
+                }
+
+                history_items.append(complete_analysis)
+            else:
+                # Fallback for old format data
+                history_items.append({
+                    'success': True,
+                    'data': {
+                        'name': item.ticker,
+                        'symbol': item.ticker,
+                        'price': item.current_price,
+                        'target_price': item.target_price,
+                        'stop_loss_price': item.stop_loss_price,
+                        'market_sentiment': item.market_sentiment
+                    },
+                    'risk': {
+                        'score': item.risk_score,
+                        'level': item.risk_level,
+                        'suggested_position': item.position_size
+                    },
+                    'report': item.ai_summary or '历史分析数据',
+                    'history_metadata': {
+                        'id': item.id,
+                        'created_at': item.created_at.isoformat(),
+                        'is_from_history': True,
+                        'ticker': item.ticker,
+                        'style': item.style,
+                        'incomplete_data': True
+                    }
+                })
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'items': history_items,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': paginated.total,
+                    'pages': paginated.pages,
+                    'has_next': paginated.has_next,
+                    'has_prev': paginated.has_prev
+                }
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching analysis history for user {g.user_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/history/<int:history_id>', methods=['GET'])
+@require_auth
+def get_analysis_history_detail(history_id):
+    """
+    Get detailed analysis history by ID including full analysis data
+    """
+    try:
+        history_item = StockAnalysisHistory.query.filter_by(
+            id=history_id,
+            user_id=g.user_id
+        ).first()
+
+        if not history_item:
+            return jsonify({'success': False, 'error': 'Analysis history not found'}), 404
+
+        # Check if we have the new complete response format
+        if history_item.full_analysis_data and 'complete_response' in history_item.full_analysis_data:
+            # Return the stored complete response exactly as it was sent to frontend originally
+            stored_response = history_item.full_analysis_data['complete_response']
+
+            # Add history metadata for frontend reference
+            stored_response['history_metadata'] = {
+                'id': history_item.id,
+                'created_at': history_item.created_at.isoformat(),
+                'is_from_history': True
+            }
+
+            logger.info(f"Returning complete stored analysis response for history ID {history_item.id}")
+            return jsonify(stored_response)
+        else:
+            # Fallback for old format data (compatibility)
+            logger.info(f"Using fallback format for history ID {history_item.id}")
+            detail_response = {
+                'success': True,
+                'data': {
+                    'name': history_item.ticker,
+                    'symbol': history_item.ticker,
+                    'price': history_item.current_price,
+                    'target_price': history_item.target_price,
+                    'stop_loss_price': history_item.stop_loss_price,
+                    'market_sentiment': history_item.market_sentiment
+                },
+                'risk': {
+                    'score': history_item.risk_score,
+                    'level': history_item.risk_level,
+                    'suggested_position': history_item.position_size
+                },
+                'report': history_item.ai_summary or '历史分析数据',
+                'history_metadata': {
+                    'id': history_item.id,
+                    'created_at': history_item.created_at.isoformat(),
+                    'is_from_history': True,
+                    'incomplete_data': True
+                }
+            }
+            return jsonify(detail_response)
+
+    except Exception as e:
+        logger.error(f"Error fetching analysis history detail {history_id} for user {g.user_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+
+@stock_bp.route('/test-history', methods=['POST'])
+@require_auth
+def test_history():
+    """Test endpoint to verify history saving works"""
+    try:
+        logger.info(f"Testing history save for user: {g.user_id}")
+
+        # Simple test record
+        test_history = StockAnalysisHistory(
+            user_id=g.user_id,
+            ticker="TEST",
+            style="test",
+            current_price=100.0,
+            target_price=110.0,
+            stop_loss_price=95.0,
+            market_sentiment=5.0,
+            risk_score=3.0,
+            risk_level="medium",
+            position_size=10.0,
+            ev_score=6.0,
+            ev_weighted_pct=15.5,
+            recommendation_action="buy",
+            recommendation_confidence="high",
+            ai_summary="Test AI summary",
+            full_analysis_data={"test": "data"}
+        )
+
+        db.session.add(test_history)
+        db.session.commit()
+
+        logger.info(f"Successfully saved test history with ID: {test_history.id}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Test history saved with ID: {test_history.id}'
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to save test history: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500

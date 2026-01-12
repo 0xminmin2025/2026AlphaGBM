@@ -4,6 +4,8 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
+import OptionAnalysisHistory from '@/components/OptionAnalysisHistory';
+import HistoryStorage from '@/lib/historyStorage';
 
 // CSS matching original options.html
 const styles = `
@@ -243,6 +245,7 @@ export default function Options() {
     const [error, setError] = useState('');
     const [strategy, setStrategy] = useState<Strategy>('sell_put');
     const [stockPrice, setStockPrice] = useState<number | null>(null);
+    const [activeTab, setActiveTab] = useState('analysis');
 
     // Fetch Expirations
     const fetchExpirations = async () => {
@@ -281,6 +284,14 @@ export default function Options() {
             if (response.data.real_stock_price) {
                 setStockPrice(response.data.real_stock_price);
             }
+
+            // Save to browser history
+            HistoryStorage.saveOptionAnalysis({
+                symbol: ticker,
+                expiryDate: expiry,
+                analysisType: 'chain',
+                data: response.data
+            });
         } catch (err: any) {
             console.error(err);
             setError(err.response?.data?.error || 'Failed to fetch option chain');
@@ -378,11 +389,59 @@ export default function Options() {
         <div className="animate-in fade-in" style={{ color: 'var(--foreground)' }}>
             <style>{styles}</style>
 
-            {/* Header */}
-            <div className="header-section">
-                <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>期权智能分析</h1>
-                <p style={{ color: 'var(--muted-foreground)' }}>基于 G = B + M 模型与波动率曲面的期权策略扫描</p>
+            {/* Custom Tabs */}
+            <div className="card" style={{ padding: '0', marginBottom: '2rem' }}>
+                <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
+                    <button
+                        onClick={() => setActiveTab('analysis')}
+                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${
+                            activeTab === 'analysis'
+                                ? 'border-b-2'
+                                : 'hover:bg-opacity-10'
+                        }`}
+                        style={{
+                            borderBottomColor: activeTab === 'analysis' ? 'var(--primary)' : 'transparent',
+                            background: 'none',
+                            border: 'none',
+                            borderBottomWidth: '2px',
+                            borderBottomStyle: 'solid',
+                            fontSize: '1rem',
+                            color: activeTab === 'analysis' ? 'var(--primary)' : 'var(--muted-foreground)'
+                        }}
+                    >
+                        <i className="bi bi-graph-up mr-2"></i>
+                        期权分析
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${
+                            activeTab === 'history'
+                                ? 'border-b-2'
+                                : 'hover:bg-opacity-10'
+                        }`}
+                        style={{
+                            borderBottomColor: activeTab === 'history' ? 'var(--primary)' : 'transparent',
+                            background: 'none',
+                            border: 'none',
+                            borderBottomWidth: '2px',
+                            borderBottomStyle: 'solid',
+                            fontSize: '1rem',
+                            color: activeTab === 'history' ? 'var(--primary)' : 'var(--muted-foreground)'
+                        }}
+                    >
+                        <i className="bi bi-clock-history mr-2"></i>
+                        分析历史
+                    </button>
+                </div>
             </div>
+
+            {activeTab === 'analysis' && (
+                <div>
+                    {/* Header */}
+                    <div className="header-section">
+                        <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>期权智能分析</h1>
+                        <p style={{ color: 'var(--muted-foreground)' }}>基于 G = B + M 模型与波动率曲面的期权策略扫描</p>
+                    </div>
 
             {/* Error Alert */}
             {error && (
@@ -585,6 +644,22 @@ export default function Options() {
                     <i className="bi bi-graph-down text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
                     <p>输入股票代码，加载日期，选择到期日开始分析</p>
                 </div>
+            )}
+                </div>
+            )}
+
+            {activeTab === 'history' && (
+                <OptionAnalysisHistory
+                    onSelectHistory={(historyItem) => {
+                        setTicker(historyItem.symbol);
+                        setActiveTab('analysis');
+                        // Try to load the expiry date if it matches available expirations
+                        if (expirations.find(exp => exp.date === historyItem.expiryDate)) {
+                            fetchChain(historyItem.expiryDate);
+                        }
+                    }}
+                    symbolFilter={ticker}
+                />
             )}
         </div>
     );

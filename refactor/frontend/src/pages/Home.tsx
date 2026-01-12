@@ -4,6 +4,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
+import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 
 // Declare global types for Chart.js and marked
 declare global {
@@ -475,6 +476,7 @@ export default function Home() {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState('analysis');
 
     const handleAnalyze = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -546,7 +548,53 @@ export default function Home() {
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ color: 'var(--foreground)' }}>
             <style>{styles}</style>
 
-            {/* 股票查询表单 */}
+            {/* Custom Tabs */}
+            <div className="card shadow-lg mb-4" style={{ padding: '0' }}>
+                <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
+                    <button
+                        onClick={() => setActiveTab('analysis')}
+                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${
+                            activeTab === 'analysis'
+                                ? 'border-b-2 text-primary'
+                                : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        style={{
+                            borderBottomColor: activeTab === 'analysis' ? 'var(--primary)' : 'transparent',
+                            background: 'none',
+                            border: 'none',
+                            borderBottomWidth: '2px',
+                            borderBottomStyle: 'solid',
+                            fontSize: '1rem'
+                        }}
+                    >
+                        <i className="bi bi-graph-up mr-2"></i>
+                        股票分析
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${
+                            activeTab === 'history'
+                                ? 'border-b-2 text-primary'
+                                : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        style={{
+                            borderBottomColor: activeTab === 'history' ? 'var(--primary)' : 'transparent',
+                            background: 'none',
+                            border: 'none',
+                            borderBottomWidth: '2px',
+                            borderBottomStyle: 'solid',
+                            fontSize: '1rem'
+                        }}
+                    >
+                        <i className="bi bi-clock-history mr-2"></i>
+                        分析历史
+                    </button>
+                </div>
+            </div>
+
+            {activeTab === 'analysis' && (
+                <div>
+                    {/* 股票查询表单 */}
             <div className="card shadow-lg mb-4" style={{ padding: '1.5rem' }}>
                 <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                     <i className="bi bi-search"></i>
@@ -605,6 +653,35 @@ export default function Home() {
                 <div className="text-center py-12">
                     <div className="spinner mx-auto mb-4"></div>
                     <p className="text-muted">正在连接 Gemini 进行深度推演...</p>
+                </div>
+            )}
+
+            {/* Historical Analysis Indicator */}
+            {result && result.history_metadata?.is_from_history && (
+                <div className="card shadow-lg mb-4" style={{
+                    padding: '1rem 1.5rem',
+                    background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.1) 0%, rgba(13, 155, 151, 0.05) 100%)',
+                    border: '1px solid rgba(13, 155, 151, 0.3)'
+                }}>
+                    <div className="flex items-center gap-3">
+                        <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
+                        <div>
+                            <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
+                                历史分析报告
+                            </span>
+                            {result.history_metadata.created_at && (
+                                <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
+                                    分析时间：{new Date(result.history_metadata.created_at).toLocaleString('zh-CN')}
+                                </span>
+                            )}
+                        </div>
+                        <div className="ml-auto">
+                            <span className="badge-primary">
+                                <i className="bi bi-archive mr-1"></i>
+                                历史数据
+                            </span>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -1073,6 +1150,29 @@ export default function Home() {
                     <i className="bi bi-graph-up text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
                     <p>输入股票代码开始分析</p>
                 </div>
+            )}
+                </div>
+            )}
+
+            {activeTab === 'history' && (
+                <StockAnalysisHistory
+                    onSelectHistory={(ticker, style) => {
+                        // Set ticker and style for re-analysis
+                        setTicker(ticker);
+                        setStyle(style);
+                        setActiveTab('analysis');
+                    }}
+                    onViewFullReport={(analysisData) => {
+                        // Display complete historical analysis (no network request needed!)
+                        console.log('Displaying historical analysis from memory:', analysisData);
+                        setResult(analysisData);
+                        setActiveTab('analysis');
+
+                        // Scroll to the top to show the analysis
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    tickerFilter={ticker}
+                />
             )}
         </div>
     );

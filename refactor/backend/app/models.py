@@ -162,7 +162,7 @@ class CreditLedger(db.Model):
 class UsageLog(db.Model):
     """使用日志 - 记录每一次消耗"""
     __tablename__ = 'usage_logs'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
     credit_ledger_id = db.Column(db.Integer, db.ForeignKey('credit_ledger.id'), nullable=True) # 如果使用了特定额度包
@@ -170,3 +170,37 @@ class UsageLog(db.Model):
     ticker = db.Column(db.String(20), nullable=True)
     amount_used = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class StockAnalysisHistory(db.Model):
+    """股票分析历史记录"""
+    __tablename__ = 'stock_analysis_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    style = db.Column(db.String(20), nullable=False)
+
+    # Market Data
+    current_price = db.Column(db.Float, nullable=True)
+    target_price = db.Column(db.Float, nullable=True)
+    stop_loss_price = db.Column(db.Float, nullable=True)
+    market_sentiment = db.Column(db.Float, nullable=True)
+
+    # Risk Analysis Results
+    risk_score = db.Column(db.Float, nullable=True)
+    risk_level = db.Column(db.String(20), nullable=True)
+    position_size = db.Column(db.Float, nullable=True)
+
+    # EV Model Results
+    ev_score = db.Column(db.Float, nullable=True)
+    ev_weighted_pct = db.Column(db.Float, nullable=True)
+    recommendation_action = db.Column(db.String(20), nullable=True)
+    recommendation_confidence = db.Column(db.String(20), nullable=True)
+
+    # AI Analysis
+    ai_summary = db.Column(db.Text, nullable=True)
+
+    # Store full JSON data for reference
+    full_analysis_data = db.Column(db.JSON, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
