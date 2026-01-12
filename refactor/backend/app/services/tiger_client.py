@@ -30,10 +30,8 @@ class TigerClientManager:
             candidate_paths = [
                  # Same dir as this service
                  os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tiger_openapi_config.properties'),
-                 # Previous legacy path
-                 '/Users/lewis/space/trading/tiger/tiger_openapi_config.properties',
-                 # Project root
-                 '/Users/lewis/space/lewis/AlphaG/tiger_openapi_config.properties'
+                 os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tiger_openapi_config.properties'),
+                 os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'tiger_openapi_config.properties'),
             ]
             
             config_file_path = None
