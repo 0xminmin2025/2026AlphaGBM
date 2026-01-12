@@ -1,0 +1,980 @@
+openapi: 3.0.3
+info:
+  title: AlphaGBM API
+  description: |
+    股票智能分析平台 API 文档
+
+    ## 认证方式
+    所有需要认证的接口都需要在 HTTP Header 中携带 Supabase JWT Token:
+    ```
+    Authorization: Bearer <your_access_token>
+    ```
+
+    ## 服务类型
+    | 服务类型 | 描述 |
+    |---------|------|
+    | stock_analysis | 股票分析 |
+    | option_analysis | 期权分析 |
+    | deep_report | 深度研报 |
+
+    ## 投资风格
+    | 风格 | 描述 |
+    |------|------|
+    | quality | 质量型 - 关注财务稳健、盈利能力强的优质公司 |
+    | value | 价值型 - 寻找被市场低估的股票 |
+    | growth | 成长型 - 追求高营收增长和盈利增长 |
+    | momentum | 趋势型 - 跟随市场趋势和价格动量 |
+
+  version: 1.0.0
+  contact:
+    name: AlphaGBM Team
+    email: support@alphagbm.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5002/api
+    description: Development Server
+  - url: https://api.alphagbm.com/api
+    description: Production Server
+
+tags:
+  - name: Health
+    description: 健康检查
+  - name: Auth
+    description: 认证相关
+  - name: User
+    description: 用户相关
+  - name: Stock
+    description: 股票分析
+  - name: Options
+    description: 期权分析
+  - name: Payment
+    description: 支付与订阅
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: 健康检查
+      description: 检查API服务是否正常运行
+      operationId: healthCheck
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ==================== Auth Endpoints ====================
+  /auth/status:
+    get:
+      tags: [Auth]
+      summary: 认证状态检查
+      description: 检查认证服务状态
+      operationId: authStatus
+      responses:
+        '200':
+          description: 认证服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ==================== User Endpoints ====================
+  /user/profile:
+    get:
+      tags: [User]
+      summary: 获取用户资料
+      description: 获取当前登录用户的资料信息
+      operationId: getUserProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 用户资料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==================== Stock Endpoints ====================
+  /stock/analyze:
+    post:
+      tags: [Stock]
+      summary: 股票智能分析
+      description: |
+        对指定股票进行全面分析，包括：
+        - 市场数据获取
+        - 风险评估
+        - 目标价格计算
+        - 止损价格计算
+        - EV模型分析
+        - AI深度分析报告
+
+        **注意：** 此接口响应时间较长（10-30秒），因为需要调用AI进行分析
+      operationId: analyzeStock
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAnalyzeRequest'
+            examples:
+              美股:
+                value:
+                  ticker: AAPL
+                  style: quality
+              A股:
+                value:
+                  ticker: 600519.SS
+                  style: value
+              港股:
+                value:
+                  ticker: 0700.HK
+                  style: growth
+      responses:
+        '200':
+          description: 分析成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockAnalyzeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ==================== Options Endpoints ====================
+  /options/expirations/{symbol}:
+    get:
+      tags: [Options]
+      summary: 获取期权到期日列表
+      description: 获取指定股票的可用期权到期日
+      operationId: getExpirations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码
+          schema:
+            type: string
+            example: AAPL
+      responses:
+        '200':
+          description: 到期日列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpirationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /options/chain/{symbol}/{expiry_date}:
+    get:
+      tags: [Options]
+      summary: 获取期权链
+      description: 获取指定股票在特定到期日的完整期权链，包含评分
+      operationId: getOptionChain
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码
+          schema:
+            type: string
+            example: AAPL
+        - name: expiry_date
+          in: path
+          required: true
+          description: 到期日 (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2026-02-21"
+      responses:
+        '200':
+          description: 期权链数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptionChainResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /options/quote/{symbol}:
+    get:
+      tags: [Options]
+      summary: 获取股票报价
+      description: 获取指定股票的基本报价信息
+      operationId: getStockQuote
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码
+          schema:
+            type: string
+            example: AAPL
+      responses:
+        '200':
+          description: 股票报价
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockQuoteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /options/history/{symbol}:
+    get:
+      tags: [Options]
+      summary: 获取股票历史价格
+      description: 获取指定股票的历史价格数据
+      operationId: getStockHistory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码
+          schema:
+            type: string
+            example: AAPL
+        - name: days
+          in: query
+          required: false
+          description: 获取天数
+          schema:
+            type: integer
+            default: 60
+            example: 60
+      responses:
+        '200':
+          description: 历史价格数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /options/enhanced-analysis/{symbol}/{option_identifier}:
+    get:
+      tags: [Options]
+      summary: 获取增强分析
+      description: 获取期权的增强分析，包括VRP和风险评估
+      operationId: getEnhancedAnalysis
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: 股票代码
+          schema:
+            type: string
+            example: AAPL
+        - name: option_identifier
+          in: path
+          required: true
+          description: 期权标识符
+          schema:
+            type: string
+            example: AAPL260220C00200000
+      responses:
+        '200':
+          description: 增强分析数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnhancedAnalysisResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ==================== Payment Endpoints ====================
+  /payment/pricing:
+    get:
+      tags: [Payment]
+      summary: 获取定价信息
+      description: 获取所有订阅计划和加油包的定价信息
+      operationId: getPricing
+      responses:
+        '200':
+          description: 定价信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingResponse'
+
+  /payment/credits:
+    get:
+      tags: [Payment]
+      summary: 获取用户额度
+      description: 获取当前用户的可用额度信息
+      operationId: getCredits
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: service_type
+          in: query
+          required: false
+          description: 服务类型
+          schema:
+            type: string
+            enum: [stock_analysis, option_analysis, deep_report]
+            default: stock_analysis
+      responses:
+        '200':
+          description: 用户额度信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/transactions:
+    get:
+      tags: [Payment]
+      summary: 获取交易历史
+      description: 获取当前用户的支付交易历史
+      operationId: getTransactions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: 页码
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          description: 每页数量
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 交易历史
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/create-checkout-session:
+    post:
+      tags: [Payment]
+      summary: 创建支付会话
+      description: 创建Stripe支付会话，用于购买订阅或加油包
+      operationId: createCheckoutSession
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCheckoutRequest'
+      responses:
+        '200':
+          description: 支付会话创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/webhook:
+    post:
+      tags: [Payment]
+      summary: Stripe Webhook回调
+      description: |
+        接收Stripe的Webhook回调，处理支付完成、订阅续费等事件。
+        **注意：** 此接口由Stripe调用，无需手动调用
+      operationId: handleWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook处理成功
+        '400':
+          description: 无效的Webhook请求
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT Token
+
+  responses:
+    Unauthorized:
+      description: 未授权 - Token无效或已过期
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Unauthorized
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+    InternalError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+
+  schemas:
+    # ==================== User Schemas ====================
+    UserProfile:
+      type: object
+      properties:
+        message:
+          type: string
+          example: User Profile Endpoint
+
+    # ==================== Stock Schemas ====================
+    StockAnalyzeRequest:
+      type: object
+      required:
+        - ticker
+      properties:
+        ticker:
+          type: string
+          description: 股票代码
+          example: AAPL
+        style:
+          type: string
+          description: 投资风格
+          enum: [quality, value, growth, momentum]
+          default: quality
+        onlyHistoryData:
+          type: boolean
+          description: 仅获取历史数据（不进行AI分析）
+          default: false
+
+    StockAnalyzeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/MarketData'
+        risk:
+          $ref: '#/components/schemas/RiskResult'
+        report:
+          type: string
+          description: AI生成的分析报告（Markdown格式）
+
+    MarketData:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: AAPL
+        name:
+          type: string
+          example: Apple Inc.
+        price:
+          type: number
+          format: float
+          example: 259.37
+        currency_symbol:
+          type: string
+          example: $
+        week52_high:
+          type: number
+          format: float
+          example: 288.62
+        week52_low:
+          type: number
+          format: float
+          example: 169.21
+        ma50:
+          type: number
+          format: float
+          example: 272.58
+        ma200:
+          type: number
+          format: float
+          example: 232.80
+        pe:
+          type: number
+          format: float
+          example: 34.72
+        forward_pe:
+          type: number
+          format: float
+          example: 28.34
+        peg:
+          type: number
+          format: float
+          nullable: true
+        growth:
+          type: number
+          format: float
+          description: 营收增长率
+          example: 0.079
+        margin:
+          type: number
+          format: float
+          description: 净利润率
+          example: 0.2692
+        beta:
+          type: number
+          format: float
+          example: 1.24
+        sector:
+          type: string
+          example: Technology
+        industry:
+          type: string
+          example: Consumer Electronics
+        is_etf_or_fund:
+          type: boolean
+          example: false
+        target_price:
+          type: number
+          format: float
+          example: 261.14
+        stop_loss_price:
+          type: number
+          format: float
+          example: 246.40
+        stop_loss_method:
+          type: string
+          example: ATR动态止损
+        market_sentiment:
+          type: number
+          format: float
+          description: 市场情绪评分 (0-10)
+          example: 5.5
+        history_dates:
+          type: array
+          items:
+            type: string
+          description: 历史价格日期
+        history_prices:
+          type: array
+          items:
+            type: number
+          description: 历史价格
+        company_news:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsItem'
+        macro_data:
+          $ref: '#/components/schemas/MacroData'
+        options_data:
+          $ref: '#/components/schemas/OptionsMarketData'
+        market_warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketWarning'
+        ev_model:
+          $ref: '#/components/schemas/EVModel'
+
+    NewsItem:
+      type: object
+      properties:
+        title:
+          type: string
+        publisher:
+          type: string
+        link:
+          type: string
+
+    MacroData:
+      type: object
+      properties:
+        treasury_10y:
+          type: number
+          format: float
+          example: 4.17
+        treasury_10y_change:
+          type: number
+          format: float
+        dxy:
+          type: number
+          format: float
+          example: 98.97
+        dxy_change:
+          type: number
+          format: float
+        gold:
+          type: number
+          format: float
+          example: 4583.80
+        gold_change:
+          type: number
+          format: float
+        oil:
+          type: number
+          format: float
+          example: 59.23
+        oil_change:
+          type: number
+          format: float
+        geopolitical_risk:
+          type: number
+          format: float
+          description: 地缘政治风险指数 (0-10)
+        fed_meetings:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              days_until:
+                type: integer
+              has_dot_plot:
+                type: boolean
+        china_events:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              date:
+                type: string
+              days_until:
+                type: integer
+              data_month:
+                type: string
+
+    OptionsMarketData:
+      type: object
+      properties:
+        vix:
+          type: number
+          format: float
+          example: 14.49
+        vix_change:
+          type: number
+          format: float
+        put_call_ratio:
+          type: number
+          format: float
+          example: 0.70
+
+    MarketWarning:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [high, medium, low]
+        urgency:
+          type: string
+          enum: [immediate, soon, monitor]
+        message:
+          type: string
+        event_date:
+          type: string
+
+    EVModel:
+      type: object
+      properties:
+        ev_weighted:
+          type: number
+          format: float
+        ev_weighted_pct:
+          type: number
+          format: float
+        ev_score:
+          type: number
+          format: float
+        recommendation:
+          type: object
+          properties:
+            action:
+              type: string
+              enum: [BUY, HOLD, SELL]
+            reason:
+              type: string
+            confidence:
+              type: string
+              enum: [high, medium, low]
+
+    RiskResult:
+      type: object
+      properties:
+        score:
+          type: integer
+          description: 风险评分 (0-10)
+          example: 2
+        level:
+          type: string
+          description: 风险等级
+          example: 低
+        suggested_position:
+          type: integer
+          description: 建议仓位 (%)
+          example: 20
+        flags:
+          type: array
+          items:
+            type: string
+          description: 风险警示标志
+
+    # ==================== Options Schemas ====================
+    ExpirationResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        expirations:
+          type: array
+          items:
+            type: string
+            format: date
+
+    OptionChainResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        expiry:
+          type: string
+          format: date
+        underlying_price:
+          type: number
+          format: float
+        calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptionContract'
+        puts:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptionContract'
+
+    OptionContract:
+      type: object
+      properties:
+        strike:
+          type: number
+          format: float
+        lastPrice:
+          type: number
+          format: float
+        bid:
+          type: number
+          format: float
+        ask:
+          type: number
+          format: float
+        volume:
+          type: integer
+        openInterest:
+          type: integer
+        impliedVolatility:
+          type: number
+          format: float
+        inTheMoney:
+          type: boolean
+        score:
+          type: number
+          format: float
+          description: 期权评分
+
+    StockQuoteResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        price:
+          type: number
+          format: float
+        change:
+          type: number
+          format: float
+        changePercent:
+          type: number
+          format: float
+        volume:
+          type: integer
+
+    StockHistoryResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        dates:
+          type: array
+          items:
+            type: string
+        prices:
+          type: array
+          items:
+            type: number
+            format: float
+
+    EnhancedAnalysisResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        option_identifier:
+          type: string
+        vrp_analysis:
+          type: object
+        risk_analysis:
+          type: object
+
+    # ==================== Payment Schemas ====================
+    PricingResponse:
+      type: object
+      properties:
+        plans:
+          type: object
+          properties:
+            free:
+              type: object
+            plus:
+              type: object
+            pro:
+              type: object
+        topups:
+          type: object
+
+    CreditsResponse:
+      type: object
+      properties:
+        total_credits:
+          type: integer
+          description: 总剩余额度
+        subscription:
+          type: object
+          nullable: true
+          description: 订阅信息
+        daily_free:
+          type: object
+          properties:
+            quota:
+              type: integer
+              description: 每日免费配额
+            used:
+              type: integer
+              description: 今日已使用
+            remaining:
+              type: integer
+              description: 今日剩余
+
+    TransactionsResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date-time
+              description:
+                type: string
+              amount:
+                type: number
+                format: float
+              currency:
+                type: string
+              status:
+                type: string
+        total:
+          type: integer
+        pages:
+          type: integer
+        current_page:
+          type: integer
+
+    CreateCheckoutRequest:
+      type: object
+      required:
+        - price_key
+      properties:
+        price_key:
+          type: string
+          description: 价格键
+          enum: [plus_monthly, plus_yearly, pro_monthly, pro_yearly, topup_100]
+        success_url:
+          type: string
+          description: 支付成功后跳转URL
+        cancel_url:
+          type: string
+          description: 支付取消后跳转URL
+
+    CheckoutSessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Stripe会话ID
+        checkout_url:
+          type: string
+          description: 支付页面URL

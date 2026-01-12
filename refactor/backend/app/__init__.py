@@ -27,12 +27,14 @@ def create_app(config_class=Config):
     from .api.stock import stock_bp
     from .api.options import options_bp
     from .api.payment import payment_bp
+    from .docs import docs_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(stock_bp)
     app.register_blueprint(options_bp)
     app.register_blueprint(payment_bp)
+    app.register_blueprint(docs_bp)
     
     @app.route('/health')
     def health():
