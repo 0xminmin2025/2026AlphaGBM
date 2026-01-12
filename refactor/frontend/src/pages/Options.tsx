@@ -35,9 +35,10 @@ export default function Options() {
         try {
             const response = await api.get(`/options/expirations/${ticker}`);
             setExpirations(response.data.expirations);
-            if (response.data.expirations.length > 0) {
-                setSelectedExpiry(response.data.expirations[0].date);
-            }
+            // Default to no selection - user must click date
+            // if (response.data.expirations.length > 0) {
+            //     setSelectedExpiry(response.data.expirations[0].date);
+            // }
         } catch (err: any) {
             console.error(err);
             setError('Failed to fetch expirations');
@@ -61,11 +62,12 @@ export default function Options() {
         }
     };
 
-    useEffect(() => {
-        if (user && ticker) {
-            fetchExpirations();
-        }
-    }, [user]); // Initial load or user login
+    // Removed useEffect for auto-fetch on mount
+    // useEffect(() => {
+    //    if (user && ticker) {
+    //        fetchExpirations();
+    //    }
+    // }, [user]); 
 
     useEffect(() => {
         if (selectedExpiry) {

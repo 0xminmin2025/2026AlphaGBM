@@ -215,10 +215,14 @@ def get_fallback_analysis(ticker, style, data, risk_result):
     return analysis
 
 
-def get_gemini_analysis(ticker, style, data, risk_result):
+def get_gemini_analysis(ticker, data, risk_result, ev_result, style):
     """
     发送数据给 Gemini 进行定性分析
     """
+    # 将 ev_result 注入 data，以便后续生成 prompt 时使用
+    if ev_result:
+        data['ev_model'] = ev_result
+
     # 如果 genai 模块未导入或没有 API 密钥，使用备用分析
     if genai is None or not api_key:
         return get_fallback_analysis(ticker, style, data, risk_result)
