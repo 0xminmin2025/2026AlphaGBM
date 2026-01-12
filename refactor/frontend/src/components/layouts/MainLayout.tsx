@@ -1,12 +1,6 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { ThemeToggle } from '../ui/theme-toggle';
 import { LanguageToggle } from '../ui/language-toggle';
-
-// Imports updated at top of file separately if needed, but I can't inject imports easily with this block unless I replace top too.
-// Let's assume I will add imports in a separate call or do a larger replace.
-// Actually, `MainLayout` needs `useAuth` and `useNavigate`. 
-// I'll rewrite the whole MainLayout to be safe and also address the Styling requirements (referencing original base.html nav style).
 
 export default function MainLayout() {
     const { user, signOut } = useAuth();
@@ -37,7 +31,6 @@ export default function MainLayout() {
 
                     <nav className="flex items-center gap-4">
                         <div className="flex items-center gap-2 mr-2 border-r border-white/10 pr-4">
-                            <ThemeToggle />
                             <LanguageToggle />
                         </div>
                         {user ? (

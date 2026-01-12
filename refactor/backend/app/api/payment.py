@@ -177,6 +177,38 @@ def get_transactions():
     }), 200
 
 
+@payment_bp.route('/usage-history', methods=['GET'])
+@require_auth
+def get_usage_history():
+    """获取用户额度使用历史"""
+    user_id = g.user_id
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    from ..models import UsageLog
+    
+    pagination = UsageLog.query.filter_by(user_id=user_id)\
+        .order_by(UsageLog.created_at.desc())\
+        .paginate(page=page, per_page=per_page, error_out=False)
+    
+    usage_logs = []
+    for log in pagination.items:
+        usage_logs.append({
+            'id': log.id,
+            'service_type': log.service_type,
+            'amount_used': log.amount_used,
+            'created_at': log.created_at.isoformat(),
+        })
+    
+    return jsonify({
+        'usage_logs': usage_logs,
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': page,
+        'per_page': per_page
+    }), 200
+
+
 @payment_bp.route('/pricing', methods=['GET'])
 def get_pricing():
     """获取定价信息"""
