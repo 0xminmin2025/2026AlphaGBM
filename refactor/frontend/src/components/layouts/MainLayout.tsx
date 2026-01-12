@@ -1,10 +1,13 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useUserData } from '@/components/auth/UserDataProvider';
 import { LanguageToggle } from '../ui/language-toggle';
+import LoadingScreen from '../ui/LoadingScreen';
 import { useTranslation } from 'react-i18next';
 
 export default function MainLayout() {
     const { user, signOut } = useAuth();
+    const { isInitialLoading } = useUserData();
     const navigate = useNavigate();
     const { t } = useTranslation();
 
@@ -12,6 +15,11 @@ export default function MainLayout() {
         await signOut();
         navigate('/login');
     };
+
+    // Show loading screen when user data is being initially loaded
+    if (isInitialLoading && user) {
+        return <LoadingScreen message={t('common.loading')} />;
+    }
 
     return (
         <div className="min-h-screen bg-[#09090B] text-[#FAFAFA] flex flex-col font-sans">

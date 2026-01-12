@@ -61,11 +61,28 @@ def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
                 logger.error(f"Auth error in check_quota: {e}")
                 return jsonify({'error': 'Unauthorized'}), 401
             
+            # 尝试从请求中提取ticker信息用于记录
+            ticker = None
+            try:
+                # 尝试从JSON数据中获取ticker
+                if request.is_json and request.get_json():
+                    ticker = request.get_json().get('ticker')
+                # 尝试从URL路径参数中获取ticker (例如 /api/stock/analyze 可能没有路径参数)
+                # 但 /api/options/chain/<symbol>/<expiry_date> 会有symbol
+                elif hasattr(request, 'view_args') and request.view_args:
+                    ticker = request.view_args.get('symbol') or request.view_args.get('ticker')
+                # 尝试从查询参数中获取ticker
+                elif request.args:
+                    ticker = request.args.get('ticker') or request.args.get('symbol')
+            except Exception:
+                pass  # 如果提取失败，忽略错误，ticker保持为None
+
             # 检查并扣减额度
             success, message, remaining = PaymentService.check_and_deduct_credits(
                 user_id=user_id,
                 service_type=service_type,
-                amount=amount
+                amount=amount,
+                ticker=ticker
             )
             
             if not success:

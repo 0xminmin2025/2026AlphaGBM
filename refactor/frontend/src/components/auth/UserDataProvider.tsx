@@ -65,6 +65,7 @@ type UserDataContextType = {
     };
 
     // Loading states
+    isInitialLoading: boolean;
     creditsLoading: boolean;
     pricingLoading: boolean;
     transactionsLoading: boolean;
@@ -109,6 +110,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Loading states
+    const [isInitialLoading, setIsInitialLoading] = useState(false);
     const [creditsLoading, setCreditsLoading] = useState(false);
     const [pricingLoading, setPricingLoading] = useState(false);
     const [transactionsLoading, setTransactionsLoading] = useState(false);
@@ -234,6 +236,13 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     // Auto-fetch data when user changes
     useEffect(() => {
         if (user) {
+            // Check if we need to do initial loading (any critical data is missing)
+            const needsInitialLoading = !dataCache.current.credits || !dataCache.current.pricing;
+
+            if (needsInitialLoading) {
+                setIsInitialLoading(true);
+            }
+
             // Only fetch credits if not already cached
             if (!dataCache.current.credits && !creditsLoading) {
                 refreshCredits();
@@ -250,6 +259,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
             }
         } else {
             // Clear user-specific data when user logs out
+            setIsInitialLoading(false);
             setCredits(null);
             setTransactions([]);
             setUsageLogs([]);
@@ -270,6 +280,20 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
         }
     }, []); // Only run once on mount
 
+    // Monitor when initial loading should end
+    useEffect(() => {
+        if (isInitialLoading && user) {
+            // Check if all critical data is loaded
+            const hasCredits = credits !== null;
+            const hasPricing = pricing !== null;
+            const notLoading = !creditsLoading && !pricingLoading;
+
+            if (hasCredits && hasPricing && notLoading) {
+                setIsInitialLoading(false);
+            }
+        }
+    }, [isInitialLoading, user, credits, pricing, creditsLoading, pricingLoading]);
+
     const value: UserDataContextType = {
         // Data
         credits,
@@ -282,6 +306,7 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
         usagePagination,
 
         // Loading states
+        isInitialLoading,
         creditsLoading,
         pricingLoading,
         transactionsLoading,

@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import api from '@/lib/api';
 
 type UsageLog = {
     id: number;
@@ -47,6 +48,28 @@ export default function Profile() {
         refreshTransactions,
         refreshUsageHistory,
     } = useUserData();
+
+    const [manageSubscriptionLoading, setManageSubscriptionLoading] = useState(false);
+
+    const handleManageSubscription = async () => {
+        setManageSubscriptionLoading(true);
+        try {
+            const response = await api.post('/payment/customer-portal', {
+                return_url: window.location.origin + '/profile'
+            });
+
+            if (response.data.portal_url) {
+                // 在新窗口中打开Stripe客户门户
+                window.open(response.data.portal_url, '_blank');
+            }
+        } catch (error: any) {
+            console.error('打开客户门户失败:', error);
+            const errorMessage = error.response?.data?.error || '打开客户门户失败，请稍后再试';
+            alert(errorMessage);
+        } finally {
+            setManageSubscriptionLoading(false);
+        }
+    };
 
     if (!user) return (
         <div className="flex items-center justify-center min-h-[50vh] text-slate-400">
@@ -114,7 +137,7 @@ export default function Profile() {
                                         {credits.daily_free.remaining} / {credits.daily_free.quota}
                                     </span>
                                 </div>
-                                <div className="pt-2">
+                                <div className="pt-2 space-y-2">
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -125,6 +148,20 @@ export default function Profile() {
                                         <RefreshCcw className={`w-4 h-4 mr-2 ${creditsLoading ? 'animate-spin' : ''}`} />
                                         {t('profile.refreshCredits')}
                                     </Button>
+
+                                    {/* 订阅管理按钮 - 只对已订阅用户显示 */}
+                                    {credits.subscription.has_subscription && (
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            onClick={handleManageSubscription}
+                                            disabled={manageSubscriptionLoading}
+                                            className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white"
+                                        >
+                                            <Settings className={`w-4 h-4 mr-2 ${manageSubscriptionLoading ? 'animate-spin' : ''}`} />
+                                            {manageSubscriptionLoading ? '正在打开...' : '管理订阅'}
+                                        </Button>
+                                    )}
                                 </div>
                             </>
                         ) : (

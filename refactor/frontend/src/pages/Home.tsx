@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 // Declare global types for Chart.js and marked
 declare global {
@@ -533,12 +534,12 @@ export default function Home() {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4 text-white">
-                <h1 className="text-4xl font-bold tracking-tight">AlphaGBM Stock Analysis</h1>
+                <h1 className="text-4xl font-bold tracking-tight">AlphaGBM 股票分析</h1>
                 <p className="text-lg text-slate-400 max-w-2xl">
-                    Please login to access professional AI stock analysis.
+                    请登录以访问期权分析
                 </p>
                 <div className="flex gap-4">
-                    <Button onClick={() => navigate('/login')} className="btn-primary" size="lg">Login</Button>
+                    <Button onClick={() => navigate('/login')} className="btn-primary" size="lg">登录</Button>
                 </div>
             </div>
         );
@@ -553,11 +554,10 @@ export default function Home() {
                 <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
                     <button
                         onClick={() => setActiveTab('analysis')}
-                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${
-                            activeTab === 'analysis'
-                                ? 'border-b-2 text-primary'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${activeTab === 'analysis'
+                            ? 'border-b-2 text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
                         style={{
                             borderBottomColor: activeTab === 'analysis' ? 'var(--primary)' : 'transparent',
                             background: 'none',
@@ -572,11 +572,10 @@ export default function Home() {
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
-                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${
-                            activeTab === 'history'
-                                ? 'border-b-2 text-primary'
-                                : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${activeTab === 'history'
+                            ? 'border-b-2 text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
                         style={{
                             borderBottomColor: activeTab === 'history' ? 'var(--primary)' : 'transparent',
                             background: 'none',
@@ -595,562 +594,580 @@ export default function Home() {
             {/* Stock Analysis Tab */}
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
                 {/* 股票查询表单 */}
-            <div className="card shadow-lg mb-4" style={{ padding: '1.5rem' }}>
-                <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                    <i className="bi bi-search"></i>
-                    股票智能分析
-                </h5>
+                <div className="card shadow-lg mb-4" style={{ padding: '1.5rem' }}>
+                    <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                        <i className="bi bi-search"></i>
+                        股票智能分析
+                    </h5>
 
-                <form onSubmit={handleAnalyze} className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-4">
-                    <div>
-                        <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>投资风格</label>
-                        <select
-                            value={style}
-                            onChange={(e) => setStyle(e.target.value)}
-                            className="form-select w-full"
-                        >
-                            <option value="quality">Quality (质量)</option>
-                            <option value="value">Value (价值)</option>
-                            <option value="growth">Growth (成长)</option>
-                            <option value="momentum">Momentum (趋势)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>股票代码</label>
-                        <Input
-                            placeholder="输入股票代码，如 AAPL, TSLA, 600519.SS"
-                            value={ticker}
-                            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                            required
-                            className="form-control w-full"
-                        />
-                    </div>
-                    <div className="flex items-end">
-                        <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
-                            <i className="bi bi-graph-up mr-2"></i>
-                            {loading ? '分析中...' : '分析'}
-                        </Button>
-                    </div>
-                </form>
-
-                <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
-                    {styleDescriptions[style]}
-                </div>
-
-                {error && <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>}
-            </div>
-
-            {/* Market Warnings */}
-            {result && result.data?.market_warnings && (
-                <MarketWarnings warnings={result.data.market_warnings} />
-            )}
-
-            {/* Investment Philosophy */}
-            <InvestmentPhilosophy />
-
-            {/* Loading */}
-            {loading && (
-                <div className="text-center py-12">
-                    <div className="spinner mx-auto mb-4"></div>
-                    <p className="text-muted">正在连接 Gemini 进行深度推演...</p>
-                </div>
-            )}
-
-            {/* Historical Analysis Indicator */}
-            {result && result.history_metadata?.is_from_history && (
-                <div className="card shadow-lg mb-4" style={{
-                    padding: '1rem 1.5rem',
-                    background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.1) 0%, rgba(13, 155, 151, 0.05) 100%)',
-                    border: '1px solid rgba(13, 155, 151, 0.3)'
-                }}>
-                    <div className="flex items-center gap-3">
-                        <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
+                    <form onSubmit={handleAnalyze} className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-4">
                         <div>
-                            <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
-                                历史分析报告
-                            </span>
-                            {result.history_metadata.created_at && (
-                                <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
-                                    分析时间：{new Date(result.history_metadata.created_at).toLocaleString('zh-CN')}
-                                </span>
-                            )}
+                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>投资风格</label>
+                            <CustomSelect
+                                options={[
+                                    {
+                                        value: 'quality',
+                                        label: 'Quality (质量)',
+                                        description: '关注财务稳健、盈利能力强、债务水平低的优质公司，适合长期持有，最大仓位20%'
+                                    },
+                                    {
+                                        value: 'value',
+                                        label: 'Value (价值)',
+                                        description: '寻找被市场低估的股票，关注低PE、低PEG，追求安全边际，最大仓位10%'
+                                    },
+                                    {
+                                        value: 'growth',
+                                        label: 'Growth (成长)',
+                                        description: '追求高营收增长和盈利增长的公司，容忍较高估值，最大仓位15%'
+                                    },
+                                    {
+                                        value: 'momentum',
+                                        label: 'Momentum (趋势)',
+                                        description: '跟随市场趋势和价格动量，快进快出，风险较高，最大仓位5%'
+                                    }
+                                ]}
+                                value={style}
+                                onChange={setStyle}
+                                placeholder="选择投资风格"
+                                className="w-full"
+                            />
                         </div>
-                        <div className="ml-auto">
-                            <span className="badge-primary">
-                                <i className="bi bi-archive mr-1"></i>
-                                历史数据
-                            </span>
+                        <div>
+                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>股票代码</label>
+                            <Input
+                                placeholder="输入股票代码，如 AAPL, TSLA, 600519.SS"
+                                value={ticker}
+                                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                                required
+                                className="form-control w-full"
+                            />
+                        </div>
+                        <div className="flex items-end">
+                            <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
+                                <i className="bi bi-graph-up mr-2"></i>
+                                {loading ? '分析中...' : '分析'}
+                            </Button>
+                        </div>
+                    </form>
+
+                    <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
+                        {styleDescriptions[style]}
+                    </div>
+
+                    {error && <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>}
+                </div>
+
+                {/* Market Warnings */}
+                {result && result.data?.market_warnings && (
+                    <MarketWarnings warnings={result.data.market_warnings} />
+                )}
+
+                {/* Investment Philosophy */}
+                <InvestmentPhilosophy />
+
+                {/* Loading */}
+                {loading && (
+                    <div className="text-center py-12">
+                        <div className="spinner mx-auto mb-4"></div>
+                        <p className="text-muted">正在连接 Gemini 进行深度推演...</p>
+                    </div>
+                )}
+
+                {/* Historical Analysis Indicator */}
+                {result && result.history_metadata?.is_from_history && (
+                    <div className="card shadow-lg mb-4" style={{
+                        padding: '1rem 1.5rem',
+                        background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.1) 0%, rgba(13, 155, 151, 0.05) 100%)',
+                        border: '1px solid rgba(13, 155, 151, 0.3)'
+                    }}>
+                        <div className="flex items-center gap-3">
+                            <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
+                            <div>
+                                <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
+                                    历史分析报告
+                                </span>
+                                {result.history_metadata.created_at && (
+                                    <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
+                                        分析时间：{new Date(result.history_metadata.created_at).toLocaleString('zh-CN')}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="ml-auto">
+                                <span className="badge-primary">
+                                    <i className="bi bi-archive mr-1"></i>
+                                    历史数据
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Dashboard Results */}
-            {result && result.success && (() => {
-                const d = result.data;
-                const r = result.risk;
-                const sentiment = d.market_sentiment ?? 5.0;
-                const rating = getRating(r.score);
-                const styleName = styleNames[style] || '质量 (Quality)';
-                const pricePosition = d.week52_high && d.week52_low && d.week52_high > d.week52_low
-                    ? ((d.price - d.week52_low) / (d.week52_high - d.week52_low) * 100)
-                    : 50;
+                {/* Dashboard Results */}
+                {result && result.success && (() => {
+                    const d = result.data;
+                    const r = result.risk;
+                    const sentiment = d.market_sentiment ?? 5.0;
+                    const rating = getRating(r.score);
+                    const styleName = styleNames[style] || '质量 (Quality)';
+                    const pricePosition = d.week52_high && d.week52_low && d.week52_high > d.week52_low
+                        ? ((d.price - d.week52_low) / (d.week52_high - d.week52_low) * 100)
+                        : 50;
 
-                return (
-                    <div id="dashboard" className="space-y-6">
-                        {/* Metrics Row - 4 cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            {/* Price */}
-                            <div className="card shadow-md" style={{ padding: '1.5rem' }}>
-                                <div className="metric-label">
-                                    <i className="bi bi-graph-up mr-2"></i>
-                                    当前价格 (P)
-                                </div>
-                                <div className="metric-value">{d.currency_symbol}{d.price?.toFixed(2)}</div>
-                                <small className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                    52w: {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
-                                </small>
-                            </div>
-
-                            {/* Sentiment */}
-                            <div className="card shadow-md" style={{ padding: '1.5rem' }}>
-                                <div className="metric-label">
-                                    <i className="bi bi-emoji-smile mr-2"></i>
-                                    市场情绪 (S)
-                                </div>
-                                <div className={`metric-value ${getSentimentClass(sentiment)}`}>{sentiment.toFixed(1)}</div>
-                                <small className="text-muted" style={{ fontSize: '0.85rem' }}>0-10分，越高越乐观</small>
-                            </div>
-
-                            {/* Risk Level */}
-                            <div className="card shadow-md" style={{ padding: '1.5rem' }}>
-                                <div className="metric-label">
-                                    <i className="bi bi-shield-check mr-2"></i>
-                                    综合风控等级
-                                </div>
-                                <div className={`metric-value ${getRiskClass(r.score)}`}>{r.level}</div>
-                                <small className="text-danger" style={{ fontSize: '0.85rem' }}>Score: {r.score}/10</small>
-                            </div>
-
-                            {/* Suggested Position */}
-                            <div className="card shadow-md border-primary" style={{ padding: '1.5rem', borderWidth: '2px' }}>
-                                <div className="metric-label text-primary">
-                                    <i className="bi bi-pie-chart-fill mr-2"></i>
-                                    建议仓位
-                                </div>
-                                <div className="metric-value text-primary">{r.suggested_position}%</div>
-                                <small className="text-muted" style={{ fontSize: '0.85rem' }}>基于模型限制</small>
-                            </div>
-                        </div>
-
-                        {/* Second Row: Chart + Risk | AI Report */}
-                        <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6">
-                            {/* Left Column */}
-                            <div className="space-y-4">
-                                {/* Price Chart */}
+                    return (
+                        <div id="dashboard" className="space-y-6">
+                            {/* Metrics Row - 4 cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                {/* Price */}
                                 <div className="card shadow-md" style={{ padding: '1.5rem' }}>
-                                    <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
-                                        <i className="bi bi-graph-up-arrow"></i>
-                                        近12月价格趋势
-                                    </h5>
-                                    <PriceChart dates={d.history_dates} prices={d.history_prices} />
+                                    <div className="metric-label">
+                                        <i className="bi bi-graph-up mr-2"></i>
+                                        当前价格 (P)
+                                    </div>
+                                    <div className="metric-value">{d.currency_symbol}{d.price?.toFixed(2)}</div>
+                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        52w: {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
+                                    </small>
                                 </div>
 
-                                {/* Risk Flags */}
+                                {/* Sentiment */}
                                 <div className="card shadow-md" style={{ padding: '1.5rem' }}>
-                                    <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
-                                        <i className="bi bi-exclamation-triangle"></i>
-                                        风险警示
-                                    </h5>
-                                    <ul>
-                                        {r.flags && r.flags.length > 0 ? (
-                                            r.flags.map((flag: string, idx: number) => (
-                                                <li key={idx} className="list-group-item text-danger">[警告] {flag}</li>
-                                            ))
-                                        ) : (
-                                            <li className="list-group-item text-success">硬逻辑检测通过，无明显结构性风险。</li>
-                                        )}
-                                    </ul>
+                                    <div className="metric-label">
+                                        <i className="bi bi-emoji-smile mr-2"></i>
+                                        市场情绪 (S)
+                                    </div>
+                                    <div className={`metric-value ${getSentimentClass(sentiment)}`}>{sentiment.toFixed(1)}</div>
+                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>0-10分，越高越乐观</small>
+                                </div>
+
+                                {/* Risk Level */}
+                                <div className="card shadow-md" style={{ padding: '1.5rem' }}>
+                                    <div className="metric-label">
+                                        <i className="bi bi-shield-check mr-2"></i>
+                                        综合风控等级
+                                    </div>
+                                    <div className={`metric-value ${getRiskClass(r.score)}`}>{r.level}</div>
+                                    <small className="text-danger" style={{ fontSize: '0.85rem' }}>Score: {r.score}/10</small>
+                                </div>
+
+                                {/* Suggested Position */}
+                                <div className="card shadow-md border-primary" style={{ padding: '1.5rem', borderWidth: '2px' }}>
+                                    <div className="metric-label text-primary">
+                                        <i className="bi bi-pie-chart-fill mr-2"></i>
+                                        建议仓位
+                                    </div>
+                                    <div className="metric-value text-primary">{r.suggested_position}%</div>
+                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>基于模型限制</small>
                                 </div>
                             </div>
 
-                            {/* Right Column: AI Report */}
-                            <div className="card shadow-md" style={{ display: 'flex', flexDirection: 'column' }}>
-                                <div style={{
-                                    padding: '1.5rem',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    borderBottom: '1px solid var(--border)'
-                                }}>
+                            {/* Second Row: Chart + Risk | AI Report */}
+                            <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6">
+                                {/* Left Column */}
+                                <div className="space-y-4">
+                                    {/* Price Chart */}
+                                    <div className="card shadow-md" style={{ padding: '1.5rem' }}>
+                                        <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                                            <i className="bi bi-graph-up-arrow"></i>
+                                            近12月价格趋势
+                                        </h5>
+                                        <PriceChart dates={d.history_dates} prices={d.history_prices} />
+                                    </div>
+
+                                    {/* Risk Flags */}
+                                    <div className="card shadow-md" style={{ padding: '1.5rem' }}>
+                                        <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                                            <i className="bi bi-exclamation-triangle"></i>
+                                            风险警示
+                                        </h5>
+                                        <ul>
+                                            {r.flags && r.flags.length > 0 ? (
+                                                r.flags.map((flag: string, idx: number) => (
+                                                    <li key={idx} className="list-group-item text-danger">[警告] {flag}</li>
+                                                ))
+                                            ) : (
+                                                <li className="list-group-item text-success">硬逻辑检测通过，无明显结构性风险。</li>
+                                            )}
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                {/* Right Column: AI Report */}
+                                <div className="card shadow-md" style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{
+                                        padding: '1.5rem',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        borderBottom: '1px solid var(--border)'
+                                    }}>
+                                        <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                                            <i className="bi bi-stars"></i>
+                                            AI投资分析
+                                        </h5>
+                                        <span className="badge-primary">AI Generated</span>
+                                    </div>
+                                    <div className="overflow-auto" style={{ maxHeight: '650px', padding: '1.5rem' }}>
+                                        <div
+                                            className="ai-summary"
+                                            dangerouslySetInnerHTML={{ __html: renderMarkdown(result.report || '分析数据不可用') }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Full Text Report */}
+                            <div className="card shadow-md">
+                                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
                                     <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
-                                        <i className="bi bi-stars"></i>
-                                        AI投资分析
+                                        <i className="bi bi-file-text"></i>
+                                        完整分析报告
                                     </h5>
-                                    <span className="badge-primary">AI Generated</span>
                                 </div>
-                                <div className="overflow-auto" style={{ maxHeight: '650px', padding: '1.5rem' }}>
-                                    <div
-                                        className="ai-summary"
-                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(result.report || '分析数据不可用') }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Full Text Report */}
-                        <div className="card shadow-md">
-                            <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
-                                <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
-                                    <i className="bi bi-file-text"></i>
-                                    完整分析报告
-                                </h5>
-                            </div>
-                            <div style={{ padding: '1.5rem', lineHeight: 1.8, fontSize: '1rem' }}>
-                                {/* Report Header */}
-                                <div className="text-report-section" style={{ borderBottom: '2px solid var(--primary)', paddingBottom: '1.5rem' }}>
-                                    <div className="text-center mb-4">
-                                        <h3 style={{ color: 'var(--primary)', fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                            {d.name} ({d.symbol}) 投资研究报告
-                                        </h3>
-                                        <p style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>
-                                            报告日期：{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
-                                        </p>
-                                    </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                                        <div className="text-center">
-                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>投资评级</div>
-                                            <div className={rating.class} style={{ fontSize: '1.5rem', fontWeight: 700 }}>{rating.text}</div>
+                                <div style={{ padding: '1.5rem', lineHeight: 1.8, fontSize: '1rem' }}>
+                                    {/* Report Header */}
+                                    <div className="text-report-section" style={{ borderBottom: '2px solid var(--primary)', paddingBottom: '1.5rem' }}>
+                                        <div className="text-center mb-4">
+                                            <h3 style={{ color: 'var(--primary)', fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                                {d.name} ({d.symbol}) 投资研究报告
+                                            </h3>
+                                            <p style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>
+                                                报告日期：{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                            </p>
                                         </div>
-                                        <div className="text-center">
-                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>目标价格</div>
-                                            <div style={{ color: r.suggested_position === 0 ? 'var(--bear)' : 'var(--primary)', fontSize: '1.3rem', fontWeight: 600 }}>
-                                                {d.currency_symbol}{(d.target_price || d.price)?.toFixed(2)}
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                                            <div className="text-center">
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>投资评级</div>
+                                                <div className={rating.class} style={{ fontSize: '1.5rem', fontWeight: 700 }}>{rating.text}</div>
                                             </div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>当前价格</div>
-                                            <div style={{ color: 'var(--foreground)', fontSize: '1.3rem', fontWeight: 600 }}>
-                                                {d.currency_symbol}{d.price?.toFixed(2)}
+                                            <div className="text-center">
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>目标价格</div>
+                                                <div style={{ color: r.suggested_position === 0 ? 'var(--bear)' : 'var(--primary)', fontSize: '1.3rem', fontWeight: 600 }}>
+                                                    {d.currency_symbol}{(d.target_price || d.price)?.toFixed(2)}
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>建议仓位</div>
-                                            <div style={{ color: 'var(--primary)', fontSize: '1.3rem', fontWeight: 600 }}>
-                                                {r.suggested_position}%
+                                            <div className="text-center">
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>当前价格</div>
+                                                <div style={{ color: 'var(--foreground)', fontSize: '1.3rem', fontWeight: 600 }}>
+                                                    {d.currency_symbol}{d.price?.toFixed(2)}
+                                                </div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>建议仓位</div>
+                                                <div style={{ color: 'var(--primary)', fontSize: '1.3rem', fontWeight: 600 }}>
+                                                    {r.suggested_position}%
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Section 1: Core Analysis */}
-                                <div className="text-report-section">
-                                    <div className="text-report-title">一、核心观点</div>
-                                    <div style={{ color: 'var(--muted-foreground)' }}>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>投资风格：</strong>{styleName}。</p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>核心结论：</strong>基于G=B+M模型分析，当前价格位于52周区间的{pricePosition.toFixed(1)}%位置。
-                                            {!d.is_etf_or_fund && d.growth !== undefined && `基本面数据显示营收增长率为${(d.growth * 100).toFixed(2)}%，利润率为${((d.margin || 0) * 100).toFixed(2)}%。`}
-                                            综合风险评分为{r.score}/10，风险等级为{r.level}。
-                                        </p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>投资建议：</strong>{rating.text}。建议仓位上限为{r.suggested_position}%。
-                                            {r.suggested_position === 0 ? '当前风险过高，不建议建仓，建议观望。' : r.score >= 4 ? '建议分批建仓，控制风险。' : '可考虑一次性建仓，但需严格遵守仓位上限。'}
-                                        </p>
+                                    {/* Section 1: Core Analysis */}
+                                    <div className="text-report-section">
+                                        <div className="text-report-title">一、核心观点</div>
+                                        <div style={{ color: 'var(--muted-foreground)' }}>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>投资风格：</strong>{styleName}。</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>核心结论：</strong>基于G=B+M模型分析，当前价格位于52周区间的{pricePosition.toFixed(1)}%位置。
+                                                {!d.is_etf_or_fund && d.growth !== undefined && `基本面数据显示营收增长率为${(d.growth * 100).toFixed(2)}%，利润率为${((d.margin || 0) * 100).toFixed(2)}%。`}
+                                                综合风险评分为{r.score}/10，风险等级为{r.level}。
+                                            </p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>投资建议：</strong>{rating.text}。建议仓位上限为{r.suggested_position}%。
+                                                {r.suggested_position === 0 ? '当前风险过高，不建议建仓，建议观望。' : r.score >= 4 ? '建议分批建仓，控制风险。' : '可考虑一次性建仓，但需严格遵守仓位上限。'}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Section 2: Company Overview */}
-                                <div className="text-report-section">
-                                    <div className="text-report-title">二、{d.is_etf_or_fund ? 'ETF概况' : '公司概况'}</div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><div className="text-report-label">股票代码</div><div className="text-report-value">{d.symbol}</div></div>
-                                        <div><div className="text-report-label">全称</div><div className="text-report-value">{d.name}</div></div>
-                                        {!d.is_etf_or_fund && (
-                                            <>
-                                                <div><div className="text-report-label">所属行业</div><div className="text-report-value">{d.sector || '数据不足'}</div></div>
-                                                <div><div className="text-report-label">细分领域</div><div className="text-report-value">{d.industry || '数据不足'}</div></div>
-                                            </>
+                                    {/* Section 2: Company Overview */}
+                                    <div className="text-report-section">
+                                        <div className="text-report-title">二、{d.is_etf_or_fund ? 'ETF概况' : '公司概况'}</div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><div className="text-report-label">股票代码</div><div className="text-report-value">{d.symbol}</div></div>
+                                            <div><div className="text-report-label">全称</div><div className="text-report-value">{d.name}</div></div>
+                                            {!d.is_etf_or_fund && (
+                                                <>
+                                                    <div><div className="text-report-label">所属行业</div><div className="text-report-value">{d.sector || '数据不足'}</div></div>
+                                                    <div><div className="text-report-label">细分领域</div><div className="text-report-value">{d.industry || '数据不足'}</div></div>
+                                                </>
+                                            )}
+                                        </div>
+                                        {/* Company News */}
+                                        {d.company_news && Array.isArray(d.company_news) && d.company_news.length > 0 && (
+                                            <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+                                                <div style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.8rem' }}>最新动态</div>
+                                                <ul style={{ color: 'var(--muted-foreground)', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, paddingLeft: '1.5rem' }}>
+                                                    {d.company_news.slice(0, 5).map((news: any, idx: number) => (
+                                                        <li key={idx} style={{ marginBottom: '0.8rem' }}>
+                                                            <strong>{news.title || '无标题'}</strong>
+                                                            {news.publisher && <span style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}> - {news.publisher}</span>}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
                                         )}
                                     </div>
-                                    {/* Company News */}
-                                    {d.company_news && Array.isArray(d.company_news) && d.company_news.length > 0 && (
-                                        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
-                                            <div style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.8rem' }}>最新动态</div>
-                                            <ul style={{ color: 'var(--muted-foreground)', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, paddingLeft: '1.5rem' }}>
-                                                {d.company_news.slice(0, 5).map((news: any, idx: number) => (
-                                                    <li key={idx} style={{ marginBottom: '0.8rem' }}>
-                                                        <strong>{news.title || '无标题'}</strong>
-                                                        {news.publisher && <span style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}> - {news.publisher}</span>}
-                                                    </li>
-                                                ))}
-                                            </ul>
+
+                                    {/* Section 3: Financial Analysis */}
+                                    {!d.is_etf_or_fund && (
+                                        <div className="text-report-section">
+                                            <div className="text-report-title">三、财务分析 (B - 基本面)</div>
+                                            <p style={{ color: 'var(--muted-foreground)', marginBottom: '1rem' }}>基于最新财务数据，我们对公司基本面进行如下分析：</p>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <div className="text-report-label">营收增长率 (YoY)</div>
+                                                    <div className={`text-report-value ${d.growth < 0 ? 'text-danger' : d.growth > 0.2 ? 'text-success' : ''}`} style={{ fontSize: '1.1rem' }}>
+                                                        {((d.growth || 0) * 100).toFixed(2)}%
+                                                    </div>
+                                                    <small style={{ color: 'var(--muted-foreground)' }}>{d.growth > 0.2 ? '增长强劲' : d.growth > 0 ? '稳定增长' : d.growth < 0 ? '负增长，需关注' : '数据不足'}</small>
+                                                </div>
+                                                <div>
+                                                    <div className="text-report-label">净利润率</div>
+                                                    <div className={`text-report-value ${d.margin < 0.05 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
+                                                        {((d.margin || 0) * 100).toFixed(2)}%
+                                                    </div>
+                                                    <small style={{ color: 'var(--muted-foreground)' }}>{d.margin > 0.15 ? '盈利能力优秀' : d.margin > 0.1 ? '盈利能力良好' : d.margin > 0.05 ? '盈利能力一般' : '盈利能力较弱'}</small>
+                                                </div>
+                                            </div>
+                                            <p style={{ color: 'var(--muted-foreground)', marginTop: '1rem' }}>
+                                                <strong style={{ color: 'var(--foreground)' }}>财务健康度评估：</strong>
+                                                {d.growth > 0.1 && d.margin > 0.1 ? '公司财务表现稳健，营收增长和盈利能力均处于良好水平，基本面支撑较强。' :
+                                                    d.growth < 0 || d.margin < 0.05 ? '公司财务表现存在一定压力，需密切关注后续财务数据变化。' :
+                                                        '公司财务表现基本稳定，但增长动力和盈利能力有待进一步提升。'}
+                                            </p>
                                         </div>
                                     )}
-                                </div>
 
-                                {/* Section 3: Financial Analysis */}
-                                {!d.is_etf_or_fund && (
+                                    {/* Section 4: Valuation Analysis */}
                                     <div className="text-report-section">
-                                        <div className="text-report-title">三、财务分析 (B - 基本面)</div>
-                                        <p style={{ color: 'var(--muted-foreground)', marginBottom: '1rem' }}>基于最新财务数据，我们对公司基本面进行如下分析：</p>
+                                        <div className="text-report-title">四、估值分析 (M - 市场情绪)</div>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <div className="text-report-label">当前价格 (P)</div>
+                                                <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.currency_symbol}{d.price?.toFixed(2)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-report-label">52周价格区间</div>
+                                                <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
+                                                    {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
+                                                </div>
+                                                <small style={{ color: 'var(--muted-foreground)' }}>当前位于{pricePosition.toFixed(1)}%分位</small>
+                                            </div>
+                                            <div>
+                                                <div className="text-report-label">技术趋势</div>
+                                                <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
+                                                    {d.price > d.ma50 && d.ma50 > d.ma200 ? '多头排列' : d.price < d.ma200 ? '空头趋势' : '震荡整理'}
+                                                </div>
+                                                <small style={{ color: 'var(--muted-foreground)' }}>MA50: {d.currency_symbol}{d.ma50?.toFixed(2) || 'N/A'} | MA200: {d.currency_symbol}{d.ma200?.toFixed(2) || 'N/A'}</small>
+                                            </div>
+                                        </div>
+                                        {!d.is_etf_or_fund && (
+                                            <div className="grid grid-cols-3 gap-4 mt-4">
+                                                <div>
+                                                    <div className="text-report-label">市盈率 (PE)</div>
+                                                    <div className={`text-report-value ${d.pe && d.pe > 30 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
+                                                        {d.pe ? d.pe.toFixed(2) : 'N/A'}
+                                                    </div>
+                                                    <small style={{ color: 'var(--muted-foreground)' }}>{d.pe && d.pe > 30 ? '估值偏高' : d.pe && d.pe > 15 ? '估值合理' : d.pe > 0 ? '估值偏低' : '数据不足'}</small>
+                                                </div>
+                                                <div>
+                                                    <div className="text-report-label">预期市盈率 (Forward PE)</div>
+                                                    <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.forward_pe ? d.forward_pe.toFixed(2) : 'N/A'}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-report-label">PEG 比率</div>
+                                                    <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.peg ? d.peg.toFixed(2) : 'N/A'}</div>
+                                                    <small style={{ color: 'var(--muted-foreground)' }}>{d.peg && d.peg < 1 ? '估值合理' : d.peg > 0 ? '估值偏高' : '数据不足'}</small>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* VIX and Put/Call Ratio */}
+                                        {d.options_data && (d.options_data.vix !== null || d.options_data.put_call_ratio !== null) && (
+                                            <div className="grid grid-cols-2 gap-4 mt-4">
+                                                {d.options_data.vix !== null && (
+                                                    <div>
+                                                        <div className="text-report-label">VIX恐慌指数</div>
+                                                        <div className={`text-report-value ${d.options_data.vix > 30 ? 'text-danger' : d.options_data.vix > 20 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
+                                                            {d.options_data.vix.toFixed(2)}
+                                                        </div>
+                                                        <small style={{ color: 'var(--muted-foreground)' }}>
+                                                            {d.options_data.vix_change ? (d.options_data.vix_change > 0 ? '↑' : '↓') + Math.abs(d.options_data.vix_change).toFixed(1) + '%' : ''} {d.options_data.vix > 30 ? '高波动风险' : d.options_data.vix > 20 ? '中等波动' : '低波动'}
+                                                        </small>
+                                                    </div>
+                                                )}
+                                                {d.options_data.put_call_ratio !== null && (
+                                                    <div>
+                                                        <div className="text-report-label">Put/Call比率</div>
+                                                        <div className={`text-report-value ${d.options_data.put_call_ratio > 1.2 ? 'text-danger' : d.options_data.put_call_ratio > 1.0 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
+                                                            {d.options_data.put_call_ratio.toFixed(2)}
+                                                        </div>
+                                                        <small style={{ color: 'var(--muted-foreground)' }}>
+                                                            {d.options_data.put_call_ratio > 1.2 ? '看跌情绪强' : d.options_data.put_call_ratio > 1.0 ? '略偏看跌' : d.options_data.put_call_ratio < 0.8 ? '看涨情绪' : '中性'}
+                                                        </small>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Macro Data */}
+                                        {d.macro_data && (d.macro_data.treasury_10y !== null || d.macro_data.dxy !== null || d.macro_data.gold !== null || d.macro_data.oil !== null) && (
+                                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                                                <div className="text-report-title" style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>宏观经济环境</div>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                    {d.macro_data.treasury_10y !== null && (
+                                                        <div>
+                                                            <div className="text-report-label">10年美债收益率</div>
+                                                            <div className={`text-report-value ${d.macro_data.treasury_10y > 4.5 ? 'text-danger' : d.macro_data.treasury_10y > 3.5 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1rem' }}>
+                                                                {d.macro_data.treasury_10y.toFixed(2)}%
+                                                            </div>
+                                                            <small style={{ color: 'var(--muted-foreground)' }}>
+                                                                {d.macro_data.treasury_10y_change ? (d.macro_data.treasury_10y_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.treasury_10y_change).toFixed(2) + '%' : ''} {d.macro_data.treasury_10y > 4.5 ? '流动性收紧' : '正常'}
+                                                            </small>
+                                                        </div>
+                                                    )}
+                                                    {d.macro_data.dxy !== null && (
+                                                        <div>
+                                                            <div className="text-report-label">美元指数</div>
+                                                            <div className={`text-report-value ${d.macro_data.dxy > 105 ? 'text-warning' : ''}`} style={{ fontSize: '1rem' }}>
+                                                                {d.macro_data.dxy.toFixed(2)}
+                                                            </div>
+                                                            <small style={{ color: 'var(--muted-foreground)' }}>
+                                                                {d.macro_data.dxy_change ? (d.macro_data.dxy_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.dxy_change).toFixed(2) + '%' : ''} {d.macro_data.dxy > 105 ? '强势美元' : '正常'}
+                                                            </small>
+                                                        </div>
+                                                    )}
+                                                    {d.macro_data.gold !== null && (
+                                                        <div>
+                                                            <div className="text-report-label">黄金价格</div>
+                                                            <div className="text-report-value" style={{ fontSize: '1rem' }}>${d.macro_data.gold.toFixed(2)}</div>
+                                                            <small style={{ color: 'var(--muted-foreground)' }}>
+                                                                {d.macro_data.gold_change ? (d.macro_data.gold_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.gold_change).toFixed(2) + '%' : ''} {d.macro_data.gold_change > 2 ? '避险情绪' : '正常'}
+                                                            </small>
+                                                        </div>
+                                                    )}
+                                                    {d.macro_data.oil !== null && (
+                                                        <div>
+                                                            <div className="text-report-label">原油价格</div>
+                                                            <div className="text-report-value" style={{ fontSize: '1rem' }}>${d.macro_data.oil.toFixed(2)}</div>
+                                                            <small style={{ color: 'var(--muted-foreground)' }}>
+                                                                {d.macro_data.oil_change ? (d.macro_data.oil_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.oil_change).toFixed(2) + '%' : ''} 正常
+                                                            </small>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Earnings Date Reminder */}
+                                        {d.earnings_dates && Array.isArray(d.earnings_dates) && d.earnings_dates.length > 0 && (
+                                            <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: '3px solid var(--primary)', borderRadius: '4px' }}>
+                                                <strong style={{ color: 'var(--primary)' }}>财报日期提醒：</strong>
+                                                <span style={{ color: 'var(--muted-foreground)' }}>预计财报日期：{d.earnings_dates.join(', ')}。财报发布前后通常伴随较大波动，建议提前调整仓位。</span>
+                                            </div>
+                                        )}
+
+                                        {/* Economic Events */}
+                                        {d.macro_data && (d.macro_data.fed_meetings?.length > 0 || d.macro_data.cpi_releases?.length > 0 || d.macro_data.china_events?.length > 0) && (
+                                            <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: '3px solid #8b5cf6', borderRadius: '4px' }}>
+                                                <strong style={{ color: '#8b5cf6' }}>重要经济事件提醒：</strong>
+                                                <div style={{ color: 'var(--muted-foreground)', marginTop: '0.5rem' }}>
+                                                    {d.macro_data.fed_meetings?.length > 0 && (
+                                                        <div style={{ marginBottom: '0.5rem' }}>
+                                                            <strong style={{ color: 'var(--primary)' }}>🇺🇸 美国：</strong>
+                                                            <div style={{ marginLeft: '1rem', marginTop: '0.3rem' }}>
+                                                                <div>美联储利率决议：{d.macro_data.fed_meetings.map((m: any) => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}</div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {d.macro_data.china_events?.length > 0 && (
+                                                        <div style={{ marginBottom: '0.5rem' }}>
+                                                            <strong style={{ color: 'var(--bear)' }}>🇨🇳 中国：</strong>
+                                                            <div style={{ marginLeft: '1rem', marginTop: '0.3rem' }}>
+                                                                {d.macro_data.china_events.map((e: any, idx: number) => (
+                                                                    <div key={idx}>{e.type}：{e.date} ({e.days_until}天后{e.data_month ? `，${e.data_month}数据` : ''})</div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Geopolitical Risk */}
+                                        {d.macro_data?.geopolitical_risk !== null && d.macro_data?.geopolitical_risk !== undefined && (
+                                            <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: `3px solid ${d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)'}`, borderRadius: '4px' }}>
+                                                <strong style={{ color: d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)' }}>地缘政治风险指数：</strong>
+                                                <span style={{ color: 'var(--foreground)', fontSize: '1.1rem', fontWeight: 600, marginLeft: '0.5rem' }}>{d.macro_data.geopolitical_risk}/10</span>
+                                                <span style={{ color: 'var(--muted-foreground)', marginLeft: '0.5rem' }}>
+                                                    {d.macro_data.geopolitical_risk >= 7 ? '高风险 - 地缘政治紧张局势加剧' : d.macro_data.geopolitical_risk >= 5 ? '中等风险 - 需关注地缘政治动态' : '低风险 - 地缘政治环境相对稳定'}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Section 5: Risk Warning */}
+                                    <div className="text-report-section">
+                                        <div className="text-report-title">五、风险提示</div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <div className="text-report-label">营收增长率 (YoY)</div>
-                                                <div className={`text-report-value ${d.growth < 0 ? 'text-danger' : d.growth > 0.2 ? 'text-success' : ''}`} style={{ fontSize: '1.1rem' }}>
-                                                    {((d.growth || 0) * 100).toFixed(2)}%
-                                                </div>
-                                                <small style={{ color: 'var(--muted-foreground)' }}>{d.growth > 0.2 ? '增长强劲' : d.growth > 0 ? '稳定增长' : d.growth < 0 ? '负增长，需关注' : '数据不足'}</small>
+                                                <div className="text-report-label">综合风险评分</div>
+                                                <div className={`text-report-value ${getRiskClass(r.score)}`} style={{ fontSize: '1.3rem', fontWeight: 700 }}>{r.score}/10</div>
                                             </div>
                                             <div>
-                                                <div className="text-report-label">净利润率</div>
-                                                <div className={`text-report-value ${d.margin < 0.05 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                    {((d.margin || 0) * 100).toFixed(2)}%
-                                                </div>
-                                                <small style={{ color: 'var(--muted-foreground)' }}>{d.margin > 0.15 ? '盈利能力优秀' : d.margin > 0.1 ? '盈利能力良好' : d.margin > 0.05 ? '盈利能力一般' : '盈利能力较弱'}</small>
+                                                <div className="text-report-label">风险等级</div>
+                                                <div className={`text-report-value ${getRiskClass(r.score)}`} style={{ fontSize: '1.1rem' }}>{r.level}</div>
                                             </div>
                                         </div>
-                                        <p style={{ color: 'var(--muted-foreground)', marginTop: '1rem' }}>
-                                            <strong style={{ color: 'var(--foreground)' }}>财务健康度评估：</strong>
-                                            {d.growth > 0.1 && d.margin > 0.1 ? '公司财务表现稳健，营收增长和盈利能力均处于良好水平，基本面支撑较强。' :
-                                                d.growth < 0 || d.margin < 0.05 ? '公司财务表现存在一定压力，需密切关注后续财务数据变化。' :
-                                                    '公司财务表现基本稳定，但增长动力和盈利能力有待进一步提升。'}
-                                        </p>
+                                        {r.flags && r.flags.length > 0 ? (
+                                            <div style={{ marginTop: '1rem' }}>
+                                                <p><strong style={{ color: 'var(--foreground)' }}>主要风险因素：</strong></p>
+                                                <ul style={{ paddingLeft: '1.5rem', color: 'var(--muted-foreground)' }}>
+                                                    {r.flags.map((flag: string, idx: number) => (
+                                                        <li key={idx} style={{ marginBottom: '0.5rem' }}>{flag}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : (
+                                            <div style={{ marginTop: '1rem', color: 'var(--bull)' }}>
+                                                <p>经系统评估，当前无明显结构性风险，硬逻辑检测通过。</p>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
 
-                                {/* Section 4: Valuation Analysis */}
-                                <div className="text-report-section">
-                                    <div className="text-report-title">四、估值分析 (M - 市场情绪)</div>
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div>
-                                            <div className="text-report-label">当前价格 (P)</div>
-                                            <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.currency_symbol}{d.price?.toFixed(2)}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-report-label">52周价格区间</div>
-                                            <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
-                                                {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
-                                            </div>
-                                            <small style={{ color: 'var(--muted-foreground)' }}>当前位于{pricePosition.toFixed(1)}%分位</small>
-                                        </div>
-                                        <div>
-                                            <div className="text-report-label">技术趋势</div>
-                                            <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
-                                                {d.price > d.ma50 && d.ma50 > d.ma200 ? '多头排列' : d.price < d.ma200 ? '空头趋势' : '震荡整理'}
-                                            </div>
-                                            <small style={{ color: 'var(--muted-foreground)' }}>MA50: {d.currency_symbol}{d.ma50?.toFixed(2) || 'N/A'} | MA200: {d.currency_symbol}{d.ma200?.toFixed(2) || 'N/A'}</small>
+                                    {/* Section 6: Investment Advice */}
+                                    <div className="text-report-section">
+                                        <div className="text-report-title">六、投资建议</div>
+                                        <div style={{ color: 'var(--muted-foreground)' }}>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>投资评级：</strong><span className={rating.class} style={{ fontSize: '1.1rem', fontWeight: 600 }}>{rating.text}</span></p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>目标价格：</strong>{d.currency_symbol}{(d.target_price || d.price)?.toFixed(2)}（基于PE估值、增长率和技术面综合计算）</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>建议仓位：</strong><span style={{ color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 600 }}>{r.suggested_position}%</span>（基于{styleName}风格和风险评分）</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>建仓策略：</strong>{r.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>止损建议：</strong>建议设置止损价格为{d.currency_symbol}{d.stop_loss_price?.toFixed(2) || (d.price * 0.85).toFixed(2)}（{d.stop_loss_method || '动态止损'}），严格执行止损纪律。</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>持有周期：</strong>根据{styleName}风格，建议持有{style === 'quality' ? '长期（1-3年）' : style === 'value' ? '中期（6-12个月）' : style === 'growth' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
                                         </div>
                                     </div>
-                                    {!d.is_etf_or_fund && (
-                                        <div className="grid grid-cols-3 gap-4 mt-4">
-                                            <div>
-                                                <div className="text-report-label">市盈率 (PE)</div>
-                                                <div className={`text-report-value ${d.pe && d.pe > 30 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                    {d.pe ? d.pe.toFixed(2) : 'N/A'}
-                                                </div>
-                                                <small style={{ color: 'var(--muted-foreground)' }}>{d.pe && d.pe > 30 ? '估值偏高' : d.pe && d.pe > 15 ? '估值合理' : d.pe > 0 ? '估值偏低' : '数据不足'}</small>
+
+                                    {/* Disclaimer */}
+                                    <div className="text-report-section" style={{ borderTop: '2px solid var(--bear)', paddingTop: '1.5rem', marginTop: '2rem' }}>
+                                        <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--bear)', padding: '1rem', borderRadius: '4px' }}>
+                                            <h5 style={{ color: 'var(--bear)', fontSize: '1rem', fontWeight: 600, marginBottom: '0.8rem' }}>重要风险提示</h5>
+                                            <div style={{ color: 'var(--muted-foreground)', lineHeight: 1.8, fontSize: '0.9rem' }}>
+                                                <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--foreground)' }}>免责声明：</strong>本报告所载信息、数据及分析结果仅供参考，不构成任何投资建议。</p>
+                                                <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--foreground)' }}>投资风险：</strong>股票投资存在市场风险、信用风险、流动性风险等多种风险。过往业绩不代表未来表现。</p>
+                                                <p style={{ marginBottom: '0' }}><strong style={{ color: 'var(--foreground)' }}>AI分析说明：</strong>AI生成的分析报告基于算法模型和历史数据，仅供参考，不应作为唯一投资依据。</p>
                                             </div>
-                                            <div>
-                                                <div className="text-report-label">预期市盈率 (Forward PE)</div>
-                                                <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.forward_pe ? d.forward_pe.toFixed(2) : 'N/A'}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-report-label">PEG 比率</div>
-                                                <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.peg ? d.peg.toFixed(2) : 'N/A'}</div>
-                                                <small style={{ color: 'var(--muted-foreground)' }}>{d.peg && d.peg < 1 ? '估值合理' : d.peg > 0 ? '估值偏高' : '数据不足'}</small>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* VIX and Put/Call Ratio */}
-                                    {d.options_data && (d.options_data.vix !== null || d.options_data.put_call_ratio !== null) && (
-                                        <div className="grid grid-cols-2 gap-4 mt-4">
-                                            {d.options_data.vix !== null && (
-                                                <div>
-                                                    <div className="text-report-label">VIX恐慌指数</div>
-                                                    <div className={`text-report-value ${d.options_data.vix > 30 ? 'text-danger' : d.options_data.vix > 20 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                        {d.options_data.vix.toFixed(2)}
-                                                    </div>
-                                                    <small style={{ color: 'var(--muted-foreground)' }}>
-                                                        {d.options_data.vix_change ? (d.options_data.vix_change > 0 ? '↑' : '↓') + Math.abs(d.options_data.vix_change).toFixed(1) + '%' : ''} {d.options_data.vix > 30 ? '高波动风险' : d.options_data.vix > 20 ? '中等波动' : '低波动'}
-                                                    </small>
-                                                </div>
-                                            )}
-                                            {d.options_data.put_call_ratio !== null && (
-                                                <div>
-                                                    <div className="text-report-label">Put/Call比率</div>
-                                                    <div className={`text-report-value ${d.options_data.put_call_ratio > 1.2 ? 'text-danger' : d.options_data.put_call_ratio > 1.0 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                        {d.options_data.put_call_ratio.toFixed(2)}
-                                                    </div>
-                                                    <small style={{ color: 'var(--muted-foreground)' }}>
-                                                        {d.options_data.put_call_ratio > 1.2 ? '看跌情绪强' : d.options_data.put_call_ratio > 1.0 ? '略偏看跌' : d.options_data.put_call_ratio < 0.8 ? '看涨情绪' : '中性'}
-                                                    </small>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Macro Data */}
-                                    {d.macro_data && (d.macro_data.treasury_10y !== null || d.macro_data.dxy !== null || d.macro_data.gold !== null || d.macro_data.oil !== null) && (
-                                        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                                            <div className="text-report-title" style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>宏观经济环境</div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                {d.macro_data.treasury_10y !== null && (
-                                                    <div>
-                                                        <div className="text-report-label">10年美债收益率</div>
-                                                        <div className={`text-report-value ${d.macro_data.treasury_10y > 4.5 ? 'text-danger' : d.macro_data.treasury_10y > 3.5 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1rem' }}>
-                                                            {d.macro_data.treasury_10y.toFixed(2)}%
-                                                        </div>
-                                                        <small style={{ color: 'var(--muted-foreground)' }}>
-                                                            {d.macro_data.treasury_10y_change ? (d.macro_data.treasury_10y_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.treasury_10y_change).toFixed(2) + '%' : ''} {d.macro_data.treasury_10y > 4.5 ? '流动性收紧' : '正常'}
-                                                        </small>
-                                                    </div>
-                                                )}
-                                                {d.macro_data.dxy !== null && (
-                                                    <div>
-                                                        <div className="text-report-label">美元指数</div>
-                                                        <div className={`text-report-value ${d.macro_data.dxy > 105 ? 'text-warning' : ''}`} style={{ fontSize: '1rem' }}>
-                                                            {d.macro_data.dxy.toFixed(2)}
-                                                        </div>
-                                                        <small style={{ color: 'var(--muted-foreground)' }}>
-                                                            {d.macro_data.dxy_change ? (d.macro_data.dxy_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.dxy_change).toFixed(2) + '%' : ''} {d.macro_data.dxy > 105 ? '强势美元' : '正常'}
-                                                        </small>
-                                                    </div>
-                                                )}
-                                                {d.macro_data.gold !== null && (
-                                                    <div>
-                                                        <div className="text-report-label">黄金价格</div>
-                                                        <div className="text-report-value" style={{ fontSize: '1rem' }}>${d.macro_data.gold.toFixed(2)}</div>
-                                                        <small style={{ color: 'var(--muted-foreground)' }}>
-                                                            {d.macro_data.gold_change ? (d.macro_data.gold_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.gold_change).toFixed(2) + '%' : ''} {d.macro_data.gold_change > 2 ? '避险情绪' : '正常'}
-                                                        </small>
-                                                    </div>
-                                                )}
-                                                {d.macro_data.oil !== null && (
-                                                    <div>
-                                                        <div className="text-report-label">原油价格</div>
-                                                        <div className="text-report-value" style={{ fontSize: '1rem' }}>${d.macro_data.oil.toFixed(2)}</div>
-                                                        <small style={{ color: 'var(--muted-foreground)' }}>
-                                                            {d.macro_data.oil_change ? (d.macro_data.oil_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.oil_change).toFixed(2) + '%' : ''} 正常
-                                                        </small>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Earnings Date Reminder */}
-                                    {d.earnings_dates && Array.isArray(d.earnings_dates) && d.earnings_dates.length > 0 && (
-                                        <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: '3px solid var(--primary)', borderRadius: '4px' }}>
-                                            <strong style={{ color: 'var(--primary)' }}>财报日期提醒：</strong>
-                                            <span style={{ color: 'var(--muted-foreground)' }}>预计财报日期：{d.earnings_dates.join(', ')}。财报发布前后通常伴随较大波动，建议提前调整仓位。</span>
-                                        </div>
-                                    )}
-
-                                    {/* Economic Events */}
-                                    {d.macro_data && (d.macro_data.fed_meetings?.length > 0 || d.macro_data.cpi_releases?.length > 0 || d.macro_data.china_events?.length > 0) && (
-                                        <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: '3px solid #8b5cf6', borderRadius: '4px' }}>
-                                            <strong style={{ color: '#8b5cf6' }}>重要经济事件提醒：</strong>
-                                            <div style={{ color: 'var(--muted-foreground)', marginTop: '0.5rem' }}>
-                                                {d.macro_data.fed_meetings?.length > 0 && (
-                                                    <div style={{ marginBottom: '0.5rem' }}>
-                                                        <strong style={{ color: 'var(--primary)' }}>🇺🇸 美国：</strong>
-                                                        <div style={{ marginLeft: '1rem', marginTop: '0.3rem' }}>
-                                                            <div>美联储利率决议：{d.macro_data.fed_meetings.map((m: any) => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}</div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {d.macro_data.china_events?.length > 0 && (
-                                                    <div style={{ marginBottom: '0.5rem' }}>
-                                                        <strong style={{ color: 'var(--bear)' }}>🇨🇳 中国：</strong>
-                                                        <div style={{ marginLeft: '1rem', marginTop: '0.3rem' }}>
-                                                            {d.macro_data.china_events.map((e: any, idx: number) => (
-                                                                <div key={idx}>{e.type}：{e.date} ({e.days_until}天后{e.data_month ? `，${e.data_month}数据` : ''})</div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Geopolitical Risk */}
-                                    {d.macro_data?.geopolitical_risk !== null && d.macro_data?.geopolitical_risk !== undefined && (
-                                        <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: `3px solid ${d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)'}`, borderRadius: '4px' }}>
-                                            <strong style={{ color: d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)' }}>地缘政治风险指数：</strong>
-                                            <span style={{ color: 'var(--foreground)', fontSize: '1.1rem', fontWeight: 600, marginLeft: '0.5rem' }}>{d.macro_data.geopolitical_risk}/10</span>
-                                            <span style={{ color: 'var(--muted-foreground)', marginLeft: '0.5rem' }}>
-                                                {d.macro_data.geopolitical_risk >= 7 ? '高风险 - 地缘政治紧张局势加剧' : d.macro_data.geopolitical_risk >= 5 ? '中等风险 - 需关注地缘政治动态' : '低风险 - 地缘政治环境相对稳定'}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Section 5: Risk Warning */}
-                                <div className="text-report-section">
-                                    <div className="text-report-title">五、风险提示</div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <div className="text-report-label">综合风险评分</div>
-                                            <div className={`text-report-value ${getRiskClass(r.score)}`} style={{ fontSize: '1.3rem', fontWeight: 700 }}>{r.score}/10</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-report-label">风险等级</div>
-                                            <div className={`text-report-value ${getRiskClass(r.score)}`} style={{ fontSize: '1.1rem' }}>{r.level}</div>
-                                        </div>
-                                    </div>
-                                    {r.flags && r.flags.length > 0 ? (
-                                        <div style={{ marginTop: '1rem' }}>
-                                            <p><strong style={{ color: 'var(--foreground)' }}>主要风险因素：</strong></p>
-                                            <ul style={{ paddingLeft: '1.5rem', color: 'var(--muted-foreground)' }}>
-                                                {r.flags.map((flag: string, idx: number) => (
-                                                    <li key={idx} style={{ marginBottom: '0.5rem' }}>{flag}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ) : (
-                                        <div style={{ marginTop: '1rem', color: 'var(--bull)' }}>
-                                            <p>经系统评估，当前无明显结构性风险，硬逻辑检测通过。</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Section 6: Investment Advice */}
-                                <div className="text-report-section">
-                                    <div className="text-report-title">六、投资建议</div>
-                                    <div style={{ color: 'var(--muted-foreground)' }}>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>投资评级：</strong><span className={rating.class} style={{ fontSize: '1.1rem', fontWeight: 600 }}>{rating.text}</span></p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>目标价格：</strong>{d.currency_symbol}{(d.target_price || d.price)?.toFixed(2)}（基于PE估值、增长率和技术面综合计算）</p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>建议仓位：</strong><span style={{ color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 600 }}>{r.suggested_position}%</span>（基于{styleName}风格和风险评分）</p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>建仓策略：</strong>{r.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>止损建议：</strong>建议设置止损价格为{d.currency_symbol}{d.stop_loss_price?.toFixed(2) || (d.price * 0.85).toFixed(2)}（{d.stop_loss_method || '动态止损'}），严格执行止损纪律。</p>
-                                        <p><strong style={{ color: 'var(--foreground)' }}>持有周期：</strong>根据{styleName}风格，建议持有{style === 'quality' ? '长期（1-3年）' : style === 'value' ? '中期（6-12个月）' : style === 'growth' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
-                                    </div>
-                                </div>
-
-                                {/* Disclaimer */}
-                                <div className="text-report-section" style={{ borderTop: '2px solid var(--bear)', paddingTop: '1.5rem', marginTop: '2rem' }}>
-                                    <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--bear)', padding: '1rem', borderRadius: '4px' }}>
-                                        <h5 style={{ color: 'var(--bear)', fontSize: '1rem', fontWeight: 600, marginBottom: '0.8rem' }}>重要风险提示</h5>
-                                        <div style={{ color: 'var(--muted-foreground)', lineHeight: 1.8, fontSize: '0.9rem' }}>
-                                            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--foreground)' }}>免责声明：</strong>本报告所载信息、数据及分析结果仅供参考，不构成任何投资建议。</p>
-                                            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--foreground)' }}>投资风险：</strong>股票投资存在市场风险、信用风险、流动性风险等多种风险。过往业绩不代表未来表现。</p>
-                                            <p style={{ marginBottom: '0' }}><strong style={{ color: 'var(--foreground)' }}>AI分析说明：</strong>AI生成的分析报告基于算法模型和历史数据，仅供参考，不应作为唯一投资依据。</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                );
-            })()}
+                    );
+                })()}
 
-            {/* Empty State */}
-            {!result && !loading && (
-                <div className="text-center py-20 text-muted">
-                    <i className="bi bi-graph-up text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-                    <p>输入股票代码开始分析</p>
-                </div>
-            )}
+                {/* Empty State */}
+                {!result && !loading && (
+                    <div className="text-center py-20 text-muted">
+                        <i className="bi bi-graph-up text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
+                        <p>输入股票代码开始分析</p>
+                    </div>
+                )}
             </div>
 
             {/* Analysis History Tab - Always Mounted but Hidden when Not Active */}

@@ -152,18 +152,27 @@ export default function ResetPassword() {
     // Loading state while checking authentication
     if (sessionLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                <Card className="w-[350px]">
-                    <CardHeader>
-                        <CardTitle>Verifying Reset Link</CardTitle>
-                        <CardDescription>
-                            Please wait while we verify your password reset link...
+            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
+                <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+                    <CardHeader className="space-y-4">
+                        {/* Brand Logo */}
+                        <div className="flex justify-center mb-2">
+                            <div className="flex items-center space-x-2">
+                                <span className="font-bold text-2xl tracking-tight text-[#FAFAFA]">
+                                    Alpha<span className="text-[#0D9B97]">GBM</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <CardTitle className="text-center text-[#FAFAFA] text-xl">验证重置链接</CardTitle>
+                        <CardDescription className="text-center text-slate-400">
+                            正在验证您的密码重置链接，请稍候...
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="text-center py-6">
-                        <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                        <p className="text-sm text-gray-600">
-                            Authenticating...
+                    <CardContent className="text-center py-8">
+                        <div className="w-12 h-12 border-4 border-[#0D9B97]/30 border-t-[#0D9B97] rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-400 text-sm">
+                            正在验证身份...
                         </p>
                     </CardContent>
                 </Card>
@@ -173,23 +182,36 @@ export default function ResetPassword() {
 
     if (success) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                <Card className="w-[350px]">
-                    <CardHeader>
-                        <CardTitle>Password Reset Successful</CardTitle>
-                        <CardDescription>
-                            Your password has been updated successfully
+            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
+                <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+                    <CardHeader className="space-y-4">
+                        {/* Brand Logo */}
+                        <div className="flex justify-center mb-2">
+                            <div className="flex items-center space-x-2">
+                                <span className="font-bold text-2xl tracking-tight text-[#FAFAFA]">
+                                    Alpha<span className="text-[#0D9B97]">GBM</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <CardTitle className="text-center text-[#FAFAFA] text-xl">密码重置成功</CardTitle>
+                        <CardDescription className="text-center text-slate-400">
+                            您的密码已成功更新
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="text-center py-6">
-                        <div className="text-green-600 mb-4">
-                            ✅ Password Updated!
+                    <CardContent className="text-center py-8">
+                        <div className="w-16 h-16 bg-[#0D9B97]/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="text-[#0D9B97] text-2xl">✓</div>
                         </div>
-                        <p className="text-sm text-gray-600 mb-4">
-                            You will be redirected to the login page automatically.
+                        <h3 className="text-[#FAFAFA] font-semibold mb-2">密码更新完成</h3>
+                        <p className="text-slate-400 text-sm mb-6">
+                            您将自动跳转到登录页面
                         </p>
-                        <Button onClick={() => navigate('/login')} className="w-full">
-                            Go to Login
+                        <Button
+                            onClick={() => navigate('/login')}
+                            className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white font-medium py-2.5"
+                        >
+                            前往登录
                         </Button>
                     </CardContent>
                 </Card>
@@ -200,24 +222,43 @@ export default function ResetPassword() {
     // Error state - invalid/expired link
     if (error && !hasValidSession) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-                <Card className="w-[350px]">
-                    <CardHeader>
-                        <CardTitle>Reset Link Error</CardTitle>
-                        <CardDescription>
-                            There was a problem with your password reset link
+            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
+                <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+                    <CardHeader className="space-y-4">
+                        {/* Brand Logo */}
+                        <div className="flex justify-center mb-2">
+                            <div className="flex items-center space-x-2">
+                                <span className="font-bold text-2xl tracking-tight text-[#FAFAFA]">
+                                    Alpha<span className="text-[#0D9B97]">GBM</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <CardTitle className="text-center text-[#FAFAFA] text-xl">重置链接错误</CardTitle>
+                        <CardDescription className="text-center text-slate-400">
+                            密码重置链接出现问题
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="text-center py-6">
-                        <div className="text-red-600 mb-4">
-                            ❌ {error}
+                    <CardContent className="text-center py-8">
+                        <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="text-red-400 text-2xl">✗</div>
+                        </div>
+                        <div className="text-red-400 mb-6 text-sm">
+                            {error}
                         </div>
                         <div className="space-y-3">
-                            <Button onClick={() => navigate('/login')} className="w-full">
-                                Request New Reset Link
+                            <Button
+                                onClick={() => navigate('/login')}
+                                className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white font-medium py-2.5"
+                            >
+                                请求新的重置链接
                             </Button>
-                            <Button variant="outline" onClick={() => window.location.reload()} className="w-full">
-                                Try Again
+                            <Button
+                                variant="outline"
+                                onClick={() => window.location.reload()}
+                                className="w-full bg-transparent border-white/20 text-[#FAFAFA] hover:bg-white/10"
+                            >
+                                重试
                             </Button>
                         </div>
                     </CardContent>
@@ -228,49 +269,64 @@ export default function ResetPassword() {
 
     // Main password reset form - only shown if we have a valid session
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-            <Card className="w-[350px]">
-                <CardHeader>
-                    <CardTitle>Reset Your Password</CardTitle>
-                    <CardDescription>
-                        Enter your new password below
+        <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
+            <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+                <CardHeader className="space-y-4">
+                    {/* Brand Logo */}
+                    <div className="flex justify-center mb-2">
+                        <div className="flex items-center space-x-2">
+                            <span className="font-bold text-2xl tracking-tight text-[#FAFAFA]">
+                                Alpha<span className="text-[#0D9B97]">GBM</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <CardTitle className="text-center text-[#FAFAFA] text-xl">重置密码</CardTitle>
+                    <CardDescription className="text-center text-slate-400">
+                        请输入您的新密码
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
                     {hasValidSession ? (
                         <>
                             {error && (
-                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                                <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded mb-4 text-sm">
                                     {error}
                                 </div>
                             )}
                             <form onSubmit={handlePasswordReset}>
-                                <div className="grid w-full items-center gap-4">
-                                    <div className="flex flex-col space-y-1.5">
-                                        <Label htmlFor="password">New Password</Label>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="password" className="text-[#FAFAFA] text-sm font-medium">
+                                            新密码
+                                        </Label>
                                         <Input
                                             id="password"
                                             type="password"
-                                            placeholder="Enter new password"
+                                            placeholder="输入新密码"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             required
                                             minLength={6}
+                                            className="bg-[#27272a] border-white/20 text-[#FAFAFA] placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-[#0D9B97]/20"
                                         />
-                                        <p className="text-xs text-gray-500">
-                                            Password must be at least 6 characters long
+                                        <p className="text-xs text-slate-400">
+                                            密码长度至少6个字符
                                         </p>
                                     </div>
-                                    <div className="flex flex-col space-y-1.5">
-                                        <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="confirmPassword" className="text-[#FAFAFA] text-sm font-medium">
+                                            确认新密码
+                                        </Label>
                                         <Input
                                             id="confirmPassword"
                                             type="password"
-                                            placeholder="Confirm new password"
+                                            placeholder="再次输入新密码"
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
                                             required
                                             minLength={6}
+                                            className="bg-[#27272a] border-white/20 text-[#FAFAFA] placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-[#0D9B97]/20"
                                         />
                                     </div>
                                 </div>
@@ -278,29 +334,44 @@ export default function ResetPassword() {
                         </>
                     ) : (
                         <div className="text-center py-6">
-                            <div className="text-yellow-600 mb-4">
-                                ⚠️ Authentication Required
+                            <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <div className="text-yellow-400 text-2xl">⚠</div>
                             </div>
-                            <p className="text-sm text-gray-600 mb-4">
-                                You need a valid reset link to change your password.
+                            <h3 className="text-[#FAFAFA] font-semibold mb-2">需要身份验证</h3>
+                            <p className="text-slate-400 text-sm mb-6">
+                                您需要有效的重置链接才能更改密码
                             </p>
-                            <Button onClick={() => navigate('/login')} className="w-full">
-                                Get Reset Link
+                            <Button
+                                onClick={() => navigate('/login')}
+                                className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white font-medium py-2.5"
+                            >
+                                获取重置链接
                             </Button>
                         </div>
                     )}
                 </CardContent>
                 {hasValidSession && (
-                    <CardFooter className="flex flex-col gap-2">
+                    <CardFooter className="flex flex-col gap-3 pt-6">
                         <Button
-                            className="w-full"
+                            className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white font-medium py-2.5 transition-all duration-200"
                             onClick={handlePasswordReset}
                             disabled={loading}
                         >
-                            {loading ? 'Updating Password...' : 'Update Password'}
+                            {loading ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    更新密码中...
+                                </div>
+                            ) : (
+                                '更新密码'
+                            )}
                         </Button>
-                        <Button variant="link" onClick={() => navigate('/login')}>
-                            Back to Login
+                        <Button
+                            variant="link"
+                            onClick={() => navigate('/login')}
+                            className="text-slate-400 hover:text-[#FAFAFA] p-0"
+                        >
+                            返回登录
                         </Button>
                     </CardFooter>
                 )}

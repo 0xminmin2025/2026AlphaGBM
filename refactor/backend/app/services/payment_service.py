@@ -274,9 +274,9 @@ class PaymentService:
         return ledger
     
     @classmethod
-    def check_and_deduct_credits(cls, user_id, service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
+    def check_and_deduct_credits(cls, user_id, service_type=ServiceType.STOCK_ANALYSIS.value, amount=1, ticker=None):
         """检查并扣减额度（FIFO）
-        
+
         Note: Subscription credits are stored as 'stock_analysis' type but can be used for all services.
         We first check daily free quota for the specific service, then check stock_analysis credits (universal).
         """
@@ -285,10 +285,17 @@ class PaymentService:
             usage_log = UsageLog(
                 user_id=user_id,
                 service_type=service_type,
-                amount_used=amount
+                amount_used=amount,
+                ticker=ticker
             )
             db.session.add(usage_log)
             db.session.commit()
+
+            # 添加调试日志
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Created usage log - User: {user_id}, Service: {service_type}, Ticker: {ticker}, Amount: {amount}, ID: {usage_log.id}")
+
             return True, "使用每日免费额度", cls.get_total_credits(user_id, ServiceType.STOCK_ANALYSIS.value)
         
         # 2. 查找有效额度 - 使用stock_analysis类型 (universal credits from subscription)
@@ -324,16 +331,22 @@ class PaymentService:
             valid_credits.amount_remaining -= amount
             if valid_credits.amount_remaining < 0:
                 valid_credits.amount_remaining = 0
-            
+
             usage_log = UsageLog(
                 user_id=user_id,
                 credit_ledger_id=valid_credits.id,
                 service_type=service_type,  # Log the actual service used
-                amount_used=amount
+                amount_used=amount,
+                ticker=ticker
             )
             db.session.add(usage_log)
             db.session.commit()
-            
+
+            # 添加调试日志
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Created usage log (paid credits) - User: {user_id}, Service: {service_type}, Ticker: {ticker}, Amount: {amount}, ID: {usage_log.id}")
+
             remaining = cls.get_total_credits(user_id, credit_service_type)
             return True, "扣减成功", remaining
             

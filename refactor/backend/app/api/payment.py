@@ -265,3 +265,51 @@ def get_pricing():
             }
         }
     }), 200
+
+
+@payment_bp.route('/customer-portal', methods=['POST'])
+@require_auth
+def create_customer_portal_session():
+    """创建Stripe客户门户会话"""
+    user_id = g.user_id
+
+    try:
+        # 导入必要的模型
+        from ..models import User, Subscription
+
+        # 获取用户信息
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': '用户不存在'}), 404
+
+        # 检查用户是否有Stripe客户ID
+        if not user.stripe_customer_id:
+            return jsonify({'error': '未找到客户信息，请先创建订阅'}), 400
+
+        # 检查用户是否有有效订阅
+        subscription = Subscription.query.filter_by(
+            user_id=user_id,
+            status='active'
+        ).first()
+
+        if not subscription:
+            return jsonify({'error': '未找到有效订阅'}), 400
+
+        # 获取返回URL
+        data = request.get_json() or {}
+        return_url = data.get('return_url', f"{os.getenv('VITE_FRONTEND_URL', 'http://localhost:5173')}/profile")
+
+        # 创建客户门户会话
+        portal_session = stripe.billing_portal.Session.create(
+            customer=user.stripe_customer_id,
+            return_url=return_url
+        )
+
+        return jsonify({
+            'portal_url': portal_session.url
+        }), 200
+
+    except stripe.error.StripeError as e:
+        return jsonify({'error': f'Stripe错误: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': f'创建客户门户失败: {str(e)}'}), 500
