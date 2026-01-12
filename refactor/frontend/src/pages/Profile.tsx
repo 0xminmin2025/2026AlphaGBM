@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,20 +9,6 @@ import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, Refresh
 import { useTranslation } from 'react-i18next';
 import api from '@/lib/api';
 
-type UsageLog = {
-    id: number;
-    service_type: string;
-    amount_used: number;
-    created_at: string;
-};
-
-type Transaction = {
-    date: string;
-    description: string;
-    amount: number;
-    currency: string;
-    status: string;
-};
 
 const serviceTypeLabels: Record<string, string> = {
     'stock_analysis': '股票分析',

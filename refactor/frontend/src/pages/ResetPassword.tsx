@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { useTranslation } from 'react-i18next';
 
 export default function ResetPassword() {
     const [password, setPassword] = useState('');
@@ -16,8 +15,6 @@ export default function ResetPassword() {
     const [sessionLoading, setSessionLoading] = useState(true);
     const [hasValidSession, setHasValidSession] = useState(false);
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const { t } = useTranslation();
 
     useEffect(() => {
         let mounted = true;

@@ -241,8 +241,8 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                         borderRadius: '4px',
                         fontSize: '0.9rem'
                       }}
-                      onMouseOver={(e) => e.target.style.background = 'rgba(239, 68, 68, 0.1)'}
-                      onMouseOut={(e) => e.target.style.background = 'none'}
+                      onMouseOver={(e) => (e.target as HTMLElement).style.background = 'rgba(239, 68, 68, 0.1)'}
+                      onMouseOut={(e) => (e.target as HTMLElement).style.background = 'none'}
                     >
                       <i className="bi bi-trash"></i>
                     </button>

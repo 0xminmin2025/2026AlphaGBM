@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import api from '@/lib/api';
 
 // Now each history item contains the complete analysis data
@@ -157,14 +156,6 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
     }
   };
 
-  const getRecommendationClass = (action: string | null): string => {
-    switch (action?.toLowerCase()) {
-      case 'buy': return 'text-success';
-      case 'sell': return 'text-danger';
-      case 'hold': return 'text-warning';
-      default: return 'text-muted';
-    }
-  };
 
   const formatCurrency = (value: number | null): string => {
     if (value === null || value === undefined) return 'N/A';

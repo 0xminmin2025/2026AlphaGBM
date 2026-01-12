@@ -157,11 +157,6 @@ const styles = `
     }
 `;
 
-type SubscriptionInfo = {
-    has_subscription: boolean;
-    plan_tier: string;
-    status: string;
-};
 
 export default function Pricing() {
     const { user } = useAuth();

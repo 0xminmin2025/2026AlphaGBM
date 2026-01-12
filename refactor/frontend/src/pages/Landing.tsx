@@ -124,7 +124,7 @@ const originalStyles = `
 `;
 
 export default function Landing() {
-    const { t, i18n } = useTranslation();
+    const { i18n } = useTranslation();
     const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
 
     const toggleLang = () => {
