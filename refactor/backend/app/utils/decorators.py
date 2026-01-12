@@ -3,21 +3,45 @@ from flask import jsonify, g, request
 from ..services.payment_service import PaymentService
 from ..models import ServiceType
 from werkzeug.exceptions import Unauthorized
-from .auth import get_current_user_info
+from .auth import supabase
+import logging
+
+logger = logging.getLogger(__name__)
 
 def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
     """
-    额度检查装饰器
+    额度检查装饰器 - 同时处理认证和额度检查
     """
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            # 必须先认证
-            user_info = get_current_user_info()
-            if not user_info or 'user_id' not in user_info:
-                return jsonify({'error': 'Unauthorized'}), 401
+            # 1. 首先验证token（与require_auth相同逻辑）
+            if not supabase:
+                return jsonify({'error': 'Supabase client not initialized'}), 500
             
-            user_id = user_info['user_id']
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return jsonify({'error': 'Missing Authorization header'}), 401
+            
+            try:
+                if len(auth_header.split(' ')) < 2:
+                    return jsonify({'error': 'Invalid Authorization header format'}), 401
+                
+                token = auth_header.split(' ')[1]
+                user_response = supabase.auth.get_user(token)
+                
+                if not user_response or not user_response.user:
+                    return jsonify({'error': 'Invalid token'}), 401
+                
+                # Store user info in flask global
+                user_id = user_response.user.id
+                g.user_id = user_id
+                if hasattr(user_response.user, 'email'):
+                    g.user_email = user_response.user.email
+                    
+            except Exception as e:
+                logger.error(f"Auth error in check_quota: {e}")
+                return jsonify({'error': 'Unauthorized'}), 401
             
             # 检查并扣减额度
             success, message, remaining = PaymentService.check_and_deduct_credits(
@@ -57,7 +81,7 @@ def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
             # Let's put it here to be safe, filtering by message content is hacky but matches legacy.
             
             if '免费' in message or 'free' in message.lower():
-                 from datetime import datetime
+                 from datetime import datetime, timedelta
                  from ..models import db, DailyQueryCount
                  today = datetime.now().date()
                  daily_count = DailyQueryCount.query.filter_by(
@@ -66,11 +90,14 @@ def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
                  ).first()
                  
                  if not daily_count:
+                     # Calculate reset time (next day midnight)
+                     tomorrow = datetime.combine(today + timedelta(days=1), datetime.min.time())
                      daily_count = DailyQueryCount(
                          user_id=user_id,
                          date=today,
                          query_count=1,
-                         max_queries=PaymentService.DAILY_FREE_QUOTA.get(service_type, 0)
+                         max_queries=PaymentService.DAILY_FREE_QUOTA.get(service_type, 0),
+                         reset_time=tomorrow
                      )
                      db.session.add(daily_count)
                  else:
