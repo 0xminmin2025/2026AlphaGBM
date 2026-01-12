@@ -275,8 +275,12 @@ class PaymentService:
     
     @classmethod
     def check_and_deduct_credits(cls, user_id, service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
-        """检查并扣减额度（FIFO）"""
-        # 1. 检查每日免费额度
+        """检查并扣减额度（FIFO）
+        
+        Note: Subscription credits are stored as 'stock_analysis' type but can be used for all services.
+        We first check daily free quota for the specific service, then check stock_analysis credits (universal).
+        """
+        # 1. 检查每日免费额度 (specific to service type)
         if cls.check_daily_free_quota(user_id, service_type):
             usage_log = UsageLog(
                 user_id=user_id,
@@ -285,13 +289,16 @@ class PaymentService:
             )
             db.session.add(usage_log)
             db.session.commit()
-            return True, "使用每日免费额度", cls.get_total_credits(user_id, service_type)
+            return True, "使用每日免费额度", cls.get_total_credits(user_id, ServiceType.STOCK_ANALYSIS.value)
         
-        # 2. 查找有效额度
+        # 2. 查找有效额度 - 使用stock_analysis类型 (universal credits from subscription)
+        # Subscription credits are added as stock_analysis but can be used for any service
+        credit_service_type = ServiceType.STOCK_ANALYSIS.value
+        
         query = CreditLedger.query.filter(
             and_(
                 CreditLedger.user_id == user_id,
-                CreditLedger.service_type == service_type,
+                CreditLedger.service_type == credit_service_type,
                 CreditLedger.amount_remaining > 0,
                 or_(
                     CreditLedger.expires_at == None,
@@ -309,7 +316,7 @@ class PaymentService:
              valid_credits = query.first()
         
         if not valid_credits:
-            total = cls.get_total_credits(user_id, service_type)
+            total = cls.get_total_credits(user_id, credit_service_type)
             return False, "额度不足，请充值或明天再来", total
         
         # 3. 扣减
@@ -321,13 +328,13 @@ class PaymentService:
             usage_log = UsageLog(
                 user_id=user_id,
                 credit_ledger_id=valid_credits.id,
-                service_type=service_type,
+                service_type=service_type,  # Log the actual service used
                 amount_used=amount
             )
             db.session.add(usage_log)
             db.session.commit()
             
-            remaining = cls.get_total_credits(user_id, service_type)
+            remaining = cls.get_total_credits(user_id, credit_service_type)
             return True, "扣减成功", remaining
             
         except Exception as e:

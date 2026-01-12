@@ -213,7 +213,7 @@ type ExpirationDate = {
 
 type OptionChainResponse = {
     symbol: string;
-    expiry: string;
+    expiry_date: string;
     calls: OptionData[];
     puts: OptionData[];
     real_stock_price?: number;
@@ -275,6 +275,8 @@ export default function Options() {
 
         try {
             const response = await api.get(`/options/chain/${ticker}/${expiry}`);
+            console.log('Options chain response:', response.data);
+            console.log('Calls:', response.data.calls?.length, 'Puts:', response.data.puts?.length);
             setChain(response.data);
             if (response.data.real_stock_price) {
                 setStockPrice(response.data.real_stock_price);
@@ -307,15 +309,24 @@ export default function Options() {
 
     // Filter and sort options based on strategy
     const getFilteredOptions = (): OptionData[] => {
-        if (!chain) return [];
+        if (!chain) {
+            console.log('No chain data');
+            return [];
+        }
+
+        console.log('Chain:', chain);
+        console.log('Calls array:', chain.calls);
+        console.log('Puts array:', chain.puts);
 
         let options: OptionData[] = [];
 
         if (strategy === 'sell_put' || strategy === 'buy_put') {
-            options = [...chain.puts];
+            options = Array.isArray(chain.puts) ? [...chain.puts] : [];
         } else {
-            options = [...chain.calls];
+            options = Array.isArray(chain.calls) ? [...chain.calls] : [];
         }
+
+        console.log('Filtered options:', options.length);
 
         // Sort by score (highest first)
         options.sort((a, b) => {
@@ -333,12 +344,12 @@ export default function Options() {
         return 'score-low';
     };
 
-    const formatNumber = (num: number | undefined, decimals = 2) => {
-        return num !== undefined ? num.toFixed(decimals) : '-';
+    const formatNumber = (num: number | undefined | null, decimals = 2) => {
+        return (num !== undefined && num !== null) ? num.toFixed(decimals) : '-';
     };
 
-    const formatPercent = (num: number | undefined, decimals = 1) => {
-        return num !== undefined ? `${(num * 100).toFixed(decimals)}%` : '-';
+    const formatPercent = (num: number | undefined | null, decimals = 1) => {
+        return (num !== undefined && num !== null) ? `${(num * 100).toFixed(decimals)}%` : '-';
     };
 
     if (authLoading) {
