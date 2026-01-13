@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from ..services import analysis_engine, ev_model, ai_service
 from ..utils.auth import require_auth
 from ..utils.decorators import check_quota
+from ..utils.serialization import convert_numpy_types
 from ..models import db, ServiceType, StockAnalysisHistory
 import yfinance as yf
 import logging
@@ -170,25 +171,29 @@ def analyze_stock():
                     'version': '1.0'  # Version for future compatibility
                 }
 
+                # Convert all numpy types to Python native types before JSON serialization
+                # This prevents PostgreSQL schema errors when storing JSON data
+                complete_analysis_data_clean = convert_numpy_types(complete_analysis_data)
+
                 analysis_history = StockAnalysisHistory(
                     user_id=g.user_id,
                     ticker=ticker,
                     style=style,
-                    # Extract key fields for indexing and quick display
-                    current_price=market_data.get('price'),
-                    target_price=market_data.get('target_price'),
-                    stop_loss_price=market_data.get('stop_loss_price'),
-                    market_sentiment=market_data.get('market_sentiment'),
-                    risk_score=risk_result.get('score'),
-                    risk_level=risk_result.get('level'),
-                    position_size=risk_result.get('suggested_position'),
-                    ev_score=ev_result.get('ev_score'),
-                    ev_weighted_pct=ev_result.get('ev_weighted_pct'),
-                    recommendation_action=ev_result.get('recommendation', {}).get('action'),
-                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),
+                    # Extract key fields for indexing and quick display - also convert numpy types
+                    current_price=convert_numpy_types(market_data.get('price')),
+                    target_price=convert_numpy_types(market_data.get('target_price')),
+                    stop_loss_price=convert_numpy_types(market_data.get('stop_loss_price')),
+                    market_sentiment=convert_numpy_types(market_data.get('market_sentiment')),
+                    risk_score=convert_numpy_types(risk_result.get('score')),
+                    risk_level=risk_result.get('level'),  # String field, no need to convert
+                    position_size=convert_numpy_types(risk_result.get('suggested_position')),
+                    ev_score=convert_numpy_types(ev_result.get('ev_score')),
+                    ev_weighted_pct=convert_numpy_types(ev_result.get('ev_weighted_pct')),
+                    recommendation_action=ev_result.get('recommendation', {}).get('action'),  # String field
+                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),  # String field
                     ai_summary=ai_summary,
                     # Store the COMPLETE response for perfect frontend recreation
-                    full_analysis_data=json.loads(json.dumps(complete_analysis_data, default=str, ensure_ascii=False))
+                    full_analysis_data=complete_analysis_data_clean
                 )
 
                 logger.info(f"Adding analysis history to database session...")

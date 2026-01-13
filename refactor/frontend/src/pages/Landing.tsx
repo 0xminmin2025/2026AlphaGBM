@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Chart from 'chart.js/auto';
 import { Menu, X } from 'lucide-react';
+import axios from 'axios';
 
 // Original CSS from home/index.html
 const originalStyles = `
@@ -129,6 +130,11 @@ export default function Landing() {
     const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+    // Portfolio data state
+    const [portfolioData, setPortfolioData] = useState<any>(null);
+    const [portfolioLoading, setPortfolioLoading] = useState(true);
+    const [portfolioError, setPortfolioError] = useState<string | null>(null);
+
     const toggleLang = () => {
         i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh');
     };
@@ -171,7 +177,7 @@ export default function Landing() {
             titleSub: i18n.language === 'zh' ? "AI 驱动的机构级投资操作系统" : "AI-Driven Institutional Investment Operating System",
             subtitle: i18n.language === 'zh' ? "融合股票模型、期权策略与全自动智能体。不预测未来，只计算概率。" : "Integrating stock models, options strategies, and fully autonomous agents. We don't predict the future; we calculate probabilities.",
             cta_primary: i18n.language === 'zh' ? "立即开启 AI 投资" : "Start AI Investing Now",
-            limit_notice: i18n.language === 'zh' ? "注册即送每日 5 次深度分析" : "Register for 5 free deep analyses daily"
+            limit_notice: i18n.language === 'zh' ? "注册即送每日 2 次分析机会" : "Register for 2 free analyses daily"
         },
         valueProposition: {
             title: i18n.language === 'zh' ? "三大引擎" : "Three Engines",
@@ -220,46 +226,59 @@ export default function Landing() {
         }
     };
 
-    // Data mocks
-    const defaultPortfolioData = {
-        quality: [
-            { ticker: 'NVDA', name: '英伟达', shares: 214, cost: 194.2, current: 194.2, market: 'US' },
-            { ticker: 'GOOGL', name: '谷歌', shares: 157, cost: 263.8, current: 263.8, market: 'US' },
-            { ticker: '9988.HK', name: '阿里巴巴', shares: 1917, cost: 169.5, current: 169.5, market: 'HK' },
-        ],
-        value: [
-            { ticker: 'COP', name: '康菲石油', shares: 462, cost: 90.03, current: 90.03, market: 'US' },
-            { ticker: '0883.HK', name: '中国海油', shares: 16839, cost: 19.3, current: 19.3, market: 'HK' },
-        ],
-        growth: [
-            { ticker: 'MU', name: '美光科技', shares: 550, cost: 88.00, current: 88.00, market: 'US' },
-        ],
-        momentum: [
-            { ticker: 'TSLA', name: '特斯拉', shares: 200, cost: 245.00, current: 245.00, market: 'US' },
-        ]
+    // API functions
+    const fetchPortfolioData = async () => {
+        try {
+            setPortfolioLoading(true);
+            setPortfolioError(null);
+
+            // Use environment variable API URL or fallback to localhost
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5002';
+            const response = await axios.get(`${apiUrl}/portfolio/holdings`);
+
+            if (response.data.success) {
+                setPortfolioData(response.data.data);
+                console.log('Portfolio data loaded:', response.data.data);
+            } else {
+                throw new Error(response.data.error || 'Failed to fetch portfolio data');
+            }
+        } catch (error: any) {
+            console.error('Failed to fetch portfolio data:', error.message);
+            setPortfolioError(error.message);
+        } finally {
+            setPortfolioLoading(false);
+        }
     };
 
-    const styleStats = {
-        quality: { profitLossPercent: '12.4', vsYesterdayPercent: '1.2' },
-        value: { profitLossPercent: '8.2', vsYesterdayPercent: '0.5' },
-        growth: { profitLossPercent: '15.8', vsYesterdayPercent: '-0.3' },
-        momentum: { profitLossPercent: '22.1', vsYesterdayPercent: '2.5' }
-    };
 
-    // Initialize chart
+    // Load portfolio data on component mount
+    useEffect(() => {
+        fetchPortfolioData();
+    }, []);
+
+    // Initialize chart with real data
     useEffect(() => {
         const ctx = document.getElementById('portfolio-chart') as HTMLCanvasElement;
-        if (!ctx) return;
+        if (!ctx || !portfolioData) return;
+
+        const chartData = portfolioData.chart_data || [];
+
+        // Prepare chart labels and data
+        const labels = chartData.map((item: any) => item.date);
+        const qualityData = chartData.map((item: any) => item.quality || 0);
+        const valueData = chartData.map((item: any) => item.value || 0);
+        const growthData = chartData.map((item: any) => item.growth || 0);
+        const momentumData = chartData.map((item: any) => item.momentum || 0);
 
         const myChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: Array.from({ length: 30 }, (_, i) => i + 1),
+                labels: labels,
                 datasets: [
-                    { label: 'Quality', data: Array.from({ length: 30 }, () => Math.random() * 10 + 10), borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4 },
-                    { label: 'Value', data: Array.from({ length: 30 }, () => Math.random() * 5 + 5), borderColor: '#3B82F6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4 },
-                    { label: 'Growth', data: Array.from({ length: 30 }, () => Math.random() * 15 + 5), borderColor: '#A78BFA', backgroundColor: 'rgba(167, 139, 250, 0.1)', tension: 0.4 },
-                    { label: 'Momentum', data: Array.from({ length: 30 }, () => Math.random() * 20), borderColor: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4 },
+                    { label: 'Quality', data: qualityData, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', tension: 0.4 },
+                    { label: 'Value', data: valueData, borderColor: '#3B82F6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4 },
+                    { label: 'Growth', data: growthData, borderColor: '#A78BFA', backgroundColor: 'rgba(167, 139, 250, 0.1)', tension: 0.4 },
+                    { label: 'Momentum', data: momentumData, borderColor: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.4 },
                 ]
             },
             options: {
@@ -267,21 +286,65 @@ export default function Landing() {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'top', labels: { color: '#A1A1AA', font: { size: 12 }, padding: 15, usePointStyle: true } },
-                    tooltip: { backgroundColor: 'rgba(24, 24, 27, 0.95)', titleColor: '#FAFAFA', bodyColor: '#A1A1AA', borderColor: '#27272A', borderWidth: 1 }
+                    tooltip: {
+                        backgroundColor: 'rgba(24, 24, 27, 0.95)', titleColor: '#FAFAFA', bodyColor: '#A1A1AA', borderColor: '#27272A', borderWidth: 1,
+                        callbacks: {
+                            label: function (context) {
+                                const value = context.parsed.y || 0;
+                                return context.dataset.label + (value >= 0 ? '+' : '') + value.toFixed(1) + '%';
+                            }
+                        }
+                    }
                 },
                 scales: {
                     x: { grid: { color: 'rgba(39, 39, 42, 0.5)' }, ticks: { color: '#71717A', font: { size: 11 } } },
-                    y: { grid: { color: 'rgba(39, 39, 42, 0.5)' }, ticks: { color: '#71717A', font: { size: 11 } } }
+                    y: {
+                        grid: { color: 'rgba(39, 39, 42, 0.5)' },
+                        ticks: {
+                            color: '#71717A',
+                            font: { size: 11 },
+                            callback: function (value: any) {
+                                return (value >= 0 ? '+' : '') + value.toFixed(1) + '%';
+                            }
+                        }
+                    }
                 },
                 interaction: { intersect: false, mode: 'index' }
             }
         });
 
         return () => myChart.destroy();
-    }, []);
+    }, [portfolioData]);
 
     const toggleHoldings = (key: string) => {
         setExpandedPortfolio(expandedPortfolio === key ? null : key);
+    };
+
+    // Currency symbol helper function
+    const getCurrencySymbol = (currency: string) => {
+        switch (currency?.toUpperCase()) {
+            case 'USD':
+                return '$';
+            case 'HKD':
+                return 'HK$';
+            case 'CNY':
+                return '¥';
+            default:
+                return '$';
+        }
+    };
+
+    // Exchange rates (should ideally come from API, using approximation for now)
+    const exchangeRates = {
+        'USD': 1,
+        'HKD': 0.128, // 1 HKD = 0.128 USD
+        'CNY': 0.139  // 1 CNY = 0.139 USD
+    };
+
+    // Convert to USD for allocation calculation
+    const convertToUSD = (amount: number, currency: string) => {
+        const rate = exchangeRates[currency?.toUpperCase() as keyof typeof exchangeRates] || 1;
+        return amount * rate;
     };
 
     return (
@@ -434,6 +497,47 @@ export default function Landing() {
                         </div>
 
                         {/* Portfolio Summary Cards */}
+                        {portfolioLoading ? (
+                            // Loading skeleton
+                            <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
+                                {[1, 2, 3, 4].map((i) => (
+                                    <div key={i} className="glass-card rounded-2xl p-4 sm:p-6 animate-pulse">
+                                        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 sm:gap-4">
+                                            <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                                                <div className="w-1 h-10 sm:h-12 rounded-full bg-gray-600"></div>
+                                                <div className="text-center sm:text-left">
+                                                    <div className="h-6 bg-gray-600 rounded w-24 mb-2"></div>
+                                                    <div className="h-4 bg-gray-700 rounded w-32"></div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 w-full sm:w-auto">
+                                                <div className="text-center sm:text-right">
+                                                    <div className="h-8 bg-gray-600 rounded w-20 mb-2"></div>
+                                                    <div className="h-5 bg-gray-700 rounded w-24"></div>
+                                                </div>
+                                                <div className="h-8 bg-gray-600 rounded w-24"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : portfolioError ? (
+                            // Error state
+                            <div className="glass-card rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 text-center">
+                                <div className="text-red-400 mb-4">
+                                    <i className="ph ph-warning text-4xl mb-2" style={{ display: 'block' }}></i>
+                                    <p>加载投资组合数据时出错</p>
+                                    <p className="text-sm text-slate-400 mt-1">正在使用模拟数据</p>
+                                </div>
+                                <button
+                                    onClick={fetchPortfolioData}
+                                    className="px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand/80 transition-colors"
+                                >
+                                    重新加载
+                                </button>
+                            </div>
+                        ) : null}
+
                         <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
                             {[
                                 { key: 'quality', name: content.portfolio.quality, color: 'emerald' },
@@ -441,7 +545,12 @@ export default function Landing() {
                                 { key: 'growth', name: content.portfolio.growth, color: 'purple' },
                                 { key: 'momentum', name: content.portfolio.momentum, color: 'orange' }
                             ].map((config, idx) => {
-                                const stats = styleStats[config.key as keyof typeof styleStats];
+                                // Use real data from API
+                                const stats = portfolioData?.style_stats?.[config.key];
+
+                                // Skip rendering if no stats available
+                                if (!stats) return null;
+
                                 const isPositive = parseFloat(stats.vsYesterdayPercent) >= 0;
 
                                 return (
@@ -456,7 +565,9 @@ export default function Landing() {
                                             </div>
                                             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 w-full sm:w-auto">
                                                 <div className="text-center sm:text-right">
-                                                    <div className="text-xl sm:text-2xl font-bold text-white">+{stats.profitLossPercent}%</div>
+                                                    <div className={`text-xl sm:text-2xl font-bold ${parseFloat(stats.profitLossPercent) >= 0 ? 'text-white' : 'text-red-400'}`}>
+                                                        {parseFloat(stats.profitLossPercent) >= 0 ? '+' : ''}{stats.profitLossPercent}%
+                                                    </div>
                                                     <div className={`text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                                                         {content.portfolio.dailyChange}: {isPositive ? '+' : ''}{stats.vsYesterdayPercent}%
                                                     </div>
@@ -478,20 +589,27 @@ export default function Landing() {
                                                                 <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.shares}</th>
                                                                 <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.costPrice}</th>
                                                                 <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.currentPrice}</th>
+                                                                <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.allocation}</th>
                                                                 <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.profitPercent}</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {(defaultPortfolioData[config.key as keyof typeof defaultPortfolioData] || []).map((holding: any, hidx: number) => {
+                                                            {(portfolioData?.holdings_by_style?.[config.key] || []).map((holding: any, hidx: number) => {
                                                                 const profit = ((holding.current - holding.cost) / holding.cost * 100).toFixed(2);
+                                                                const marketValueUSD = convertToUSD(holding.current * holding.shares, holding.currency);
+                                                                const totalPortfolioValueUSD = (portfolioData?.holdings_by_style?.[config.key] || [])
+                                                                    .reduce((sum: number, h: any) => sum + convertToUSD(h.current * h.shares, h.currency), 0);
+                                                                const allocation = totalPortfolioValueUSD > 0 ? ((marketValueUSD / totalPortfolioValueUSD) * 100).toFixed(1) : '0.0';
+                                                                const currencySymbol = getCurrencySymbol(holding.currency);
                                                                 return (
                                                                     <tr key={hidx} className="border-b border-slate-800 last:border-b-0">
                                                                         <td className="py-3 px-2">
                                                                             <div className="font-medium text-white">{holding.name} ({holding.ticker})</div>
                                                                         </td>
                                                                         <td className="py-3 px-2 text-right text-white">{holding.shares}</td>
-                                                                        <td className="py-3 px-2 text-right text-white">${holding.cost}</td>
-                                                                        <td className="py-3 px-2 text-right text-white">${holding.current}</td>
+                                                                        <td className="py-3 px-2 text-right text-white">{currencySymbol}{holding.cost}</td>
+                                                                        <td className="py-3 px-2 text-right text-white">{currencySymbol}{holding.current}</td>
+                                                                        <td className="py-3 px-2 text-right text-white">{allocation}%</td>
                                                                         <td className={`py-3 px-2 text-right font-medium ${parseFloat(profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                                             {parseFloat(profit) >= 0 ? '+' : ''}{profit}%
                                                                         </td>
@@ -504,8 +622,13 @@ export default function Landing() {
 
                                                 {/* Mobile Cards */}
                                                 <div className="sm:hidden space-y-3">
-                                                    {(defaultPortfolioData[config.key as keyof typeof defaultPortfolioData] || []).map((holding: any, hidx: number) => {
+                                                    {(portfolioData?.holdings_by_style?.[config.key] || []).map((holding: any, hidx: number) => {
                                                         const profit = ((holding.current - holding.cost) / holding.cost * 100).toFixed(2);
+                                                        const marketValueUSD = convertToUSD(holding.current * holding.shares, holding.currency);
+                                                        const totalPortfolioValueUSD = (portfolioData?.holdings_by_style?.[config.key] || [])
+                                                            .reduce((sum: number, h: any) => sum + convertToUSD(h.current * h.shares, h.currency), 0);
+                                                        const allocation = totalPortfolioValueUSD > 0 ? ((marketValueUSD / totalPortfolioValueUSD) * 100).toFixed(1) : '0.0';
+                                                        const currencySymbol = getCurrencySymbol(holding.currency);
                                                         return (
                                                             <div key={hidx} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
                                                                 <div className="flex justify-between items-center mb-2">
@@ -519,13 +642,17 @@ export default function Landing() {
                                                                     </div>
                                                                     <div className="flex justify-between">
                                                                         <span className="text-[var(--text-secondary)]">{content.portfolio.costPrice}:</span>
-                                                                        <span className="text-white">${holding.cost}</span>
+                                                                        <span className="text-white">{currencySymbol}{holding.cost}</span>
                                                                     </div>
                                                                     <div className="flex justify-between">
                                                                         <span className="text-[var(--text-secondary)]">{content.portfolio.currentPrice}:</span>
-                                                                        <span className="text-white">${holding.current}</span>
+                                                                        <span className="text-white">{currencySymbol}{holding.current}</span>
                                                                     </div>
                                                                     <div className="flex justify-between">
+                                                                        <span className="text-[var(--text-secondary)]">{content.portfolio.allocation}:</span>
+                                                                        <span className="text-white">{allocation}%</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between col-span-2">
                                                                         <span className="text-[var(--text-secondary)]">{content.portfolio.profitPercent}:</span>
                                                                         <span className={`font-medium ${parseFloat(profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                                             {parseFloat(profit) >= 0 ? '+' : ''}{profit}%
