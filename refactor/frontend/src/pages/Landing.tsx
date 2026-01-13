@@ -134,6 +134,7 @@ export default function Landing() {
     const [portfolioData, setPortfolioData] = useState<any>(null);
     const [portfolioLoading, setPortfolioLoading] = useState(true);
     const [portfolioError, setPortfolioError] = useState<string | null>(null);
+    const [isDataFromCache, setIsDataFromCache] = useState(false);
 
     const toggleLang = () => {
         i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh');
@@ -226,25 +227,117 @@ export default function Landing() {
         }
     };
 
+    // Cache management constants
+    const CACHE_KEY = 'alphaGBM_portfolio_data';
+    const CACHE_TIMESTAMP_KEY = 'alphaGBM_portfolio_timestamp';
+    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+    // Check if cache is valid (not expired)
+    const isCacheValid = () => {
+        const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+        if (!timestamp) return false;
+
+        const cacheTime = parseInt(timestamp);
+        const now = Date.now();
+        return (now - cacheTime) < CACHE_DURATION;
+    };
+
+    // Get cached data if valid, clean expired cache
+    const getCachedData = () => {
+        if (!isCacheValid()) {
+            // Clean expired cache
+            localStorage.removeItem(CACHE_KEY);
+            localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+            return null;
+        }
+
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        if (!cachedData) return null;
+
+        try {
+            return JSON.parse(cachedData);
+        } catch (error) {
+            console.warn('Failed to parse cached portfolio data:', error);
+            // Clean corrupted cache
+            localStorage.removeItem(CACHE_KEY);
+            localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+            return null;
+        }
+    };
+
+    // Get cache info for display
+    const getCacheInfo = () => {
+        const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+        if (!timestamp) return null;
+
+        const cacheTime = parseInt(timestamp);
+        const now = Date.now();
+        const hoursAgo = Math.floor((now - cacheTime) / (1000 * 60 * 60));
+        const minutesAgo = Math.floor((now - cacheTime) / (1000 * 60));
+
+        if (hoursAgo > 0) {
+            return `${hoursAgo}小时前`;
+        } else if (minutesAgo > 0) {
+            return `${minutesAgo}分钟前`;
+        } else {
+            return '刚刚';
+        }
+    };
+
+    // Save data to cache
+    const setCacheData = (data: any) => {
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+            console.log('Portfolio data cached successfully');
+        } catch (error) {
+            console.warn('Failed to cache portfolio data:', error);
+        }
+    };
+
     // API functions
-    const fetchPortfolioData = async () => {
+    const fetchPortfolioData = async (forceRefresh = false) => {
         try {
             setPortfolioLoading(true);
             setPortfolioError(null);
+            setIsDataFromCache(false);
+
+            // Check cache first (unless force refresh)
+            if (!forceRefresh) {
+                const cachedData = getCachedData();
+                if (cachedData) {
+                    setPortfolioData(cachedData);
+                    setIsDataFromCache(true);
+                    setPortfolioLoading(false);
+                    console.log('Portfolio data loaded from cache');
+                    return;
+                }
+            }
 
             // Use environment variable API URL or fallback to localhost
             const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5002';
             const response = await axios.get(`${apiUrl}/portfolio/holdings`);
 
             if (response.data.success) {
-                setPortfolioData(response.data.data);
-                console.log('Portfolio data loaded:', response.data.data);
+                const portfolioData = response.data.data;
+                setPortfolioData(portfolioData);
+                setIsDataFromCache(false);
+                setCacheData(portfolioData); // Cache the new data
+                console.log('Portfolio data loaded from API and cached');
             } else {
                 throw new Error(response.data.error || 'Failed to fetch portfolio data');
             }
         } catch (error: any) {
             console.error('Failed to fetch portfolio data:', error.message);
             setPortfolioError(error.message);
+
+            // If API fails, try to use cache as fallback
+            const cachedData = getCachedData();
+            if (cachedData) {
+                setPortfolioData(cachedData);
+                setIsDataFromCache(true);
+                console.log('Using cached data as fallback due to API error');
+            }
         } finally {
             setPortfolioLoading(false);
         }
@@ -482,7 +575,26 @@ export default function Landing() {
                     {/* Portfolio Section */}
                     <section id="portfolio" className="my-12 sm:my-20 px-4 sm:px-0">
                         <div className="text-center mb-8 sm:mb-12">
-                            <h2 className="text-2xl sm:text-3xl font-bold mb-4">{content.portfolio.title}</h2>
+                            <div className="flex items-center justify-center mb-4 gap-3">
+                                <h2 className="text-2xl sm:text-3xl font-bold">{content.portfolio.title}</h2>
+                                {false && !portfolioLoading && portfolioData && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => fetchPortfolioData(true)}
+                                            className="p-2 text-slate-400 hover:text-brand transition-colors"
+                                            title="刷新数据"
+                                        >
+                                            <i className="ph ph-arrow-clockwise text-lg"></i>
+                                        </button>
+                                        <div
+                                            className={`text-xs px-2 py-1 rounded-full cursor-help ${isDataFromCache ? 'bg-yellow-500/20 text-yellow-400' : 'bg-emerald-500/20 text-emerald-400'}`}
+                                            title={isDataFromCache ? `缓存数据：${getCacheInfo()}` : '实时数据'}
+                                        >
+                                            {isDataFromCache ? `缓存 (${getCacheInfo()})` : '实时'}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             <p className="text-[var(--text-secondary)] max-w-2xl mx-auto text-sm sm:text-base px-4 sm:px-0 leading-relaxed">{content.portfolio.description}</p>
                         </div>
 
@@ -527,14 +639,24 @@ export default function Landing() {
                                 <div className="text-red-400 mb-4">
                                     <i className="ph ph-warning text-4xl mb-2" style={{ display: 'block' }}></i>
                                     <p>加载投资组合数据时出错</p>
-                                    <p className="text-sm text-slate-400 mt-1">正在使用模拟数据</p>
+                                    <p className="text-sm text-slate-400 mt-1">
+                                        {portfolioData ? '正在使用缓存数据' : '无法获取数据'}
+                                    </p>
                                 </div>
-                                <button
-                                    onClick={fetchPortfolioData}
-                                    className="px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand/80 transition-colors"
-                                >
-                                    重新加载
-                                </button>
+                                <div className="flex justify-center gap-3">
+                                    <button
+                                        onClick={() => fetchPortfolioData(false)}
+                                        className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                                    >
+                                        重新加载
+                                    </button>
+                                    <button
+                                        onClick={() => fetchPortfolioData(true)}
+                                        className="px-4 py-2 bg-brand text-white rounded-lg hover:bg-brand/80 transition-colors"
+                                    >
+                                        强制刷新
+                                    </button>
+                                </div>
                             </div>
                         ) : null}
 
