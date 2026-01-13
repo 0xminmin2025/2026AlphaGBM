@@ -130,7 +130,7 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
 
   return (
     <>
-      <div className="card shadow-lg mb-4 p-4 sm:p-6">
+      <div className="card bg-[#0f0f11] border-white/10 shadow-lg mb-4 p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4">
           <h5 className="flex items-center gap-2 text-lg sm:text-xl font-semibold m-0">
             <i className="bi bi-clock-history"></i>
@@ -139,7 +139,7 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
           {history.length > 0 && (
             <button
               onClick={clearAllHistory}
-              className="px-3 py-2 text-sm bg-red-50 border border-red-300 text-red-600 rounded-md hover:bg-red-100 transition-colors whitespace-nowrap"
+              className="px-3 py-2 text-sm bg-red-500/10 border border-red-500/30 text-red-400 rounded-md hover:bg-red-500/20 transition-colors whitespace-nowrap"
             >
               <i className="bi bi-trash mr-1"></i>
               清空历史
@@ -155,7 +155,7 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
           <input
             type="text"
-            className="flex-1 px-3 py-2 bg-slate-100 border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            className="flex-1 px-3 py-2 bg-[#27272a] border border-white/20 rounded-md text-white placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-2 focus:ring-[#0D9B97]/20"
             placeholder="搜索标的代码..."
             value={searchSymbol}
             onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
@@ -163,7 +163,7 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
           />
           <Button
             onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 border border-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium whitespace-nowrap"
+            className="px-4 py-2 bg-[#0D9B97] border border-[#0D9B97] text-white rounded-md hover:bg-[#0D9B97]/80 transition-colors font-medium whitespace-nowrap"
           >
             <i className="bi bi-search mr-2"></i>
             搜索
@@ -176,11 +176,11 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
             <p>{searchSymbol ? '未找到相关记录' : '暂无期权分析历史'}</p>
           </div>
         ) : (
-          <div className="max-h-96 sm:max-h-[600px] overflow-auto">
+          <div className="max-h-[500px] sm:max-h-[700px] overflow-auto">
             {currentItems.map((item) => (
               <div
                 key={item.id}
-                className="card mb-3 p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-md"
+                className="card bg-[#1c1c1e] border-white/10 mb-3 p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:bg-[#1c1c1e]/80 hover:border-[#0D9B97]/30"
                 onClick={() => {
                   setSelectedDetail(item);
                   setShowDetail(true);
@@ -188,23 +188,23 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                    <span className="text-lg sm:text-xl font-bold text-blue-600">
+                    <span className="text-lg sm:text-xl font-bold text-[#0D9B97]">
                       {item.symbol}
                     </span>
-                    <span className={`px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs ${getAnalysisTypeClass(item.analysisType)}`}>
+                    <span className={`px-2 py-1 bg-[#0D9B97]/20 text-[#0D9B97] rounded text-xs ${getAnalysisTypeClass(item.analysisType)}`}>
                       {getAnalysisTypeLabel(item.analysisType)}
                     </span>
-                    <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
+                    <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
                       {item.expiryDate}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 justify-between sm:justify-end">
-                    <span className="text-slate-500 text-sm">
+                    <span className="text-slate-400 text-sm">
                       {formatTimestamp(item.timestamp)}
                     </span>
                     <button
                       onClick={(e) => handleDelete(item.id, e)}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                      className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
                     >
                       <i className="bi bi-trash"></i>
                     </button>
@@ -214,13 +214,13 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <div className="text-xs text-slate-500 mb-1">分析类型</div>
-                    <div className="text-sm font-medium text-slate-900">
+                    <div className="text-sm font-medium text-slate-300">
                       {getAnalysisTypeLabel(item.analysisType)}
                     </div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500 mb-1">到期日期</div>
-                    <div className="text-sm font-medium text-slate-900">
+                    <div className="text-sm font-medium text-slate-300">
                       {item.expiryDate}
                     </div>
                   </div>
@@ -233,7 +233,7 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                         e.stopPropagation();
                         onSelectHistory(item);
                       }}
-                      className="px-3 py-2 bg-slate-100 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-200 transition-colors text-sm"
+                      className="px-3 py-2 bg-white/10 border border-white/20 text-slate-300 rounded-md hover:bg-white/20 transition-colors text-sm"
                     >
                       <i className="bi bi-arrow-repeat mr-1"></i>
                       重新分析
@@ -245,7 +245,7 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                         e.stopPropagation();
                         onViewFullReport(item.data);
                       }}
-                      className="px-3 py-2 bg-blue-600 border border-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                      className="px-3 py-2 bg-[#0D9B97] border border-[#0D9B97] text-white rounded-md hover:bg-[#0D9B97]/80 transition-colors text-sm"
                     >
                       <i className="bi bi-file-text mr-1"></i>
                       查看完整报告
@@ -263,14 +263,14 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                   disabled={currentPage === 1}
                   className={`p-2 border rounded-md transition-colors ${
                     currentPage === 1
-                      ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'
-                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                      ? 'bg-white/5 border-white/10 text-slate-600 cursor-not-allowed'
+                      : 'bg-white/10 border-white/20 text-slate-300 hover:bg-white/20 cursor-pointer'
                   }`}
                 >
                   <i className="bi bi-chevron-left"></i>
                 </button>
 
-                <span className="text-slate-500 text-sm">
+                <span className="text-slate-400 text-sm">
                   第 {currentPage} 页，共 {totalPages} 页
                 </span>
 
@@ -279,8 +279,8 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
                   disabled={currentPage === totalPages}
                   className={`p-2 border rounded-md transition-colors ${
                     currentPage === totalPages
-                      ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'
-                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer'
+                      ? 'bg-white/5 border-white/10 text-slate-600 cursor-not-allowed'
+                      : 'bg-white/10 border-white/20 text-slate-300 hover:bg-white/20 cursor-pointer'
                   }`}
                 >
                   <i className="bi bi-chevron-right"></i>
@@ -302,16 +302,16 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
           onClick={() => setShowDetail(false)}
         >
           <div
-            className="card shadow-lg w-full max-w-4xl max-h-[90vh] overflow-auto p-4 sm:p-6 m-4"
+            className="card bg-[#0f0f11] border-white/10 shadow-lg w-full max-w-4xl max-h-[90vh] overflow-auto p-4 sm:p-6 m-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h4 className="text-lg sm:text-xl md:text-2xl font-semibold text-blue-600">
+              <h4 className="text-lg sm:text-xl md:text-2xl font-semibold text-[#0D9B97]">
                 {selectedDetail.symbol} 期权分析详情
               </h4>
               <button
                 onClick={() => setShowDetail(false)}
-                className="self-end sm:self-center p-1 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
+                className="self-end sm:self-center p-1 text-slate-400 hover:text-slate-300 hover:bg-white/10 rounded transition-colors"
               >
                 <i className="bi bi-x text-xl"></i>
               </button>
@@ -320,13 +320,13 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
               <div>
                 <div className="text-xs text-slate-500 mb-1">标的代码</div>
-                <div className="text-sm font-medium text-blue-600">
+                <div className="text-sm font-medium text-[#0D9B97]">
                   {selectedDetail.symbol}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-slate-500 mb-1">到期日</div>
-                <div className="text-sm font-medium text-slate-900">
+                <div className="text-sm font-medium text-slate-300">
                   {selectedDetail.expiryDate}
                 </div>
               </div>
@@ -338,17 +338,17 @@ const OptionAnalysisHistory: React.FC<OptionAnalysisHistoryProps> = ({
               </div>
               <div>
                 <div className="text-xs text-slate-500 mb-1">分析时间</div>
-                <div className="text-sm font-medium text-slate-900">
+                <div className="text-sm font-medium text-slate-300">
                   {formatTimestamp(selectedDetail.timestamp)}
                 </div>
               </div>
             </div>
 
             <div>
-              <h5 className="text-base sm:text-lg font-semibold mb-3 text-slate-900">
+              <h5 className="text-base sm:text-lg font-semibold mb-3 text-slate-300">
                 分析结果
               </h5>
-              <div className="bg-slate-100 p-3 sm:p-4 rounded-lg text-slate-700 text-sm max-h-64 sm:max-h-96 overflow-auto">
+              <div className="bg-[#1c1c1e] border border-white/10 p-3 sm:p-4 rounded-lg text-slate-300 text-sm max-h-64 sm:max-h-96 overflow-auto">
                 <pre className="whitespace-pre-wrap font-mono text-xs sm:text-sm">
                   {JSON.stringify(selectedDetail.data, null, 2)}
                 </pre>

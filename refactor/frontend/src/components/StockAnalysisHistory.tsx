@@ -202,7 +202,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
 
   return (
     <>
-      <div className="card shadow-lg mb-4 p-4 sm:p-6">
+      <div className="card bg-[#0f0f11] border-white/10 shadow-lg mb-4 p-4 sm:p-6">
         <h5 className="mb-4 flex items-center gap-2 text-lg sm:text-xl font-semibold">
           <i className="bi bi-clock-history"></i>
           分析历史
@@ -212,7 +212,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
           <input
             type="text"
-            className="flex-1 px-3 py-2 bg-slate-100 border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            className="flex-1 px-3 py-2 bg-[#27272a] border border-white/20 rounded-md text-white placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-2 focus:ring-[#0D9B97]/20"
             placeholder="搜索股票代码... (实时搜索)"
             value={searchTicker}
             onChange={(e) => handleSearchChange(e.target.value.toUpperCase())}
@@ -222,14 +222,14 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
             disabled={loading}
             className={`px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${
               loading
-                ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-orange-600 border-orange-600 text-white hover:bg-orange-700'
+                ? 'bg-white/5 border-white/10 text-slate-600 cursor-not-allowed'
+                : 'bg-[#0D9B97] border-[#0D9B97] text-white hover:bg-[#0D9B97]/80'
             }`}
           >
             <i className={`bi ${loading ? 'bi-arrow-repeat' : 'bi-arrow-clockwise'} mr-2 ${loading ? 'spinner' : ''}`}></i>
             {loading ? '加载中...' : '刷新'}
           </Button>
-          <div className="flex items-center gap-2 text-slate-500 text-sm px-2 py-1">
+          <div className="flex items-center gap-2 text-slate-400 text-sm px-2 py-1">
             <i className="bi bi-database"></i>
             <span>{filteredHistory.length}/{allHistory.length} 项</span>
           </div>
@@ -256,32 +256,32 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
             <p>暂无分析历史记录</p>
           </div>
         ) : (
-          <div className="max-h-96 sm:max-h-[600px] overflow-auto">
+          <div className="max-h-[500px] sm:max-h-[700px] overflow-auto">
             {filteredHistory.map((analysisData) => {
               const item = extractDisplayInfo(analysisData);  // Extract display info from complete data
 
               return (
                 <div
                   key={item.id}
-                  className="card mb-3 p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-md"
+                  className="card bg-[#1c1c1e] border-white/10 mb-3 p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:bg-[#1c1c1e]/80 hover:border-[#0D9B97]/30"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                      <span className="text-lg sm:text-xl font-bold text-blue-600">
+                      <span className="text-lg sm:text-xl font-bold text-[#0D9B97]">
                         {item.ticker}
                       </span>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">{item.style}</span>
+                      <span className="px-2 py-1 bg-[#0D9B97]/20 text-[#0D9B97] rounded text-xs">{item.style}</span>
                       {item.risk_level && (
                         <span className={`px-2 py-1 rounded text-xs ${getRiskClass(item.risk_level)}`}>
                           {item.risk_level}
                         </span>
                       )}
-                      <span className="px-2 py-1 bg-teal-100 text-teal-800 rounded text-xs">
+                      <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
                         <i className="bi bi-clock-history mr-1"></i>
                         历史分析
                       </span>
                     </div>
-                    <span className="text-slate-500 text-sm">
+                    <span className="text-slate-400 text-sm">
                       {formatDate(item.created_at)}
                     </span>
                   </div>
@@ -289,13 +289,13 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-3">
                     <div>
                       <div className="text-xs text-slate-500 mb-1">当前价格</div>
-                      <div className="text-sm font-medium text-slate-900">
+                      <div className="text-sm font-medium text-slate-300">
                         {formatCurrency(item.current_price)}
                       </div>
                     </div>
                     <div>
                       <div className="text-xs text-slate-500 mb-1">目标价格</div>
-                      <div className="text-sm font-medium text-green-600">
+                      <div className="text-sm font-medium text-green-400">
                         {formatCurrency(item.target_price)}
                       </div>
                     </div>
@@ -307,14 +307,14 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                     </div>
                     <div>
                       <div className="text-xs text-slate-500 mb-1">建议仓位</div>
-                      <div className="text-sm font-medium text-blue-600">
+                      <div className="text-sm font-medium text-[#0D9B97]">
                         {item.position_size}%
                       </div>
                     </div>
                   </div>
 
                   {item.ai_summary && (
-                    <div className="text-muted" style={{
+                    <div className="text-slate-400" style={{
                       fontSize: '0.9rem',
                       lineHeight: 1.5,
                       maxHeight: '3rem',
@@ -335,7 +335,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                           e.stopPropagation();
                           loadFullReport(analysisData);  // Pass complete data directly
                         }}
-                        className="px-3 py-2 bg-blue-600 border border-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                        className="px-3 py-2 bg-[#0D9B97] border border-[#0D9B97] text-white rounded-md hover:bg-[#0D9B97]/80 transition-colors text-sm"
                       >
                         <i className="bi bi-file-earmark-text mr-1"></i>
                         查看完整报告
@@ -347,7 +347,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                           e.stopPropagation();
                           onSelectHistory(item.ticker, item.style);  // Pass ticker and style
                         }}
-                        className="px-3 py-2 bg-slate-100 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-200 transition-colors text-sm"
+                        className="px-3 py-2 bg-white/10 border border-white/20 text-slate-300 rounded-md hover:bg-white/20 transition-colors text-sm"
                       >
                         <i className="bi bi-arrow-repeat mr-1"></i>
                         重新分析
