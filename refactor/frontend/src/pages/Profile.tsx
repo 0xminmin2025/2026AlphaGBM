@@ -65,9 +65,9 @@ export default function Profile() {
 
     return (
         <div className="space-y-8 animate-in fade-in">
-            <h1 className="text-3xl font-bold tracking-tight">{t('profile.title')}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('profile.title')}</h1>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2">
                 {/* User Details Card */}
                 <Card className="bg-[#0f0f11] border-white/10">
                     <CardHeader className="flex flex-row items-center gap-3">
@@ -200,7 +200,8 @@ export default function Profile() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <Table>
+                    <div className="overflow-x-auto">
+                        <Table>
                         <TableHeader>
                             <TableRow className="border-white/5">
                                 <TableHead>{t('profile.time')}</TableHead>
@@ -248,6 +249,7 @@ export default function Profile() {
                             )}
                         </TableBody>
                     </Table>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -291,7 +293,8 @@ export default function Profile() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <Table>
+                    <div className="overflow-x-auto">
+                        <Table>
                         <TableHeader>
                             <TableRow className="border-white/5">
                                 <TableHead>{t('profile.date')}</TableHead>
@@ -337,6 +340,7 @@ export default function Profile() {
                             )}
                         </TableBody>
                     </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>

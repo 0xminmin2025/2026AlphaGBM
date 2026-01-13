@@ -31,17 +31,30 @@ const styles = `
         background-color: var(--card);
         border: 1px solid var(--border);
         border-radius: 0.75rem;
-        padding: 2rem;
+        padding: 1.5rem;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (min-width: 640px) {
+        .header-section {
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
     }
 
     .controls-section {
-        padding: 1.5rem;
+        padding: 1rem;
         background-color: var(--card);
         border: 1px solid var(--border);
         border-radius: 0.75rem;
         margin-bottom: 1rem;
+    }
+
+    @media (min-width: 640px) {
+        .controls-section {
+            padding: 1.5rem;
+        }
     }
 
     .option-col-section {
@@ -76,6 +89,23 @@ const styles = `
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
+    }
+
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 640px) {
+        .option-table {
+            font-size: 0.75rem;
+        }
+
+        .option-table th,
+        .option-table td {
+            padding: 0.5rem 0.25rem;
+            min-width: 60px;
+        }
     }
 
     .option-table th {
@@ -462,7 +492,7 @@ export default function Options() {
 
             {/* Controls */}
             <div className="controls-section">
-                <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-end">
                     <div className="flex-1 min-w-[200px]">
                         <label className="block mb-2" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem' }}>股票代码 (Symbol)</label>
                         <div className="flex gap-2">
@@ -503,7 +533,7 @@ export default function Options() {
                     <label className="block mb-3" style={{ color: 'var(--foreground)', fontSize: '1rem', fontWeight: 600 }}>
                         选择策略
                     </label>
-                    <div className="flex gap-3 flex-wrap">
+                    <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 flex-wrap">
                         {(Object.keys(strategyLabels) as Strategy[]).map(s => (
                             <button
                                 key={s}
@@ -586,7 +616,7 @@ export default function Options() {
                                 <i className="bi bi-star-fill mr-2"></i>
                                 高评分推荐 (Score ≥ 60)
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                                 {topRecommendations.map(opt => (
                                     <div
                                         key={opt.identifier}
@@ -626,7 +656,8 @@ export default function Options() {
                             {strategy.includes('call') ? 'CALLS (看涨)' : 'PUTS (看跌)'} - {strategyLabels[strategy]}
                         </div>
                         <div style={{ overflowX: 'auto' }}>
-                            <table className="option-table">
+                            <div className="table-container">
+                                <table className="option-table">
                                 <thead>
                                     <tr>
                                         <th>Strike</th>
@@ -675,7 +706,8 @@ export default function Options() {
                                         })
                                     )}
                                 </tbody>
-                            </table>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

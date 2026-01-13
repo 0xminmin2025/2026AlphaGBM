@@ -13,9 +13,15 @@ const styles = `
         background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
         border: 1px solid rgba(255,255,255,0.1);
         border-radius: 1.5rem;
-        padding: 2rem;
+        padding: 1.5rem;
         position: relative;
         transition: all 0.3s ease;
+    }
+
+    @media (min-width: 640px) {
+        .pricing-card {
+            padding: 2rem;
+        }
     }
     
     .pricing-card:hover {
@@ -134,11 +140,17 @@ const styles = `
         background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
         border: 1px solid rgba(255,255,255,0.1);
         border-radius: 1rem;
-        padding: 1.5rem 2rem;
+        padding: 1.25rem 1.5rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
         transition: all 0.3s ease;
+    }
+
+    @media (min-width: 640px) {
+        .topup-card {
+            padding: 1.5rem 2rem;
+        }
     }
     
     .topup-card:hover {
@@ -217,18 +229,18 @@ export default function Pricing() {
             <style>{styles}</style>
 
             {/* Header */}
-            <div className="text-center mb-16">
-                <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
+            <div className="text-center mb-8 sm:mb-16 px-4">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4">
                     {t('pricing.title')}
                 </h1>
-                <p className="text-xl text-slate-400 max-w-2xl mx-auto">
+                <p className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto">
                     {t('pricing.subtitle')}
                 </p>
             </div>
 
             {/* Success Message */}
             {success && (
-                <div className="success-banner max-w-4xl mx-auto">
+                <div className="success-banner max-w-4xl mx-4 sm:mx-auto">
                     <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
                         <Check className="w-5 h-5 text-green-500" />
                     </div>
@@ -240,7 +252,7 @@ export default function Pricing() {
             )}
 
             {/* Pricing Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 max-w-6xl mx-4 sm:mx-auto mb-8 sm:mb-16">
                 {/* Free Plan */}
                 <div className={`pricing-card ${currentPlan === 'free' ? 'current' : ''}`}>
                     {currentPlan === 'free' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
@@ -367,20 +379,20 @@ export default function Pricing() {
             </div>
 
             {/* Top-up Section */}
-            <div className="max-w-2xl mx-auto">
-                <h2 className="text-2xl font-bold text-center mb-6">{t('pricing.topUpTitle')}</h2>
-                <div className="topup-card">
-                    <div>
+            <div className="max-w-2xl mx-4 sm:mx-auto">
+                <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6">{t('pricing.topUpTitle')}</h2>
+                <div className="topup-card flex-col sm:flex-row gap-4 sm:gap-6">
+                    <div className="flex-1">
                         <div className="font-semibold text-lg">{pricing.topups['100'].name}</div>
                         <div className="text-sm text-slate-500">{pricing.topups['100'].validity}</div>
                     </div>
-                    <div className="flex items-center gap-6">
-                        <div className="text-2xl font-bold">¥{pricing.topups['100'].price}</div>
+                    <div className="flex items-center gap-4 sm:gap-6 justify-between sm:justify-end">
+                        <div className="text-xl sm:text-2xl font-bold">¥{pricing.topups['100'].price}</div>
                         <Button
                             variant="outline"
                             onClick={() => handleSubscribe('topup_100')}
                             disabled={!!checkoutLoading}
-                            className="border-[#0D9B97] text-[#0D9B97] hover:bg-[#0D9B97]/10"
+                            className="border-[#0D9B97] text-[#0D9B97] hover:bg-[#0D9B97]/10 whitespace-nowrap"
                         >
                             {checkoutLoading === 'topup_100' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {t('pricing.topUp')}

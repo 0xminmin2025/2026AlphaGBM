@@ -149,8 +149,8 @@ export default function ResetPassword() {
     // Loading state while checking authentication
     if (sessionLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
-                <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA] px-4 sm:px-6 lg:px-8">
+                <Card className="w-full max-w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
                     <CardHeader className="space-y-4">
                         {/* Brand Logo */}
                         <div className="flex justify-center mb-2">
@@ -179,8 +179,8 @@ export default function ResetPassword() {
 
     if (success) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
-                <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA] px-4 sm:px-6 lg:px-8">
+                <Card className="w-full max-w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
                     <CardHeader className="space-y-4">
                         {/* Brand Logo */}
                         <div className="flex justify-center mb-2">
@@ -219,8 +219,8 @@ export default function ResetPassword() {
     // Error state - invalid/expired link
     if (error && !hasValidSession) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
-                <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+            <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA] px-4 sm:px-6 lg:px-8">
+                <Card className="w-full max-w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
                     <CardHeader className="space-y-4">
                         {/* Brand Logo */}
                         <div className="flex justify-center mb-2">

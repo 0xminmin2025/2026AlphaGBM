@@ -384,7 +384,7 @@ function InvestmentPhilosophy() {
                     {/* Five Pillars */}
                     <div style={{ marginBottom: '2rem' }}>
                         <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.5rem', fontSize: '1rem' }}>五大支柱投资框架</strong>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mt-3">
                             <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>怀疑主义</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>始终质疑，寻找不买入的理由</div></div>
                             <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>事前验尸</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>假设投资失败，提前识别风险点</div></div>
                             <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>严格风控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>硬数据计算，设置仓位上限和止损</div></div>
@@ -399,7 +399,7 @@ function InvestmentPhilosophy() {
                         <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
                             系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制：
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                             <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Quality</strong>质量 - 财务稳健</div>
                             <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Value</strong>价值 - 寻找低估</div>
                             <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Growth</strong>成长 - 追求增长</div>
@@ -554,7 +554,7 @@ export default function Home() {
                 <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
                     <button
                         onClick={() => setActiveTab('analysis')}
-                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${activeTab === 'analysis'
+                        className={`flex-1 px-3 sm:px-6 py-3 text-center font-medium transition-all duration-200 text-sm sm:text-base ${activeTab === 'analysis'
                             ? 'border-b-2 text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                             }`}
@@ -572,7 +572,7 @@ export default function Home() {
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
-                        className={`flex-1 px-6 py-3 text-center font-medium transition-all duration-200 ${activeTab === 'history'
+                        className={`flex-1 px-3 sm:px-6 py-3 text-center font-medium transition-all duration-200 text-sm sm:text-base ${activeTab === 'history'
                             ? 'border-b-2 text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                             }`}
@@ -594,13 +594,13 @@ export default function Home() {
             {/* Stock Analysis Tab */}
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
                 {/* 股票查询表单 */}
-                <div className="card shadow-lg mb-4" style={{ padding: '1.5rem' }}>
+                <div className="card shadow-lg mb-4 p-4 sm:p-6">
                     <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                         <i className="bi bi-search"></i>
                         股票智能分析
                     </h5>
 
-                    <form onSubmit={handleAnalyze} className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-4">
+                    <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
                         <div>
                             <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>投资风格</label>
                             <CustomSelect

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Chart from 'chart.js/auto';
+import { Menu, X } from 'lucide-react';
 
 // Original CSS from home/index.html
 const originalStyles = `
@@ -126,9 +127,14 @@ const originalStyles = `
 export default function Landing() {
     const { i18n } = useTranslation();
     const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const toggleLang = () => {
         i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh');
+    };
+
+    const closeMobileMenu = () => {
+        setIsMobileMenuOpen(false);
     };
 
     // Strict content mapping
@@ -291,74 +297,116 @@ export default function Landing() {
             {/* Hero Glow */}
             <div className="hero-glow"></div>
 
-            {/* Navbar */}
+            {/* Mobile-Responsive Navbar */}
             <nav className="fixed w-full z-50 landing-nav">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
+                        {/* Logo */}
                         <div className="flex items-center gap-2">
                             <span className="font-bold text-xl tracking-tight">
                                 Alpha<span style={{ color: '#0D9B97' }}>GBM</span>
                             </span>
                         </div>
-                        <div className="hidden md:block">
-                            <div className="ml-10 flex items-baseline space-x-8">
+
+                        {/* Desktop Navigation */}
+                        <div className="hidden md:flex items-center gap-8">
+                            <div className="flex items-baseline space-x-8">
                                 <a href="#" className="hover:text-brand transition-colors text-sm text-[var(--text-secondary)]">{content.nav.home}</a>
                                 <a href="#portfolio" className="hover:text-brand transition-colors text-sm text-[var(--text-secondary)]">{content.nav.portfolio}</a>
                                 <a href="#styles" className="hover:text-brand transition-colors text-sm text-[var(--text-secondary)]">{content.nav.styles}</a>
                                 <a href="#contact" className="hover:text-brand transition-colors text-sm text-[var(--text-secondary)]">{content.nav.contact}</a>
                             </div>
+
+                            <div className="flex items-center gap-4">
+                                <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
+                                    {content.nav.lang}
+                                </button>
+                                <a href="/stock" className="btn-primary rounded-full px-4 py-2 text-sm font-semibold hover:bg-opacity-90 transition-colors shadow-brand">
+                                    {content.nav.cta}
+                                </a>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
-                                {content.nav.lang}
-                            </button>
-                            <a href="/stock" className="btn-primary rounded-full px-4 py-2 text-sm font-semibold hover:bg-opacity-90 transition-colors shadow-brand">
-                                {content.nav.cta}
-                            </a>
-                        </div>
+
+                        {/* Mobile Menu Button */}
+                        <button
+                            className="md:hidden p-2 text-[var(--text-secondary)] hover:text-brand transition-colors"
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            aria-label="Toggle mobile menu"
+                        >
+                            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                        </button>
                     </div>
+
+                    {/* Mobile Navigation Menu */}
+                    {isMobileMenuOpen && (
+                        <div className="md:hidden bg-[rgba(24,24,27,0.95)] backdrop-blur-md border-t border-slate-700">
+                            <div className="px-4 py-4 space-y-4">
+                                <a href="#" className="block text-sm text-[var(--text-secondary)] hover:text-brand transition-colors py-2" onClick={closeMobileMenu}>
+                                    {content.nav.home}
+                                </a>
+                                <a href="#portfolio" className="block text-sm text-[var(--text-secondary)] hover:text-brand transition-colors py-2" onClick={closeMobileMenu}>
+                                    {content.nav.portfolio}
+                                </a>
+                                <a href="#styles" className="block text-sm text-[var(--text-secondary)] hover:text-brand transition-colors py-2" onClick={closeMobileMenu}>
+                                    {content.nav.styles}
+                                </a>
+                                <a href="#contact" className="block text-sm text-[var(--text-secondary)] hover:text-brand transition-colors py-2" onClick={closeMobileMenu}>
+                                    {content.nav.contact}
+                                </a>
+
+                                <div className="border-t border-slate-700 pt-4 mt-4 space-y-4">
+                                    <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
+                                        {content.nav.lang}
+                                    </button>
+                                    <a href="/stock" className="btn-primary rounded-full px-4 py-2 text-sm font-semibold hover:bg-opacity-90 transition-colors shadow-brand block text-center" onClick={closeMobileMenu}>
+                                        {content.nav.cta}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </nav>
 
             {/* Hero Section */}
-            <main className="relative z-10 pt-32 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            <main className="relative z-10 pt-20 sm:pt-32 pb-8 sm:pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
                 <div className="text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-brand text-xs font-medium mb-6">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-brand text-xs font-medium mb-4 sm:mb-6">
                         <i className="ph ph-sparkle-fill"></i>
                         {content.hero.badge}
                     </div>
-                    <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
+                    <h1 className="text-3xl sm:text-5xl md:text-7xl font-extrabold tracking-tight mb-4 sm:mb-6">
                         AlphaGBM
                         <br />
-                        <span className="text-4xl md:text-6xl">{content.hero.titleSub}</span>
+                        <span className="text-2xl sm:text-4xl md:text-6xl leading-tight">{content.hero.titleSub}</span>
                     </h1>
-                    <h2 className="mt-4 max-w-2xl mx-auto text-xl text-[var(--text-secondary)] font-normal">
+                    <h2 className="mt-3 sm:mt-4 max-w-2xl mx-auto text-base sm:text-xl text-[var(--text-secondary)] font-normal px-4 leading-relaxed">
                         {content.hero.subtitle}
                     </h2>
 
-                    <div className="mt-10 flex flex-col items-center">
-                        <a href="/stock" className="btn-primary beta-pulse px-8 py-3 rounded-lg font-bold transition-all shadow-brand text-white">
+                    <div className="mt-8 sm:mt-10 flex flex-col items-center">
+                        <a href="/stock" className="btn-primary beta-pulse px-6 sm:px-8 py-3 rounded-lg font-bold transition-all shadow-brand text-white text-sm sm:text-base">
                             {content.hero.cta_primary}
                         </a>
-                        <div className="mt-4 text-xs text-[var(--text-muted)] bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
+                        <div className="mt-4 text-xs text-[var(--text-muted)] bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700 text-center">
                             {content.hero.limit_notice}
                         </div>
                     </div>
 
                     {/* Value Proposition */}
-                    <section id="value-proposition" className="my-20">
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl font-bold mb-4">{content.valueProposition.title}</h2>
+                    <section id="value-proposition" className="my-12 sm:my-20">
+                        <div className="text-center mb-8 sm:mb-12">
+                            <h2 className="text-2xl sm:text-3xl font-bold mb-4 px-4">{content.valueProposition.title}</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto px-4 sm:px-0">
                             {content.valueProposition.items.map((item, idx) => (
                                 <a key={idx} href={item.link || '#'} className="block no-underline h-full">
-                                    <div className="glass-card rounded-xl p-6 text-center transition-all hover:border-[var(--brand-primary)]/50 hover:transform hover:scale-105 cursor-pointer h-full">
-                                        <div className="flex items-center justify-center mb-4 text-brand">
-                                            <i className={`ph ph-${item.icon} text-4xl`}></i>
+                                    <div className="glass-card rounded-xl p-4 sm:p-6 text-center transition-all hover:border-[var(--brand-primary)]/50 hover:transform hover:scale-105 cursor-pointer h-full">
+                                        <div className="flex items-center justify-center mb-3 sm:mb-4 text-brand">
+                                            <i className={`ph ph-${item.icon} text-3xl sm:text-4xl`}></i>
                                         </div>
-                                        <div className="flex items-center justify-center gap-2 mb-3">
-                                            <h3 className="text-xl font-bold text-white">{item.title}</h3>
+                                        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-3">
+                                            <h3 className="text-lg sm:text-xl font-bold text-white">{item.title}</h3>
                                             {item.badge && <span className="px-2 py-1 text-xs font-semibold bg-brand/20 text-brand rounded-full border border-brand/30">{item.badge}</span>}
                                         </div>
                                         <p className="text-[var(--text-secondary)] text-sm leading-relaxed">{item.desc}</p>
@@ -369,24 +417,24 @@ export default function Landing() {
                     </section>
 
                     {/* Portfolio Section */}
-                    <section id="portfolio" className="my-20">
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl font-bold mb-4">{content.portfolio.title}</h2>
-                            <p className="text-[var(--text-secondary)] max-w-2xl mx-auto">{content.portfolio.description}</p>
+                    <section id="portfolio" className="my-12 sm:my-20 px-4 sm:px-0">
+                        <div className="text-center mb-8 sm:mb-12">
+                            <h2 className="text-2xl sm:text-3xl font-bold mb-4">{content.portfolio.title}</h2>
+                            <p className="text-[var(--text-secondary)] max-w-2xl mx-auto text-sm sm:text-base px-4 sm:px-0 leading-relaxed">{content.portfolio.description}</p>
                         </div>
 
-                        <div className="glass-card rounded-2xl p-6 mb-8">
-                            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                        <div className="glass-card rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
+                            <h3 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6 flex items-center gap-2">
                                 <i className="ph ph-chart-line-up"></i>
                                 {content.portfolio.performanceChart}
                             </h3>
-                            <div className="w-full h-[400px]">
+                            <div className="w-full h-[300px] sm:h-[400px]">
                                 <canvas id="portfolio-chart"></canvas>
                             </div>
                         </div>
 
                         {/* Portfolio Summary Cards */}
-                        <div className="space-y-6 mb-8">
+                        <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
                             {[
                                 { key: 'quality', name: content.portfolio.quality, color: 'emerald' },
                                 { key: 'value', name: content.portfolio.value, color: 'blue' },
@@ -397,59 +445,97 @@ export default function Landing() {
                                 const isPositive = parseFloat(stats.vsYesterdayPercent) >= 0;
 
                                 return (
-                                    <div key={idx} className="glass-card rounded-2xl p-6">
-                                        <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-4">
-                                            <div className="flex items-center gap-4 w-full md:w-auto">
-                                                <div className={`w-1 h-12 rounded-full bg-${config.color}-500`}></div>
-                                                <div>
-                                                    <div className={`text-${config.color}-400 font-semibold text-lg`}>{config.name}</div>
+                                    <div key={idx} className="glass-card rounded-2xl p-4 sm:p-6">
+                                        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 sm:gap-4">
+                                            <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                                                <div className={`w-1 h-10 sm:h-12 rounded-full bg-${config.color}-500`}></div>
+                                                <div className="text-center sm:text-left">
+                                                    <div className={`text-${config.color}-400 font-semibold text-base sm:text-lg`}>{config.name}</div>
                                                     <div className="text-xs text-[var(--text-secondary)]">{content.portfolio.initialCapital}: $250K</div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-                                                <div className="text-right">
-                                                    <div className="text-2xl font-bold text-white">+{stats.profitLossPercent}%</div>
+                                            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 w-full sm:w-auto">
+                                                <div className="text-center sm:text-right">
+                                                    <div className="text-xl sm:text-2xl font-bold text-white">+{stats.profitLossPercent}%</div>
                                                     <div className={`text-sm ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                                                         {content.portfolio.dailyChange}: {isPositive ? '+' : ''}{stats.vsYesterdayPercent}%
                                                     </div>
                                                 </div>
-                                                <button onClick={() => toggleHoldings(config.key)} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors whitespace-nowrap">
+                                                <button onClick={() => toggleHoldings(config.key)} className="px-3 sm:px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs sm:text-sm transition-colors whitespace-nowrap">
                                                     {expandedPortfolio === config.key ? content.portfolio.hideHoldings : content.portfolio.viewHoldings}
                                                 </button>
                                             </div>
                                         </div>
 
                                         {expandedPortfolio === config.key && (
-                                            <div className="mt-4 overflow-x-auto">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="border-b border-slate-700">
-                                                            <th className="text-left py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.stock}</th>
-                                                            <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.shares}</th>
-                                                            <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.costPrice}</th>
-                                                            <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.currentPrice}</th>
-                                                            <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.profitPercent}</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {(defaultPortfolioData[config.key as keyof typeof defaultPortfolioData] || []).map((holding: any, hidx: number) => {
-                                                            const profit = ((holding.current - holding.cost) / holding.cost * 100).toFixed(2);
-                                                            return (
-                                                                <tr key={hidx} className="border-b border-slate-800 last:border-b-0">
-                                                                    <td className="py-3 px-2">
-                                                                        <div className="font-medium text-white">{holding.name} ({holding.ticker})</div>
-                                                                    </td>
-                                                                    <td className="py-3 px-2 text-right text-white">{holding.shares}</td>
-                                                                    <td className="py-3 px-2 text-right text-white">${holding.cost}</td>
-                                                                    <td className="py-3 px-2 text-right text-white">${holding.current}</td>
-                                                                    <td className={`py-3 px-2 text-right font-medium ${parseFloat(profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                                        {parseFloat(profit) >= 0 ? '+' : ''}{profit}%
-                                                                    </td>
-                                                                </tr>
-                                                            )
-                                                        })}
-                                                    </tbody>
-                                                </table>
+                                            <div className="mt-4">
+                                                {/* Desktop Table */}
+                                                <div className="hidden sm:block overflow-x-auto">
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="border-b border-slate-700">
+                                                                <th className="text-left py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.stock}</th>
+                                                                <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.shares}</th>
+                                                                <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.costPrice}</th>
+                                                                <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.currentPrice}</th>
+                                                                <th className="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">{content.portfolio.profitPercent}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {(defaultPortfolioData[config.key as keyof typeof defaultPortfolioData] || []).map((holding: any, hidx: number) => {
+                                                                const profit = ((holding.current - holding.cost) / holding.cost * 100).toFixed(2);
+                                                                return (
+                                                                    <tr key={hidx} className="border-b border-slate-800 last:border-b-0">
+                                                                        <td className="py-3 px-2">
+                                                                            <div className="font-medium text-white">{holding.name} ({holding.ticker})</div>
+                                                                        </td>
+                                                                        <td className="py-3 px-2 text-right text-white">{holding.shares}</td>
+                                                                        <td className="py-3 px-2 text-right text-white">${holding.cost}</td>
+                                                                        <td className="py-3 px-2 text-right text-white">${holding.current}</td>
+                                                                        <td className={`py-3 px-2 text-right font-medium ${parseFloat(profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                            {parseFloat(profit) >= 0 ? '+' : ''}{profit}%
+                                                                        </td>
+                                                                    </tr>
+                                                                )
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                {/* Mobile Cards */}
+                                                <div className="sm:hidden space-y-3">
+                                                    {(defaultPortfolioData[config.key as keyof typeof defaultPortfolioData] || []).map((holding: any, hidx: number) => {
+                                                        const profit = ((holding.current - holding.cost) / holding.cost * 100).toFixed(2);
+                                                        return (
+                                                            <div key={hidx} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                                                                <div className="flex justify-between items-center mb-2">
+                                                                    <div className="font-medium text-white text-sm">{holding.name}</div>
+                                                                    <div className="text-xs text-slate-400">({holding.ticker})</div>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-[var(--text-secondary)]">{content.portfolio.shares}:</span>
+                                                                        <span className="text-white">{holding.shares}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-[var(--text-secondary)]">{content.portfolio.costPrice}:</span>
+                                                                        <span className="text-white">${holding.cost}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-[var(--text-secondary)]">{content.portfolio.currentPrice}:</span>
+                                                                        <span className="text-white">${holding.current}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-[var(--text-secondary)]">{content.portfolio.profitPercent}:</span>
+                                                                        <span className={`font-medium ${parseFloat(profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                            {parseFloat(profit) >= 0 ? '+' : ''}{profit}%
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -460,17 +546,17 @@ export default function Landing() {
                 </div>
 
                 {/* Styles Section */}
-                <section id="styles" className="py-20 bg-slate-900/30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
+                <section id="styles" className="py-12 sm:py-20 bg-slate-900/30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
                     <div className="max-w-7xl mx-auto">
-                        <div className="text-center mb-16">
-                            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">{content.styles.title}</h2>
-                            <p className="text-[var(--text-secondary)]">{content.styles.desc}</p>
+                        <div className="text-center mb-10 sm:mb-16">
+                            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight lg:text-4xl mb-4">{content.styles.title}</h2>
+                            <p className="text-[var(--text-secondary)] text-sm sm:text-base">{content.styles.desc}</p>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                             {content.styles.cards.map((style, index) => (
-                                <div key={index} className="glass-card p-6 rounded-xl relative overflow-hidden group">
+                                <div key={index} className="glass-card p-4 sm:p-6 rounded-xl relative overflow-hidden group">
                                     <div className={`absolute top-0 left-0 w-1 h-full ${style.color.replace('text', 'bg').replace('-400', '-500')}`}></div>
-                                    <h3 className={`text-xl font-bold mb-2 ${style.color}`}>{style.name}</h3>
+                                    <h3 className={`text-lg sm:text-xl font-bold mb-2 ${style.color}`}>{style.name}</h3>
                                     <p className="text-[var(--text-secondary)] text-sm leading-relaxed">{style.desc}</p>
                                 </div>
                             ))}
@@ -479,21 +565,21 @@ export default function Landing() {
                 </section>
 
                 {/* Features Section */}
-                <section id="features" className="py-20">
+                <section id="features" className="py-12 sm:py-20 px-4 sm:px-0">
                     <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-8">{content.features.title}</h2>
+                        <div className="text-center mb-8 sm:mb-12">
+                            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight lg:text-4xl mb-6 sm:mb-8">{content.features.title}</h2>
                         </div>
-                        <div className="glass-card rounded-xl p-8">
-                            <div className="space-y-4">
+                        <div className="glass-card rounded-xl p-4 sm:p-8">
+                            <div className="space-y-3 sm:space-y-4">
                                 {content.features.items.map((feature, idx) => (
-                                    <div key={idx} className="flex items-center justify-between py-3 border-b border-slate-700/50 last:border-b-0">
+                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-slate-700/50 last:border-b-0 gap-2 sm:gap-0">
                                         <div className="flex-1">
-                                            <span className="text-lg font-semibold text-white">{feature.title}</span>
+                                            <span className="text-base sm:text-lg font-semibold text-white">{feature.title}</span>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-slate-500">|</span>
-                                            <span className="text-[var(--text-secondary)] font-mono text-sm">{feature.desc}</span>
+                                            <span className="text-slate-500 hidden sm:inline">|</span>
+                                            <span className="text-[var(--text-secondary)] font-mono text-xs sm:text-sm">{feature.desc}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -503,16 +589,16 @@ export default function Landing() {
                 </section>
 
                 {/* FAQ */}
-                <section id="faq" className="py-20">
+                <section id="faq" className="py-12 sm:py-20 px-4 sm:px-0">
                     <div className="max-w-7xl mx-auto">
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl font-bold mb-4">{content.faq.title}</h2>
+                        <div className="text-center mb-8 sm:mb-12">
+                            <h2 className="text-2xl sm:text-3xl font-bold mb-4">{content.faq.title}</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                             {content.faq.items.map((item, idx) => (
-                                <div key={idx} className="glass-card rounded-xl p-6">
-                                    <h3 className="text-lg font-semibold text-white mb-3">{item.question}</h3>
-                                    <p className="text-[var(--text-secondary)] leading-relaxed">{item.answer}</p>
+                                <div key={idx} className="glass-card rounded-xl p-4 sm:p-6">
+                                    <h3 className="text-base sm:text-lg font-semibold text-white mb-3">{item.question}</h3>
+                                    <p className="text-[var(--text-secondary)] leading-relaxed text-sm sm:text-base">{item.answer}</p>
                                 </div>
                             ))}
                         </div>
@@ -520,17 +606,17 @@ export default function Landing() {
                 </section>
 
                 {/* CTA Contact */}
-                <section id="contact" className="py-20 relative overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand/10 blur-[100px] rounded-full pointer-events-none"></div>
-                    <div className="max-w-4xl mx-auto relative z-10 px-4">
-                        <div className="glass-card rounded-2xl p-8 md:p-12 text-center border border-slate-700/50 shadow-2xl">
-                            <h2 className="text-3xl font-bold mb-4">{content.cta.title}</h2>
-                            <p className="text-[var(--text-secondary)] mb-8 max-w-xl mx-auto">{content.cta.desc}</p>
+                <section id="contact" className="py-12 sm:py-20 relative overflow-hidden px-4">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-brand/10 blur-[100px] rounded-full pointer-events-none"></div>
+                    <div className="max-w-4xl mx-auto relative z-10">
+                        <div className="glass-card rounded-2xl p-6 sm:p-8 lg:p-12 text-center border border-slate-700/50 shadow-2xl">
+                            <h2 className="text-2xl sm:text-3xl font-bold mb-4">{content.cta.title}</h2>
+                            <p className="text-[var(--text-secondary)] mb-6 sm:mb-8 max-w-xl mx-auto text-sm sm:text-base">{content.cta.desc}</p>
                             <div className="flex flex-col items-center justify-center">
-                                <div className="w-48 h-48 bg-white rounded-xl flex items-center justify-center overflow-hidden border-4 border-white shadow-lg relative">
-                                    <div className="text-slate-900 font-bold">QR CODE</div>
+                                <div className="w-32 h-32 sm:w-48 sm:h-48 bg-white rounded-xl flex items-center justify-center overflow-hidden border-4 border-white shadow-lg relative">
+                                    <div className="text-slate-900 font-bold text-sm sm:text-base">QR CODE</div>
                                 </div>
-                                <div className="mt-4 text-brand font-semibold text-sm flex items-center gap-2">
+                                <div className="mt-4 text-brand font-semibold text-xs sm:text-sm flex items-center gap-2">
                                     <i className="ph ph-qr-code"></i>
                                     {content.cta.scan_text}
                                 </div>
@@ -540,13 +626,13 @@ export default function Landing() {
                 </section>
 
                 {/* Footer */}
-                <footer className="border-t border-slate-800 bg-slate-950 py-12 -mx-4 sm:-mx-6 lg:-mx-8">
+                <footer className="border-t border-slate-800 bg-slate-950 py-8 sm:py-12 -mx-4 sm:-mx-6 lg:-mx-8">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <div className="flex items-center justify-center gap-2 mb-8">
-                            <span className="font-bold text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>GBM</span></span>
+                        <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
+                            <span className="font-bold text-lg sm:text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>GBM</span></span>
                         </div>
-                        <p className="text-slate-600 text-xs max-w-2xl mx-auto mb-4">{content.footer.disclaimer}</p>
-                        <p className="text-slate-700 text-sm">{content.footer.copy}</p>
+                        <p className="text-slate-600 text-xs sm:text-sm max-w-2xl mx-auto mb-4 leading-relaxed px-4 sm:px-0">{content.footer.disclaimer}</p>
+                        <p className="text-slate-700 text-xs sm:text-sm">{content.footer.copy}</p>
                     </div>
                 </footer>
             </main>

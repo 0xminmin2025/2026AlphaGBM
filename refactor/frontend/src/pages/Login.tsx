@@ -94,8 +94,8 @@ export default function Login() {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA]">
-            <Card className="w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
+        <div className="flex items-center justify-center min-h-screen bg-[#09090B] text-[#FAFAFA] px-4 sm:px-6 lg:px-8">
+            <Card className="w-full max-w-[400px] bg-[#1c1c1e] border-white/20 shadow-2xl">
                 <CardHeader className="space-y-4">
                     {/* Brand Logo */}
                     <div className="flex justify-center mb-2">
