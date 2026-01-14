@@ -485,7 +485,7 @@ export default function Home() {
     const [taskStep, setTaskStep] = useState('');
 
     // Initialize task polling hook
-    const { taskStatus, isPolling, pollError, startPolling, stopPolling } = useTaskPolling({
+    const { taskStatus, startPolling } = useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Task completed:', taskResult);
             setResult(taskResult);

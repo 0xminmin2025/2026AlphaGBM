@@ -285,7 +285,7 @@ export default function Options() {
     const [taskStep, setTaskStep] = useState('');
 
     // Initialize task polling hook
-    const { taskStatus, isPolling, pollError, startPolling, stopPolling } = useTaskPolling({
+    const { startPolling } = useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Options task completed:', taskResult);
             setChain(taskResult);
@@ -796,7 +796,7 @@ export default function Options() {
             {/* Analysis History Tab - Always Mounted but Hidden when Not Active */}
             <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
                 <OptionsAnalysisHistory
-                    onSelectHistory={(symbol, analysisType, optionIdentifier, expiryDate) => {
+                    onSelectHistory={(symbol, _analysisType, _optionIdentifier, expiryDate) => {
                         setTicker(symbol);
                         setActiveTab('analysis');
                         // Try to load the expiry date if it matches available expirations
@@ -808,7 +808,7 @@ export default function Options() {
                     onViewFullReport={(optionData) => {
                         // Display historical option analysis data directly
                         console.log('Displaying historical options analysis:', optionData);
-                        setHistoricalChain(optionData);
+                        setHistoricalChain(optionData.data);
                         setIsHistoricalView(true);
                         setActiveTab('analysis');
                         // Extract ticker and other info from historical data
@@ -820,8 +820,8 @@ export default function Options() {
                         if (expiryDate) {
                             setSelectedExpiry(expiryDate);
                         }
-                        if (optionData.real_stock_price) {
-                            setStockPrice(optionData.real_stock_price);
+                        if (optionData.data?.real_stock_price) {
+                            setStockPrice(optionData.data.real_stock_price);
                         }
                         // Scroll to the top to show the analysis
                         window.scrollTo({ top: 0, behavior: 'smooth' });

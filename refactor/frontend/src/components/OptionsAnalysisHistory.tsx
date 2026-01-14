@@ -112,9 +112,6 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
     const metadata = analysisData.history_metadata;
     const data = analysisData.data || {};
 
-    // Handle different analysis types
-    const isEnhanced = metadata.analysis_type === 'enhanced_analysis';
-
     return {
       id: metadata.id,
       symbol: metadata.symbol,
