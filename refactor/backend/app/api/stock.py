@@ -285,22 +285,9 @@ def analyze_stock():
                 elif isinstance(ai_report, str):
                     ai_summary = ai_report[:1000] if ai_report else None
 
-                # Store the COMPLETE backend response as-is for perfect recreation
-                # This ensures 100% compatibility with frontend display logic
-                complete_analysis_data = {
-                    'original_request': {
-                        'ticker': ticker,
-                        'style': style,
-                        'timestamp': datetime.utcnow().isoformat(),
-                        'user_id': g.user_id
-                    },
-                    'complete_response': response,  # Store the exact response sent to frontend
-                    'version': '1.0'  # Version for future compatibility
-                }
-
-                # Convert all numpy types to Python native types before JSON serialization
-                # This prevents PostgreSQL schema errors when storing JSON data
-                complete_analysis_data_clean = convert_numpy_types(complete_analysis_data)
+                # Store the analysis response directly using the new simplified format
+                # This matches the async task queue format and is more efficient
+                complete_analysis_data_clean = convert_numpy_types(response)
 
                 analysis_history = StockAnalysisHistory(
                     user_id=g.user_id,
@@ -319,7 +306,7 @@ def analyze_stock():
                     recommendation_action=ev_result.get('recommendation', {}).get('action'),  # String field
                     recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),  # String field
                     ai_summary=ai_summary,
-                    # Store the COMPLETE response for perfect frontend recreation
+                    # Store the complete response data directly (new simplified format)
                     full_analysis_data=complete_analysis_data_clean
                 )
 
@@ -378,9 +365,16 @@ def get_analysis_history():
         history_items = []
         for item in paginated.items:
             # Check if we have complete analysis data
-            if item.full_analysis_data and 'complete_response' in item.full_analysis_data:
-                # Use the stored complete response data
-                complete_analysis = item.full_analysis_data['complete_response'].copy()
+            if item.full_analysis_data:
+                # Support both old and new data formats
+                if 'complete_response' in item.full_analysis_data:
+                    # Old format: extract from complete_response wrapper
+                    complete_analysis = item.full_analysis_data['complete_response'].copy()
+                    logger.info(f"Using old format for history item {item.id}")
+                else:
+                    # New format: direct analysis data (no wrapper)
+                    complete_analysis = item.full_analysis_data.copy()
+                    logger.info(f"Using new format for history item {item.id}")
 
                 # Add history metadata for list display
                 complete_analysis['history_metadata'] = {
@@ -393,7 +387,8 @@ def get_analysis_history():
 
                 history_items.append(complete_analysis)
             else:
-                # Fallback for old format data
+                # Fallback for very old records without full_analysis_data
+                logger.info(f"Using fallback format for history item {item.id}")
                 history_items.append({
                     'success': True,
                     'data': {
@@ -455,22 +450,31 @@ def get_analysis_history_detail(history_id):
         if not history_item:
             return jsonify({'success': False, 'error': 'Analysis history not found'}), 404
 
-        # Check if we have the new complete response format
-        if history_item.full_analysis_data and 'complete_response' in history_item.full_analysis_data:
-            # Return the stored complete response exactly as it was sent to frontend originally
-            stored_response = history_item.full_analysis_data['complete_response']
+        # Check if we have complete analysis data
+        if history_item.full_analysis_data:
+            # Support both old and new data formats
+            if 'complete_response' in history_item.full_analysis_data:
+                # Old format: extract from complete_response wrapper
+                stored_response = history_item.full_analysis_data['complete_response'].copy()
+                logger.info(f"Using old format for history detail {history_item.id}")
+            else:
+                # New format: direct analysis data (no wrapper)
+                stored_response = history_item.full_analysis_data.copy()
+                logger.info(f"Using new format for history detail {history_item.id}")
 
             # Add history metadata for frontend reference
             stored_response['history_metadata'] = {
                 'id': history_item.id,
                 'created_at': history_item.created_at.isoformat(),
-                'is_from_history': True
+                'is_from_history': True,
+                'ticker': history_item.ticker,
+                'style': history_item.style
             }
 
             logger.info(f"Returning complete stored analysis response for history ID {history_item.id}")
             return jsonify(stored_response)
         else:
-            # Fallback for old format data (compatibility)
+            # Fallback for very old records without full_analysis_data
             logger.info(f"Using fallback format for history ID {history_item.id}")
             detail_response = {
                 'success': True,
@@ -492,6 +496,8 @@ def get_analysis_history_detail(history_id):
                     'id': history_item.id,
                     'created_at': history_item.created_at.isoformat(),
                     'is_from_history': True,
+                    'ticker': history_item.ticker,
+                    'style': history_item.style,
                     'incomplete_data': True
                 }
             }
