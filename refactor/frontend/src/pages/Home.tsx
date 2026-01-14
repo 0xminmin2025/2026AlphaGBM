@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
+import { useTaskPolling } from '@/hooks/useTaskPolling';
 
 // Declare global types for Chart.js and marked
 declare global {
@@ -479,6 +480,32 @@ export default function Home() {
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('analysis');
 
+    // Task progress state
+    const [taskProgress, setTaskProgress] = useState(0);
+    const [taskStep, setTaskStep] = useState('');
+
+    // Initialize task polling hook
+    const { taskStatus, isPolling, pollError, startPolling, stopPolling } = useTaskPolling({
+        onTaskComplete: (taskResult) => {
+            console.log('Task completed:', taskResult);
+            setResult(taskResult);
+            setLoading(false);
+            setTaskProgress(100);
+            setTaskStep('分析完成！');
+        },
+        onTaskError: (errorMsg) => {
+            console.error('Task failed:', errorMsg);
+            setError(errorMsg);
+            setLoading(false);
+            setTaskProgress(0);
+            setTaskStep('');
+        },
+        onTaskProgress: (progress, step) => {
+            setTaskProgress(progress);
+            setTaskStep(step);
+        }
+    });
+
     const handleAnalyze = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) {
@@ -489,23 +516,30 @@ export default function Home() {
         setLoading(true);
         setError('');
         setResult(null);
+        setTaskProgress(0);
+        setTaskStep('');
 
         try {
+            // Create async task
             const response = await api.post('/stock/analyze', {
                 ticker,
                 style,
-                onlyHistoryData: false
+                async: true // Use async mode
             });
 
-            if (response.data.success) {
-                setResult(response.data);
+            if (response.data.success && response.data.task_id) {
+                console.log('Task created:', response.data.task_id);
+                setTaskStep('任务已创建，开始分析...');
+
+                // Start polling for task status
+                startPolling(response.data.task_id);
             } else {
-                setError(response.data.error || 'Analysis failed');
+                setError(response.data.error || 'Failed to create analysis task');
+                setLoading(false);
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || err.message || 'Analysis Failed');
-        } finally {
+            setError(err.response?.data?.error || err.message || 'Failed to start analysis');
             setLoading(false);
         }
     };
@@ -665,11 +699,58 @@ export default function Home() {
                 {/* Investment Philosophy */}
                 <InvestmentPhilosophy />
 
-                {/* Loading */}
+                {/* Loading with Progress */}
                 {loading && (
                     <div className="text-center py-12">
                         <div className="spinner mx-auto mb-4"></div>
-                        <p className="text-muted">正在连接 Gemini 进行深度推演...</p>
+
+                        {/* Progress Bar */}
+                        {taskProgress > 0 && (
+                            <div className="max-w-md mx-auto mb-4">
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-muted">分析进度</span>
+                                    <span className="text-primary font-semibold">{taskProgress}%</span>
+                                </div>
+                                <div style={{
+                                    width: '100%',
+                                    backgroundColor: 'var(--muted)',
+                                    borderRadius: '8px',
+                                    height: '8px',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div
+                                        style={{
+                                            width: `${taskProgress}%`,
+                                            backgroundColor: 'var(--primary)',
+                                            height: '100%',
+                                            borderRadius: '8px',
+                                            transition: 'width 0.3s ease'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Current Step */}
+                        <p className="text-muted">
+                            {taskStep || '正在连接 Gemini 进行深度推演...'}
+                        </p>
+
+                        {/* Task Status Info */}
+                        {taskStatus && (
+                            <div className="mt-4 text-sm text-muted-foreground">
+                                <p>任务ID: {taskStatus.id}</p>
+                                <p>状态: {
+                                    taskStatus.status === 'pending' ? '等待中' :
+                                    taskStatus.status === 'processing' ? '处理中' :
+                                    taskStatus.status === 'completed' ? '已完成' :
+                                    taskStatus.status === 'failed' ? '失败' : taskStatus.status
+                                }</p>
+                                {taskStatus.created_at && (
+                                    <p>创建时间: {new Date(taskStatus.created_at).toLocaleString('zh-CN')}</p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 

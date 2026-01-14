@@ -79,11 +79,11 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         if not supabase:
              return jsonify({'error': 'Supabase client not initialized'}), 500
-             
+
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             return jsonify({'error': 'Missing Authorization header'}), 401
-            
+
         try:
             # Format: "Bearer <token>"
             if len(auth_header.split(' ')) < 2:
@@ -139,6 +139,13 @@ def require_auth(f):
             
         return f(*args, **kwargs)
     return decorated
+
+def get_user_id():
+    """Get current user ID from Flask global context"""
+    try:
+        return getattr(g, 'user_id', None)
+    except Exception:
+        return None
 
 def get_current_user_info():
     """Get current user info from g"""

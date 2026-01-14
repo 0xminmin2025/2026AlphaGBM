@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify, g
 from ..services import analysis_engine, ev_model, ai_service
-from ..utils.auth import require_auth
+from ..services.task_queue import create_analysis_task, get_task_status
+from ..utils.auth import require_auth, get_user_id
 from ..utils.decorators import check_quota
 from ..utils.serialization import convert_numpy_types
-from ..models import db, ServiceType, StockAnalysisHistory
+from ..models import db, ServiceType, StockAnalysisHistory, TaskType
 import yfinance as yf
 import logging
 import json
@@ -12,50 +13,35 @@ from datetime import datetime
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
 logger = logging.getLogger(__name__)
 
-@stock_bp.route('/analyze', methods=['POST'])
-@check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
-def analyze_stock():
+def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: bool = False) -> dict:
     """
-    Stock Analysis Endpoint - Matching original app.py implementation
-    Accepts: {
-        "ticker": "AAPL",
-        "style": "quality",  # optional, default quality
-        "onlyHistoryData": false # optional
-    }
-    Returns: JSON with analysis results in original format
+    Core stock analysis logic extracted for reuse in async tasks
+
+    Args:
+        ticker: Stock ticker symbol
+        style: Analysis style (quality, value, growth, momentum)
+        only_history: If True, return only historical data
+
+    Returns:
+        Analysis result dictionary or error dictionary
     """
-    ticker = None
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
-            
-        ticker = data.get('ticker', '').upper()
-        if not ticker:
-            return jsonify({'success': False, 'error': 'Ticker is required'}), 400
-            
-        style = data.get('style', 'quality')
-        only_history = data.get('onlyHistoryData', False)
-        
-        logger.info(f"Analyzing stock {ticker} with style {style} for user {getattr(g, 'user_id', 'unknown')}")
-        
         # 1. Get Market Data
         market_data = analysis_engine.get_market_data(ticker, onlyHistoryData=only_history)
         if not market_data or not market_data.get('price'):
-            error_msg = f'找不到股票代码 "{ticker}" 或数据获取失败'
-            return jsonify({'success': False, 'error': error_msg}), 400
+            return {'error': f'找不到股票代码 "{ticker}" 或数据获取失败'}
 
         # If only requesting history data (e.g. for charts)
         if only_history:
-            return jsonify({'success': True, 'data': market_data})
+            return market_data
 
         # 2. Risk Analysis (Matching original: analyze_risk_and_position)
         try:
             risk_result = analysis_engine.analyze_risk_and_position(style, market_data)
         except Exception as e:
             logger.error(f"计算风险评分时发生异常: {e}")
-            return jsonify({'success': False, 'error': f'风险计算失败: {str(e)}'}), 500
-        
+            return {'error': f'风险计算失败: {str(e)}'}
+
         # 3. Calculate Market Sentiment (Matching original)
         try:
             market_sentiment = analysis_engine.calculate_market_sentiment(market_data)
@@ -63,7 +49,7 @@ def analyze_stock():
         except Exception as e:
             logger.warning(f"计算市场情绪时发生异常: {e}")
             market_data['market_sentiment'] = 5.0  # Default value
-        
+
         # 4. Calculate Target Price (Matching original)
         try:
             target_price = analysis_engine.calculate_target_price(market_data, risk_result, style)
@@ -71,14 +57,14 @@ def analyze_stock():
         except Exception as e:
             logger.warning(f"计算目标价格时发生异常: {e}")
             market_data['target_price'] = market_data.get('price', 0)  # Default to current price
-        
+
         # 4.5 Calculate Dynamic Stop Loss (Matching original - ATR based)
         try:
             # Get 1-month history for ATR calculation
             normalized_ticker = analysis_engine.normalize_ticker(ticker)
             stock = yf.Ticker(normalized_ticker)
             hist = stock.history(period="1mo", timeout=10)
-            
+
             if not hist.empty and len(hist) >= 15:
                 # Use ATR dynamic stop loss
                 stop_loss_price = analysis_engine.calculate_atr_stop_loss(
@@ -102,7 +88,7 @@ def analyze_stock():
             stop_loss_price = market_data.get('price', 0) * 0.85
             market_data['stop_loss_price'] = stop_loss_price
             market_data['stop_loss_method'] = '固定15%止损（计算失败）'
-        
+
         # 4.6 Calculate EV Model (Matching original)
         try:
             ev_result = ev_model.calculate_ev_model(market_data, risk_result, style)
@@ -121,7 +107,7 @@ def analyze_stock():
                     'confidence': 'low'
                 }
             }
-        
+
         # 5. AI Analysis (Matching original - this takes time)
         try:
             ai_report = ai_service.get_gemini_analysis(ticker, style, market_data, risk_result)
@@ -129,7 +115,7 @@ def analyze_stock():
             logger.error(f"AI分析时发生异常: {e}")
             # Use fallback analysis
             ai_report = ai_service.get_fallback_analysis(ticker, style, market_data, risk_result)
-        
+
         # 6. Construct Response (Matching original app.py format exactly)
         response = {
             'success': True,
@@ -137,6 +123,144 @@ def analyze_stock():
             'risk': risk_result,
             'report': ai_report
         }
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Error in stock analysis for {ticker}: {e}")
+        return {'error': f'分析过程中发生错误: {str(e)}'}
+
+@stock_bp.route('/analyze-async', methods=['POST'])
+@require_auth
+@check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
+def analyze_stock_async():
+    """
+    Create async stock analysis task
+
+    Request Body:
+    {
+        "ticker": "AAPL",
+        "style": "quality",  // optional, default quality
+        "priority": 100      // optional, lower = higher priority
+    }
+
+    Returns:
+    {
+        "success": true,
+        "task_id": "uuid-string",
+        "message": "Analysis task created successfully"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+        ticker = data.get('ticker', '').upper()
+        if not ticker:
+            return jsonify({'success': False, 'error': 'Ticker is required'}), 400
+
+        style = data.get('style', 'quality')
+        priority = data.get('priority', 100)
+
+        user_id = get_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        # Create async task
+        task_id = create_analysis_task(
+            user_id=user_id,
+            task_type=TaskType.STOCK_ANALYSIS.value,
+            input_params={
+                'ticker': ticker,
+                'style': style
+            },
+            priority=priority
+        )
+
+        logger.info(f"Created async stock analysis task {task_id} for {ticker} ({style}) - User: {user_id}")
+
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': 'Analysis task created successfully'
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error creating async stock analysis task: {e}")
+        return jsonify({'success': False, 'error': f'Failed to create analysis task: {str(e)}'}), 500
+
+@stock_bp.route('/analyze', methods=['POST'])
+@check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
+def analyze_stock():
+    """
+    Stock Analysis Endpoint - Supports both sync and async mode
+
+    Accepts: {
+        "ticker": "AAPL",
+        "style": "quality",  # optional, default quality
+        "onlyHistoryData": false, # optional
+        "async": false  # optional, if true creates async task
+    }
+
+    Returns:
+    - Sync mode: JSON with analysis results in original format
+    - Async mode: {"success": true, "task_id": "uuid", "message": "..."}
+    """
+    ticker = None
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+        ticker = data.get('ticker', '').upper()
+        if not ticker:
+            return jsonify({'success': False, 'error': 'Ticker is required'}), 400
+
+        style = data.get('style', 'quality')
+        only_history = data.get('onlyHistoryData', False)
+        use_async = data.get('async', False)
+
+        logger.info(f"Analyzing stock {ticker} with style {style} for user {getattr(g, 'user_id', 'unknown')} (async: {use_async})")
+
+        # Check if async mode is requested
+        if use_async:
+            user_id = get_user_id()
+            if not user_id:
+                return jsonify({'success': False, 'error': 'Authentication required for async mode'}), 401
+
+            # Create async task
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={
+                    'ticker': ticker,
+                    'style': style
+                },
+                priority=data.get('priority', 100)
+            )
+
+            logger.info(f"Created async stock analysis task {task_id} for {ticker} ({style}) - User: {user_id}")
+
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
+
+        # Sync mode - use the extracted helper function
+        result = get_stock_analysis_data(ticker, style, only_history)
+
+        # Handle errors from helper function
+        if 'error' in result:
+            return jsonify({'success': False, 'error': result['error']}), 400
+
+        # If only requesting history data, return it directly
+        if only_history:
+            return jsonify({'success': True, 'data': result})
+
+        # For full analysis, result already contains the complete response
+        response = result
 
         # 7. Save analysis results to history
         if not only_history:  # Only save history for full analysis, not just chart data
@@ -146,7 +270,10 @@ def analyze_stock():
                     logger.error(f"No user_id available in Flask globals for history saving")
                     return jsonify(response)  # Return response without saving history
 
-                # Extract key data for storage
+                # Extract key data for storage from the result
+                market_data = response.get('data', {})
+                risk_result = response.get('risk', {})
+                ai_report = response.get('report', '')
                 ev_result = market_data.get('ev_model', {})
 
                 logger.info(f"Preparing to save analysis history for {ticker} (user: {g.user_id})")

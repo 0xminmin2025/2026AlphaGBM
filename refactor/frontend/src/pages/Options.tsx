@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import OptionAnalysisHistory from '@/components/OptionAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
+import { useTaskPolling } from '@/hooks/useTaskPolling';
 
 // CSS matching original options.html
 const styles = `
@@ -279,6 +280,43 @@ export default function Options() {
     const [historicalChain, setHistoricalChain] = useState<OptionChainResponse | null>(null);
     const [isHistoricalView, setIsHistoricalView] = useState(false);
 
+    // Task progress state
+    const [taskProgress, setTaskProgress] = useState(0);
+    const [taskStep, setTaskStep] = useState('');
+
+    // Initialize task polling hook
+    const { taskStatus, isPolling, pollError, startPolling, stopPolling } = useTaskPolling({
+        onTaskComplete: (taskResult) => {
+            console.log('Options task completed:', taskResult);
+            setChain(taskResult);
+            if (taskResult.real_stock_price) {
+                setStockPrice(taskResult.real_stock_price);
+            }
+            setLoading(false);
+            setTaskProgress(100);
+            setTaskStep('期权分析完成！');
+
+            // Save to browser history
+            HistoryStorage.saveOptionAnalysis({
+                symbol: ticker,
+                expiryDate: selectedExpiry,
+                analysisType: 'chain',
+                data: taskResult
+            });
+        },
+        onTaskError: (errorMsg) => {
+            console.error('Options task failed:', errorMsg);
+            setError(errorMsg);
+            setLoading(false);
+            setTaskProgress(0);
+            setTaskStep('');
+        },
+        onTaskProgress: (progress, step) => {
+            setTaskProgress(progress);
+            setTaskStep(step);
+        }
+    });
+
     // Fetch Expirations
     const fetchExpirations = async () => {
         if (!ticker) {
@@ -307,31 +345,32 @@ export default function Options() {
         if (!ticker || !expiry) return;
         setLoading(true);
         setError('');
+        setTaskProgress(0);
+        setTaskStep('');
 
         // Clear historical view when fetching new data
         setIsHistoricalView(false);
         setHistoricalChain(null);
 
         try {
-            const response = await api.get(`/options/chain/${ticker}/${expiry}`);
-            console.log('Options chain response:', response.data);
-            console.log('Calls:', response.data.calls?.length, 'Puts:', response.data.puts?.length);
-            setChain(response.data);
-            if (response.data.real_stock_price) {
-                setStockPrice(response.data.real_stock_price);
-            }
-
-            // Save to browser history
-            HistoryStorage.saveOptionAnalysis({
-                symbol: ticker,
-                expiryDate: expiry,
-                analysisType: 'chain',
-                data: response.data
+            // Create async task for options chain analysis
+            const response = await api.post(`/options/chain/${ticker}/${expiry}`, {
+                async: true // Use async mode
             });
+
+            if (response.data.success && response.data.task_id) {
+                console.log('Options task created:', response.data.task_id);
+                setTaskStep('任务已创建，开始期权分析...');
+
+                // Start polling for task status
+                startPolling(response.data.task_id);
+            } else {
+                setError(response.data.error || 'Failed to create options analysis task');
+                setLoading(false);
+            }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to fetch option chain');
-        } finally {
+            setError(err.response?.data?.error || 'Failed to start options analysis');
             setLoading(false);
         }
     };
@@ -547,11 +586,43 @@ export default function Options() {
                 </div>
             </div>
 
-            {/* Loading */}
+            {/* Loading with Progress */}
             {loading && (
                 <div className="text-center py-12">
                     <div className="spinner mx-auto mb-4"></div>
-                    <p style={{ color: 'var(--muted-foreground)' }}>正在获取期权数据并进行量化评分...</p>
+                    {/* Progress Bar */}
+                    {taskProgress > 0 && (
+                        <div className="max-w-md mx-auto mb-4">
+                            <div className="flex justify-between text-sm mb-1">
+                                <span style={{ color: 'var(--muted-foreground)' }}>分析进度</span>
+                                <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{taskProgress}%</span>
+                            </div>
+                            <div style={{
+                                width: '100%',
+                                backgroundColor: 'var(--muted)',
+                                borderRadius: '8px',
+                                height: '8px',
+                                overflow: 'hidden'
+                            }}>
+                                <div style={{
+                                    width: `${taskProgress}%`,
+                                    backgroundColor: 'var(--primary)',
+                                    height: '100%',
+                                    borderRadius: '8px',
+                                    transition: 'width 0.3s ease-in-out'
+                                }}></div>
+                            </div>
+                        </div>
+                    )}
+                    {/* Task Step */}
+                    {taskStep && (
+                        <p style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                            {taskStep}
+                        </p>
+                    )}
+                    {!taskStep && (
+                        <p style={{ color: 'var(--muted-foreground)' }}>正在获取期权数据并进行量化评分...</p>
+                    )}
                 </div>
             )}
 

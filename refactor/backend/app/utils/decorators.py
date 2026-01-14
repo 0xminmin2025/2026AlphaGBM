@@ -15,19 +15,21 @@ def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
+
             # 1. 首先验证token（与require_auth相同逻辑）
             if not supabase:
                 return jsonify({'error': 'Supabase client not initialized'}), 500
-            
+
             auth_header = request.headers.get('Authorization')
             if not auth_header:
                 return jsonify({'error': 'Missing Authorization header'}), 401
-            
+
             try:
                 if len(auth_header.split(' ')) < 2:
                     return jsonify({'error': 'Invalid Authorization header format'}), 401
-                
+
                 token = auth_header.split(' ')[1]
+
                 user_response = supabase.auth.get_user(token)
                 
                 if not user_response or not user_response.user:

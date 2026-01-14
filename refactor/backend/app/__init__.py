@@ -13,7 +13,29 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # Configure Logging
-    logging.basicConfig(level=logging.INFO)
+    log_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # File handler - saves to logs/backend.log
+    log_dir = 'logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    file_handler = logging.FileHandler(os.path.join(log_dir, 'backend.log'))
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(log_formatter)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(log_formatter)
+
+    # Configure root logger
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[file_handler, console_handler]
+    )
 
     # CORS
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -21,6 +43,12 @@ def create_app(config_class=Config):
     # Initialize Extensions
     from .models import db
     db.init_app(app)
+
+    # Initialize Task Queue (always needed for API endpoints)
+    from .services.task_queue import init_task_queue, shutdown_task_queue
+    with app.app_context():
+        init_task_queue(app)
+    atexit.register(shutdown_task_queue)
 
     # Initialize Scheduler (only in production/normal mode, not in debug reloader)
     if not os.environ.get('WERKZEUG_RUN_MAIN'):
@@ -40,6 +68,7 @@ def create_app(config_class=Config):
     from .api.options import options_bp
     from .api.payment import payment_bp
     from .api.portfolio import portfolio_bp
+    from .api.tasks import tasks_bp
     from .docs import docs_bp
 
     app.register_blueprint(auth_bp)
@@ -48,6 +77,7 @@ def create_app(config_class=Config):
     app.register_blueprint(options_bp)
     app.register_blueprint(payment_bp)
     app.register_blueprint(portfolio_bp)
+    app.register_blueprint(tasks_bp)
     app.register_blueprint(docs_bp)
 
     @app.route('/health')

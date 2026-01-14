@@ -34,6 +34,17 @@ class TransactionStatus(enum.Enum):
     SUCCEEDED = 'succeeded'
     FAILED = 'failed'
 
+class TaskType(enum.Enum):
+    STOCK_ANALYSIS = 'stock_analysis'
+    OPTION_ANALYSIS = 'option_analysis'
+    ENHANCED_OPTION_ANALYSIS = 'enhanced_option_analysis'
+
+class TaskStatus(enum.Enum):
+    PENDING = 'pending'
+    PROCESSING = 'processing'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
 
 # Core Models
 class User(db.Model):
@@ -204,3 +215,87 @@ class StockAnalysisHistory(db.Model):
     full_analysis_data = db.Column(db.JSON, nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class OptionsAnalysisHistory(db.Model):
+    """期权分析历史记录"""
+    __tablename__ = 'options_analysis_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
+    symbol = db.Column(db.String(20), nullable=False, index=True)
+    option_identifier = db.Column(db.String(100), nullable=True)  # For enhanced analysis
+    expiry_date = db.Column(db.String(20), nullable=True)
+
+    # Analysis Type
+    analysis_type = db.Column(db.String(50), nullable=False)  # 'basic_chain', 'enhanced_analysis'
+
+    # Basic chain analysis results
+    strike_price = db.Column(db.Float, nullable=True)
+    option_type = db.Column(db.String(10), nullable=True)  # 'call' or 'put'
+    option_score = db.Column(db.Float, nullable=True)
+    iv_rank = db.Column(db.Float, nullable=True)
+
+    # Enhanced analysis results
+    vrp_analysis = db.Column(db.JSON, nullable=True)
+    risk_analysis = db.Column(db.JSON, nullable=True)
+
+    # AI Summary for options
+    ai_summary = db.Column(db.Text, nullable=True)
+
+    # Store full JSON data for reference
+    full_analysis_data = db.Column(db.JSON, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class AnalysisTask(db.Model):
+    """异步分析任务队列"""
+    __tablename__ = 'analysis_tasks'
+
+    id = db.Column(db.String(36), primary_key=True)  # UUID for task ID
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
+
+    # Task details
+    task_type = db.Column(db.String(50), nullable=False, index=True)  # stock_analysis, option_analysis, etc.
+    status = db.Column(db.String(20), nullable=False, default='pending', index=True)
+    priority = db.Column(db.Integer, nullable=False, default=100)  # Lower number = higher priority
+
+    # Input parameters (stored as JSON)
+    input_params = db.Column(db.JSON, nullable=False)  # ticker, style, options params, etc.
+
+    # Progress tracking
+    progress_percent = db.Column(db.Integer, nullable=False, default=0)
+    current_step = db.Column(db.String(500), nullable=True)
+
+    # Results
+    result_data = db.Column(db.JSON, nullable=True)  # Complete analysis result
+    error_message = db.Column(db.Text, nullable=True)
+
+    # Timing
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    # Relationships
+    related_history_id = db.Column(db.Integer, nullable=True)  # Link to StockAnalysisHistory/OptionsAnalysisHistory
+    related_history_type = db.Column(db.String(50), nullable=True)  # 'stock' or 'options'
+
+    def to_dict(self):
+        """Convert to dictionary for API responses"""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,  # Fixed: Added missing user_id field
+            'task_type': self.task_type,
+            'status': self.status,
+            'progress_percent': self.progress_percent,
+            'current_step': self.current_step,
+            'input_params': self.input_params,
+            'result_data': self.result_data,
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'related_history_id': self.related_history_id,
+            'related_history_type': self.related_history_type
+        }
