@@ -6,9 +6,12 @@ Ported from new_options_module/routes.py
 from flask import Blueprint, jsonify, request, g
 from ..services.options_service import OptionsService
 from ..services.task_queue import create_analysis_task, get_task_status
-from ..models import ServiceType, TaskType
+from ..models import db, ServiceType, TaskType, OptionsAnalysisHistory
 from ..utils.decorators import check_quota
 from ..utils.auth import require_auth, get_user_id
+import logging
+
+logger = logging.getLogger(__name__)
 
 options_bp = Blueprint('options', __name__, url_prefix='/api/options')
 
@@ -293,3 +296,179 @@ def get_enhanced_analysis(symbol, option_identifier):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@options_bp.route('/history', methods=['GET'])
+@require_auth
+def get_analysis_history():
+    """
+    Get user's options analysis history
+    Query parameters:
+    - page: Page number (default 1)
+    - per_page: Items per page (default 10, max 50)
+    - symbol: Filter by symbol (optional)
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 10, type=int), 50)  # Max 50 per page
+        symbol_filter = request.args.get('symbol', '').upper()
+
+        query = OptionsAnalysisHistory.query.filter_by(user_id=g.user_id)
+
+        if symbol_filter:
+            query = query.filter(OptionsAnalysisHistory.symbol == symbol_filter)
+
+        query = query.order_by(OptionsAnalysisHistory.created_at.desc())
+
+        paginated = query.paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+
+        history_items = []
+        for item in paginated.items:
+            # Check if we have complete analysis data
+            if item.full_analysis_data:
+                # Support both old and new data formats
+                if 'complete_response' in item.full_analysis_data:
+                    # Old format: extract from complete_response wrapper
+                    complete_analysis = item.full_analysis_data['complete_response'].copy()
+                    logger.info(f"Using old format for options history item {item.id}")
+                else:
+                    # New format: direct analysis data (no wrapper)
+                    complete_analysis = item.full_analysis_data.copy()
+                    logger.info(f"Using new format for options history item {item.id}")
+
+                # Add history metadata for list display
+                complete_analysis['history_metadata'] = {
+                    'id': item.id,
+                    'created_at': item.created_at.isoformat(),
+                    'is_from_history': True,
+                    'symbol': item.symbol,
+                    'option_identifier': item.option_identifier,
+                    'expiry_date': item.expiry_date,
+                    'analysis_type': item.analysis_type
+                }
+
+                history_items.append(complete_analysis)
+            else:
+                # Fallback for very old records without full_analysis_data
+                logger.info(f"Using fallback format for options history item {item.id}")
+                history_items.append({
+                    'success': True,
+                    'data': {
+                        'symbol': item.symbol,
+                        'option_identifier': item.option_identifier,
+                        'strike_price': item.strike_price,
+                        'option_type': item.option_type,
+                        'option_score': item.option_score,
+                        'iv_rank': item.iv_rank
+                    },
+                    'vrp_analysis': item.vrp_analysis,
+                    'risk_analysis': item.risk_analysis,
+                    'report': item.ai_summary or '历史期权分析数据',
+                    'history_metadata': {
+                        'id': item.id,
+                        'created_at': item.created_at.isoformat(),
+                        'is_from_history': True,
+                        'symbol': item.symbol,
+                        'option_identifier': item.option_identifier,
+                        'expiry_date': item.expiry_date,
+                        'analysis_type': item.analysis_type,
+                        'incomplete_data': True
+                    }
+                })
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'items': history_items,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': paginated.total,
+                    'pages': paginated.pages,
+                    'has_next': paginated.has_next,
+                    'has_prev': paginated.has_prev
+                }
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching options analysis history for user {g.user_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@options_bp.route('/history/<int:history_id>', methods=['GET'])
+@require_auth
+def get_analysis_history_detail(history_id):
+    """
+    Get detailed options analysis history by ID including full analysis data
+    """
+    try:
+        history_item = OptionsAnalysisHistory.query.filter_by(
+            id=history_id,
+            user_id=g.user_id
+        ).first()
+
+        if not history_item:
+            return jsonify({'success': False, 'error': 'Options analysis history not found'}), 404
+
+        # Check if we have complete analysis data
+        if history_item.full_analysis_data:
+            # Support both old and new data formats
+            if 'complete_response' in history_item.full_analysis_data:
+                # Old format: extract from complete_response wrapper
+                stored_response = history_item.full_analysis_data['complete_response'].copy()
+                logger.info(f"Using old format for options history detail {history_item.id}")
+            else:
+                # New format: direct analysis data (no wrapper)
+                stored_response = history_item.full_analysis_data.copy()
+                logger.info(f"Using new format for options history detail {history_item.id}")
+
+            # Add history metadata for frontend reference
+            stored_response['history_metadata'] = {
+                'id': history_item.id,
+                'created_at': history_item.created_at.isoformat(),
+                'is_from_history': True,
+                'symbol': history_item.symbol,
+                'option_identifier': history_item.option_identifier,
+                'expiry_date': history_item.expiry_date,
+                'analysis_type': history_item.analysis_type
+            }
+
+            logger.info(f"Returning complete stored options analysis response for history ID {history_item.id}")
+            return jsonify(stored_response)
+        else:
+            # Fallback for very old records without full_analysis_data
+            logger.info(f"Using fallback format for options history ID {history_item.id}")
+            detail_response = {
+                'success': True,
+                'data': {
+                    'symbol': history_item.symbol,
+                    'option_identifier': history_item.option_identifier,
+                    'strike_price': history_item.strike_price,
+                    'option_type': history_item.option_type,
+                    'option_score': history_item.option_score,
+                    'iv_rank': history_item.iv_rank
+                },
+                'vrp_analysis': history_item.vrp_analysis,
+                'risk_analysis': history_item.risk_analysis,
+                'report': history_item.ai_summary or '历史期权分析数据',
+                'history_metadata': {
+                    'id': history_item.id,
+                    'created_at': history_item.created_at.isoformat(),
+                    'is_from_history': True,
+                    'symbol': history_item.symbol,
+                    'option_identifier': history_item.option_identifier,
+                    'expiry_date': history_item.expiry_date,
+                    'analysis_type': history_item.analysis_type,
+                    'incomplete_data': True
+                }
+            }
+            return jsonify(detail_response)
+
+    except Exception as e:
+        logger.error(f"Error fetching options analysis history detail {history_id} for user {g.user_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

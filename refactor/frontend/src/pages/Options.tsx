@@ -4,7 +4,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
-import OptionAnalysisHistory from '@/components/OptionAnalysisHistory';
+import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 
@@ -795,24 +795,30 @@ export default function Options() {
 
             {/* Analysis History Tab - Always Mounted but Hidden when Not Active */}
             <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
-                <OptionAnalysisHistory
-                    onSelectHistory={(historyItem) => {
-                        setTicker(historyItem.symbol);
+                <OptionsAnalysisHistory
+                    onSelectHistory={(symbol, analysisType, optionIdentifier, expiryDate) => {
+                        setTicker(symbol);
                         setActiveTab('analysis');
                         // Try to load the expiry date if it matches available expirations
-                        if (expirations.find(exp => exp.date === historyItem.expiryDate)) {
-                            fetchChain(historyItem.expiryDate);
+                        if (expiryDate && expirations.find(exp => exp.date === expiryDate)) {
+                            setSelectedExpiry(expiryDate);
+                            fetchChain(expiryDate);
                         }
                     }}
                     onViewFullReport={(optionData) => {
                         // Display historical option analysis data directly
-                        console.log('Displaying historical option analysis:', optionData);
+                        console.log('Displaying historical options analysis:', optionData);
                         setHistoricalChain(optionData);
                         setIsHistoricalView(true);
                         setActiveTab('analysis');
                         // Extract ticker and other info from historical data
-                        if (optionData.symbol) {
-                            setTicker(optionData.symbol);
+                        const symbol = optionData.history_metadata?.symbol;
+                        const expiryDate = optionData.history_metadata?.expiry_date;
+                        if (symbol) {
+                            setTicker(symbol);
+                        }
+                        if (expiryDate) {
+                            setSelectedExpiry(expiryDate);
                         }
                         if (optionData.real_stock_price) {
                             setStockPrice(optionData.real_stock_price);
