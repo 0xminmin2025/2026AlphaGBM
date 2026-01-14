@@ -862,8 +862,12 @@ export default function Landing() {
                             <h2 className="text-2xl sm:text-3xl font-bold mb-4">{content.cta.title}</h2>
                             <p className="text-[var(--text-secondary)] mb-6 sm:mb-8 max-w-xl mx-auto text-sm sm:text-base">{content.cta.desc}</p>
                             <div className="flex flex-col items-center justify-center">
-                                <div className="w-32 h-32 sm:w-48 sm:h-48 bg-white rounded-xl flex items-center justify-center overflow-hidden border-4 border-white shadow-lg relative">
-                                    <div className="text-slate-900 font-bold text-sm sm:text-base">QR CODE</div>
+                                <div className="w-32 h-32 sm:w-48 sm:h-48 bg-white rounded-xl overflow-hidden border-4 border-white shadow-lg relative">
+                                    <img
+                                        src="/WeChat-QR-Code.jpg"
+                                        alt="Alpha GBM WeChat QR Code"
+                                        className="w-full h-full object-cover"
+                                    />
                                 </div>
                                 <div className="mt-4 text-brand font-semibold text-xs sm:text-sm flex items-center gap-2">
                                     <i className="ph ph-qr-code"></i>
