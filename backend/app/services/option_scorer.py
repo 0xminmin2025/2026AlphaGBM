@@ -135,10 +135,31 @@ class OptionScorer:
     def calculate_sprv(self, option: OptionData, stock_price: float) -> float:
         """Calculate Sell Put Recommendation Value (SPRV)"""
         if (not option.latest_price or not option.delta or not option.strike or
-            option.put_call != "PUT" or option.latest_price <= 0):
+            option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0
 
+        # ========== 合理性检查：只考虑虚值或平值看跌期权 ==========
+        # Sell Put应该只考虑 strike <= stock_price 的期权（虚值或平值）
+        # 深度虚值期权（strike < stock_price * 0.7）虽然收益率高但行权概率极低，应该大幅降分或过滤
+        if option.strike > stock_price * 1.02:  # 实值期权，不适合sell put
+            return 0.0
+        
+        # 深度虚值期权（strike < stock_price * 0.7）给予惩罚
+        moneyness_ratio = option.strike / stock_price if stock_price > 0 else 0
+        if moneyness_ratio < 0.7:  # 深度虚值，行权概率极低
+            # 给予严重惩罚，使评分大幅降低
+            depth_penalty = moneyness_ratio / 0.7  # 0.7以下时，惩罚系数 < 1.0
+        elif moneyness_ratio < 0.85:  # 中度虚值
+            depth_penalty = 0.6 + (moneyness_ratio - 0.7) / 0.15 * 0.3  # 0.6-0.9
+        elif moneyness_ratio < 0.95:  # 轻度虚值，理想范围
+            depth_penalty = 0.9 + (moneyness_ratio - 0.85) / 0.1 * 0.1  # 0.9-1.0
+        else:  # 平值附近，0.95-1.02
+            depth_penalty = 1.0
+
         dte = self.calculate_days_to_expiry(option.expiry_date)
+        if dte <= 0:
+            return 0.0
+        
         premium = option.latest_price * 100
 
         if option.strike <= 0:
@@ -154,7 +175,8 @@ class OptionScorer:
             option.open_interest, option.latest_price
         )
 
-        sprv = annual_return * win_rate_weight * volatility_premium * liquidity
+        # 应用深度虚值惩罚
+        sprv = annual_return * win_rate_weight * volatility_premium * liquidity * depth_penalty
         return round(sprv, 4)
 
     def calculate_scrv(self, option: OptionData, stock_price: float) -> float:
@@ -163,6 +185,22 @@ class OptionScorer:
             not option.strike or option.put_call != "CALL" or
             option.delta <= 0 or stock_price <= 0):
             return 0.0
+
+        # ========== 合理性检查：只考虑虚值或平值看涨期权 ==========
+        # Sell Call应该只考虑 strike >= stock_price 的期权（虚值或平值）
+        if option.strike < stock_price * 0.98:  # 实值期权，不适合sell call
+            return 0.0
+        
+        # 深度虚值期权（strike > stock_price * 1.3）给予惩罚
+        moneyness_ratio = option.strike / stock_price if stock_price > 0 else 0
+        if moneyness_ratio > 1.3:  # 深度虚值，行权概率极低
+            depth_penalty = 1.3 / moneyness_ratio  # 惩罚系数 < 1.0
+        elif moneyness_ratio > 1.15:  # 中度虚值
+            depth_penalty = 0.6 + (1.3 - moneyness_ratio) / 0.15 * 0.3  # 0.6-0.9
+        elif moneyness_ratio > 1.05:  # 轻度虚值，理想范围
+            depth_penalty = 0.9 + (1.15 - moneyness_ratio) / 0.1 * 0.1  # 0.9-1.0
+        else:  # 平值附近，0.98-1.05
+            depth_penalty = 1.0
 
         annual_theta_yield = (abs(option.theta) * 365) / stock_price
         anti_callback = 1.0 / option.delta
@@ -174,14 +212,20 @@ class OptionScorer:
         else:
             upside_space = (option.strike - stock_price) / stock_price
 
-        scrv = annual_theta_yield * anti_callback * volatility_reward * upside_space
+        # 应用深度虚值惩罚
+        scrv = annual_theta_yield * anti_callback * volatility_reward * upside_space * depth_penalty
         return round(scrv, 4)
 
     def calculate_bcrv(self, option: OptionData, stock_price: float) -> float:
         """Calculate Buy Call Recommendation Value (BCRV)"""
         if (not option.latest_price or not option.delta or not option.gamma or
             not option.theta or option.put_call != "CALL" or
-            abs(option.theta) <= 0):
+            abs(option.theta) <= 0 or stock_price <= 0):
+            return 0.0
+
+        # ========== 合理性检查：深度实值期权成本太高，应该过滤 ==========
+        # Buy Call通常考虑虚值或平值期权，深度实值期权（strike < stock_price * 0.8）成本太高
+        if option.strike < stock_price * 0.8:  # 深度实值，成本太高
             return 0.0
 
         efficiency_ratio = option.gamma / abs(option.theta)
@@ -201,7 +245,12 @@ class OptionScorer:
     def calculate_bprv(self, option: OptionData, stock_price: float) -> float:
         """Calculate Buy Put Recommendation Value (BPRV)"""
         if (not option.latest_price or not option.delta or
-            option.put_call != "PUT" or option.latest_price <= 0):
+            option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
+            return 0.0
+
+        # ========== 合理性检查：深度实值期权成本太高，应该过滤 ==========
+        # Buy Put通常考虑虚值或平值期权，深度实值期权（strike > stock_price * 1.2）成本太高
+        if option.strike > stock_price * 1.2:  # 深度实值，成本太高
             return 0.0
 
         premium = option.latest_price

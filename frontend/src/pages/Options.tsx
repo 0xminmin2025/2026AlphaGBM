@@ -670,30 +670,12 @@ export default function Options() {
         return (num !== undefined && num !== null) ? `${(num * 100).toFixed(decimals)}%` : '-';
     };
 
-    if (authLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-[50vh]">
-                <div className="spinner"></div>
-            </div>
-        );
-    }
-
-    if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 text-white">
-                <h2 className="text-2xl font-bold">请登录以访问期权分析</h2>
-                <Button onClick={() => navigate('/login')} className="btn-primary">
-                    登录
-                </Button>
-            </div>
-        );
-    }
-
     // Use historical chain data if viewing history, otherwise use current chain
     const displayChain = isHistoricalView ? historicalChain : chain;
     const displayStockPrice = isHistoricalView ? (historicalChain?.real_stock_price || stockPrice) : stockPrice;
 
     // Get all options using useMemo to avoid recalculating on every render
+    // IMPORTANT: All hooks must be called before any early returns
     const allOptions = useMemo((): OptionData[] => {
         if (!displayChain) return [];
 
@@ -745,6 +727,26 @@ export default function Options() {
             setReturnRange([0, 0]);
         }
     }, [displayChain?.symbol, displayChain?.expiry_date, strategy, allOptions.length]);
+
+    // Early returns after all hooks
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[50vh]">
+                <div className="spinner"></div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 text-white">
+                <h2 className="text-2xl font-bold">请登录以访问期权分析</h2>
+                <Button onClick={() => navigate('/login')} className="btn-primary">
+                    登录
+                </Button>
+            </div>
+        );
+    }
 
     const filteredOptions = getFilteredOptions();
     const topRecommendations = filteredOptions.filter(o => getOptionScore(o) >= 60).slice(0, 5);
@@ -1326,11 +1328,13 @@ export default function Options() {
                                                 ? (opt.scores.assignment_probability * 100) 
                                                 : (opt.delta ? Math.abs(opt.delta) * 100 : 0);
                                             
-                                            // 计算价格差：CALL是strike - stockPrice，PUT是stockPrice - strike
+                                            // 计算价格差百分比：CALL是(strike - stockPrice)/stockPrice，PUT是(stockPrice - strike)/stockPrice
                                             const stockPrice = displayStockPrice || 0;
-                                            const priceDiff = opt.put_call === 'CALL' 
-                                                ? opt.strike - stockPrice 
-                                                : stockPrice - opt.strike;
+                                            const priceDiffPercent = stockPrice > 0 
+                                                ? (opt.put_call === 'CALL' 
+                                                    ? ((opt.strike - stockPrice) / stockPrice) * 100
+                                                    : ((stockPrice - opt.strike) / stockPrice) * 100)
+                                                : 0;
                                             
                                             // 计算权利金：优先使用premium，否则用中间价
                                             const premium = opt.premium || 
@@ -1352,8 +1356,8 @@ export default function Options() {
                                                     <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
                                                         {exerciseProb.toFixed(1)}%
                                                     </td>
-                                                    <td style={{ color: priceDiff > 0 ? 'var(--bull)' : priceDiff < 0 ? 'var(--bear)' : 'inherit' }}>
-                                                        {priceDiff >= 0 ? '+' : ''}{formatNumber(priceDiff, 2)}
+                                                    <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
                                                     </td>
                                                     <td style={{ fontWeight: 500 }}>
                                                         ${formatNumber(premium, 2)}
