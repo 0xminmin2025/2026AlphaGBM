@@ -203,10 +203,27 @@ class TaskQueue:
 
                 task.status = status
                 task.progress_percent = progress
-                task.current_step = step
+                
+                # Truncate step message if too long (for display purposes, keep it concise)
+                # Full error details should go to error_message field
+                if step and len(step) > 1000:
+                    task.current_step = step[:997] + "..."
+                else:
+                    task.current_step = step
 
+                # Store full error message (can be long)
                 if error_message:
-                    task.error_message = error_message
+                    # Truncate error message if extremely long (keep first 5000 chars)
+                    if len(error_message) > 5000:
+                        task.error_message = error_message[:4997] + "..."
+                    else:
+                        task.error_message = error_message
+                elif status == TaskStatus.FAILED.value and step:
+                    # If no explicit error_message but status is FAILED, use step as error
+                    if len(step) > 5000:
+                        task.error_message = step[:4997] + "..."
+                    else:
+                        task.error_message = step
 
                 if status == TaskStatus.PROCESSING.value and not task.started_at:
                     task.started_at = datetime.utcnow()

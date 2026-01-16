@@ -266,7 +266,7 @@ class AnalysisTask(db.Model):
 
     # Progress tracking
     progress_percent = db.Column(db.Integer, nullable=False, default=0)
-    current_step = db.Column(db.String(500), nullable=True)
+    current_step = db.Column(db.Text, nullable=True)  # Changed from String(500) to Text to support longer error messages
 
     # Results
     result_data = db.Column(db.JSON, nullable=True)  # Complete analysis result

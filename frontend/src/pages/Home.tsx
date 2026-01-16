@@ -688,7 +688,28 @@ export default function Home() {
                         {styleDescriptions[style]}
                     </div>
 
-                    {error && <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>}
+                    {error && (
+                        <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                            <div className="font-semibold mb-2">❌ 分析失败</div>
+                            <div className="whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
+                                {error.length > 500 ? (
+                                    <>
+                                        <div>{error.substring(0, 500)}...</div>
+                                        <details className="mt-2">
+                                            <summary className="cursor-pointer text-red-300 hover:text-red-200">
+                                                查看完整错误信息
+                                            </summary>
+                                            <div className="mt-2 p-2 bg-red-500/5 rounded text-xs">
+                                                {error}
+                                            </div>
+                                        </details>
+                                    </>
+                                ) : (
+                                    error
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Market Warnings */}
