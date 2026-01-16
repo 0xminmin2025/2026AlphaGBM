@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
@@ -25,6 +25,16 @@ export default function MainLayout() {
     };
 
     // Show loading screen when user data is being initially loaded
+    // Add timeout to prevent infinite loading
+    useEffect(() => {
+        if (isInitialLoading && user) {
+            const timeout = setTimeout(() => {
+                console.warn("UserData loading timeout in MainLayout");
+            }, 10000); // 10 second warning
+            return () => clearTimeout(timeout);
+        }
+    }, [isInitialLoading, user]);
+
     if (isInitialLoading && user) {
         return <LoadingScreen message={t('common.loading')} />;
     }

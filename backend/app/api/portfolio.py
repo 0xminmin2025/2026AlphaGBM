@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import db, PortfolioHolding, DailyProfitLoss, StyleProfit
+from ..models import db, PortfolioHolding, DailyProfitLoss, StyleProfit, PortfolioRebalance
 from ..utils.serialization import convert_numpy_types
 from ..scheduler import get_exchange_rates, convert_to_usd
 import yfinance as yf
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import func, desc, text
 
 portfolio_bp = Blueprint('portfolio', __name__, url_prefix='/api/portfolio')
@@ -430,4 +430,49 @@ def get_profit_loss_history():
         logger.error(f"Error fetching profit/loss history: {e}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@portfolio_bp.route('/rebalance-history', methods=['GET'])
+def get_rebalance_history():
+    """
+    Get portfolio rebalancing history (every 2 weeks)
+    Returns list of rebalances with changes and P/L after each rebalance
+    """
+    try:
+        # Get all rebalances ordered by date (newest first)
+        rebalances = PortfolioRebalance.query.order_by(
+            desc(PortfolioRebalance.rebalance_date)
+        ).all()
+        
+        rebalance_list = []
+        for rebalance in rebalances:
+            rebalance_list.append({
+                'id': rebalance.id,
+                'rebalance_date': rebalance.rebalance_date.strftime('%Y-%m-%d'),
+                'rebalance_number': rebalance.rebalance_number,
+                'holdings_added': rebalance.holdings_added,
+                'holdings_removed': rebalance.holdings_removed,
+                'holdings_adjusted': rebalance.holdings_adjusted,
+                'total_investment': rebalance.total_investment,
+                'total_market_value': rebalance.total_market_value,
+                'total_profit_loss': rebalance.total_profit_loss,
+                'total_profit_loss_percent': rebalance.total_profit_loss_percent,
+                'style_stats': rebalance.style_stats or {},
+                'changes_detail': rebalance.changes_detail or {},
+                'notes': rebalance.notes
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': rebalance_list
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching rebalance history: {e}")
+        # If table doesn't exist yet, return empty list
+        if 'does not exist' in str(e).lower() or 'no such table' in str(e).lower():
+            return jsonify({
+                'success': True,
+                'data': []
+            })
         return jsonify({'success': False, 'error': str(e)}), 500

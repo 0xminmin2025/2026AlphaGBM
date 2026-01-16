@@ -135,6 +135,11 @@ export default function Landing() {
     const [portfolioLoading, setPortfolioLoading] = useState(true);
     const [portfolioError, setPortfolioError] = useState<string | null>(null);
     const [isDataFromCache, setIsDataFromCache] = useState(false);
+    
+    // Rebalance history state
+    const [rebalanceHistory, setRebalanceHistory] = useState<any[]>([]);
+    const [rebalanceLoading, setRebalanceLoading] = useState(false);
+    const [expandedRebalance, setExpandedRebalance] = useState<number | null>(null);
 
     const toggleLang = () => {
         i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh');
@@ -345,9 +350,28 @@ export default function Landing() {
     };
 
 
-    // Load portfolio data on component mount
+    // Fetch rebalance history
+    const fetchRebalanceHistory = async () => {
+        try {
+            setRebalanceLoading(true);
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5002';
+            const response = await axios.get(`${apiUrl}/api/portfolio/rebalance-history`);
+            
+            if (response.data.success) {
+                setRebalanceHistory(response.data.data || []);
+            }
+        } catch (error: any) {
+            console.error('Failed to fetch rebalance history:', error);
+            setRebalanceHistory([]);
+        } finally {
+            setRebalanceLoading(false);
+        }
+    };
+
+    // Load portfolio data and rebalance history on component mount
     useEffect(() => {
         fetchPortfolioData();
+        fetchRebalanceHistory();
     }, []);
 
     // Initialize chart with real data
@@ -585,7 +609,6 @@ export default function Landing() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                                 {content.styles.cards.map((style, index) => (
                                     <div key={index} className="glass-card p-3 sm:p-4 rounded-xl relative overflow-hidden group">
-                                        <div className={`absolute top-0 left-0 w-1 h-full ${style.color.replace('text', 'bg').replace('-400', '-500')}`}></div>
                                         <h3 className={`text-base sm:text-lg font-bold mb-1.5 ${style.color}`}>{style.name}</h3>
                                         <p className="text-[var(--text-secondary)] text-xs sm:text-sm leading-relaxed">{style.desc}</p>
                                     </div>
@@ -814,6 +837,164 @@ export default function Landing() {
                             })}
                         </div>
                     </section>
+
+                    {/* Rebalance History Section */}
+                    {rebalanceHistory.length > 0 && (
+                        <div className="mt-8 sm:mt-10 px-4 sm:px-0">
+                            <div className="text-center mb-4 sm:mb-6">
+                                <h3 className="text-lg sm:text-xl font-bold mb-2">调仓历史 (每2周Review)</h3>
+                                <p className="text-xs sm:text-sm text-[var(--text-secondary)]">查看历史调仓记录及调仓后的盈亏表现</p>
+                            </div>
+                            
+                            <div className="space-y-3 sm:space-y-4 max-w-5xl mx-auto">
+                                {rebalanceHistory.map((rebalance, idx) => {
+                                    const isExpanded = expandedRebalance === rebalance.id;
+                                    const changes = rebalance.changes_detail || {};
+                                    const added = changes.added || [];
+                                    const removed = changes.removed || [];
+                                    const adjusted = changes.adjusted || [];
+                                    
+                                    return (
+                                        <div key={rebalance.id} className="glass-card rounded-xl p-3 sm:p-4">
+                                            {/* Rebalance Header */}
+                                            <div 
+                                                className="flex items-center justify-between cursor-pointer"
+                                                onClick={() => setExpandedRebalance(isExpanded ? null : rebalance.id)}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-2 h-2 rounded-full bg-brand"></div>
+                                                    <div>
+                                                        <div className="text-sm sm:text-base font-semibold text-white">
+                                                            第{rebalance.rebalance_number}次调仓
+                                                        </div>
+                                                        <div className="text-xs text-[var(--text-secondary)]">
+                                                            {rebalance.rebalance_date}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    {/* Latest P/L after rebalance */}
+                                                    <div className="text-right">
+                                                        <div className={`text-sm sm:text-base font-bold ${rebalance.total_profit_loss_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {rebalance.total_profit_loss_percent >= 0 ? '+' : ''}{rebalance.total_profit_loss_percent.toFixed(1)}%
+                                                        </div>
+                                                        <div className="text-xs text-[var(--text-secondary)]">调仓后盈亏</div>
+                                                    </div>
+                                                    {/* Changes Summary */}
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        {added.length > 0 && (
+                                                            <span className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-400">
+                                                                +{added.length}
+                                                            </span>
+                                                        )}
+                                                        {removed.length > 0 && (
+                                                            <span className="px-2 py-1 rounded bg-red-500/20 text-red-400">
+                                                                -{removed.length}
+                                                            </span>
+                                                        )}
+                                                        {adjusted.length > 0 && (
+                                                            <span className="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">
+                                                                ~{adjusted.length}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <button className="text-[var(--text-secondary)] hover:text-white transition-colors">
+                                                        <i className={`bi bi-chevron-${isExpanded ? 'up' : 'down'}`}></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Expanded Details */}
+                                            {isExpanded && (
+                                                <div className="mt-4 pt-4 border-t border-slate-700/50">
+                                                    {/* Changes Details */}
+                                                    {added.length > 0 && (
+                                                        <div className="mb-3">
+                                                            <div className="text-xs font-semibold text-emerald-400 mb-2">新增持仓 ({added.length})</div>
+                                                            <div className="space-y-1.5">
+                                                                {added.map((item: any, i: number) => (
+                                                                    <div key={i} className="text-xs text-[var(--text-secondary)] pl-3 border-l-2 border-emerald-500/30">
+                                                                        <span className="text-white font-medium">{item.name} ({item.ticker})</span>
+                                                                        <span className="ml-2">{item.shares}股 @ ${item.buy_price?.toFixed(2)}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {removed.length > 0 && (
+                                                        <div className="mb-3">
+                                                            <div className="text-xs font-semibold text-red-400 mb-2">移除持仓 ({removed.length})</div>
+                                                            <div className="space-y-1.5">
+                                                                {removed.map((item: any, i: number) => (
+                                                                    <div key={i} className="text-xs text-[var(--text-secondary)] pl-3 border-l-2 border-red-500/30">
+                                                                        <span className="text-white font-medium">{item.name} ({item.ticker})</span>
+                                                                        <span className="ml-2">{item.shares}股</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {adjusted.length > 0 && (
+                                                        <div className="mb-3">
+                                                            <div className="text-xs font-semibold text-yellow-400 mb-2">调整持仓 ({adjusted.length})</div>
+                                                            <div className="space-y-1.5">
+                                                                {adjusted.map((item: any, i: number) => (
+                                                                    <div key={i} className="text-xs text-[var(--text-secondary)] pl-3 border-l-2 border-yellow-500/30">
+                                                                        <span className="text-white font-medium">{item.name} ({item.ticker})</span>
+                                                                        <span className="ml-2">
+                                                                            {item.old_shares}股 → {item.new_shares}股
+                                                                            {item.old_price && item.new_price && (
+                                                                                <span className="ml-1">@ ${item.old_price?.toFixed(2)} → ${item.new_price?.toFixed(2)}</span>
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Style Stats after rebalance */}
+                                                    {rebalance.style_stats && Object.keys(rebalance.style_stats).length > 0 && (
+                                                        <div className="mt-4 pt-3 border-t border-slate-700/50">
+                                                            <div className="text-xs font-semibold text-white mb-2">调仓后各风格盈亏</div>
+                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                                {Object.entries(rebalance.style_stats).map(([style, stats]: [string, any]) => {
+                                                                    const styleNames: Record<string, string> = {
+                                                                        'quality': '质量',
+                                                                        'value': '价值',
+                                                                        'growth': '成长',
+                                                                        'momentum': '趋势'
+                                                                    };
+                                                                    const pct = stats.profit_loss_percent || 0;
+                                                                    return (
+                                                                        <div key={style} className="text-xs">
+                                                                            <div className="text-[var(--text-secondary)]">{styleNames[style] || style}</div>
+                                                                            <div className={`font-semibold ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                                {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Notes */}
+                                                    {rebalance.notes && (
+                                                        <div className="mt-3 pt-3 border-t border-slate-700/50">
+                                                            <div className="text-xs text-[var(--text-secondary)] italic">{rebalance.notes}</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Features Section */}

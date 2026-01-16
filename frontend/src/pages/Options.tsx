@@ -973,10 +973,23 @@ export default function Options() {
     }, [displayChain?.symbol, displayChain?.expiry_date, strategy, allOptions.length]);
 
     // Early returns after all hooks
+    // Add timeout for auth loading to prevent infinite loading
+    useEffect(() => {
+        if (authLoading) {
+            const timeout = setTimeout(() => {
+                console.warn("Auth loading timeout in Options page");
+            }, 10000); // 10 second warning
+            return () => clearTimeout(timeout);
+        }
+    }, [authLoading]);
+
     if (authLoading) {
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
-                <div className="spinner"></div>
+                <div className="text-center">
+                    <div className="spinner mx-auto mb-4"></div>
+                    <p className="text-white">正在加载...</p>
+                </div>
             </div>
         );
     }

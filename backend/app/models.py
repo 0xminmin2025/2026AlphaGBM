@@ -128,6 +128,39 @@ class StyleProfit(db.Model):
     style_profit_loss = db.Column(db.Float, nullable=False)
     style_profit_loss_percent = db.Column(db.Float, nullable=False)
 
+class PortfolioRebalance(db.Model):
+    __tablename__ = 'portfolio_rebalances'
+    """
+    Record portfolio rebalancing history (every 2 weeks)
+    Stores changes: added, removed, adjusted holdings
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    rebalance_date = db.Column(db.Date, nullable=False, index=True)
+    rebalance_number = db.Column(db.Integer, nullable=False)  # 1st, 2nd, 3rd rebalance...
+    
+    # Changes summary
+    holdings_added = db.Column(db.Integer, default=0)  # Number of new holdings
+    holdings_removed = db.Column(db.Integer, default=0)  # Number of removed holdings
+    holdings_adjusted = db.Column(db.Integer, default=0)  # Number of adjusted holdings
+    
+    # Portfolio value after rebalance
+    total_investment = db.Column(db.Float, nullable=False)
+    total_market_value = db.Column(db.Float, nullable=False)
+    total_profit_loss = db.Column(db.Float, nullable=False)
+    total_profit_loss_percent = db.Column(db.Float, nullable=False)
+    
+    # Style-specific stats after rebalance
+    style_stats = db.Column(db.JSON, nullable=True)  # {style: {investment, market_value, profit_loss, profit_loss_percent}}
+    
+    # Detailed changes (JSON format)
+    # {added: [{ticker, name, shares, buy_price, style}], 
+    #  removed: [{ticker, name, shares, style}],
+    #  adjusted: [{ticker, name, old_shares, new_shares, old_price, new_price, style}]}
+    changes_detail = db.Column(db.JSON, nullable=True)
+    
+    notes = db.Column(db.Text, nullable=True)  # Optional notes about the rebalance
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Payment Models (Consolidated)
 class Subscription(db.Model):
     __tablename__ = 'subscriptions'

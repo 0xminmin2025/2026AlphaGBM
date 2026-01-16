@@ -646,7 +646,26 @@ export default function Home() {
         return { text: '买入', class: 'text-success' };
     };
 
-    if (authLoading) return <div className="p-8 text-white">Loading...</div>;
+    // Add timeout for auth loading to prevent infinite loading
+    useEffect(() => {
+        if (authLoading) {
+            const timeout = setTimeout(() => {
+                console.warn("Auth loading timeout in Home page");
+            }, 10000); // 10 second warning
+            return () => clearTimeout(timeout);
+        }
+    }, [authLoading]);
+
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[50vh]">
+                <div className="text-center">
+                    <div className="spinner mx-auto mb-4"></div>
+                    <p className="text-white">正在加载...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!user) {
         return (
