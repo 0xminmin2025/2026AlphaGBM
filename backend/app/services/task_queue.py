@@ -378,10 +378,15 @@ class TaskQueue:
                 session = db_instance.session
 
                 try:
+                    # Map task_type to analysis_type for database storage
+                    # TaskType.OPTION_ANALYSIS -> 'basic_chain'
+                    # TaskType.ENHANCED_OPTION_ANALYSIS -> 'enhanced_analysis'
+                    db_analysis_type = 'basic_chain' if analysis_type == TaskType.OPTION_ANALYSIS.value else 'enhanced_analysis'
+                    
                     history_record = OptionsAnalysisHistory(
                         user_id=user_id,
                         symbol=symbol,
-                        analysis_type=analysis_type,
+                        analysis_type=db_analysis_type,
                         option_identifier=params.get('option_identifier'),
                         expiry_date=params.get('expiry_date'),
                         strike_price=analysis_result.get('strike_price'),
