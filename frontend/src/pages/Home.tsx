@@ -213,35 +213,35 @@ const styles = `
         border-left: 4px solid var(--bear) !important;
     }
 
-    /* AI Summary */
+    /* AI Summary - Compact and small font */
     .ai-summary {
         color: var(--muted-foreground);
-        line-height: 1.9;
-        font-size: 1rem;
+        line-height: 1.4;
+        font-size: 0.85rem;
     }
 
     .ai-summary h2 {
         color: var(--primary);
-        font-size: 1.4rem;
+        font-size: 1.1rem;
         font-weight: 600;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.6rem;
         border-bottom: 2px solid var(--border);
-        padding-bottom: 0.75rem;
+        padding-bottom: 0.5rem;
     }
 
     .ai-summary h3 {
         color: var(--foreground);
-        font-size: 1.15rem;
+        font-size: 0.95rem;
         font-weight: 600;
-        margin-top: 1.5rem;
-        margin-bottom: 0.75rem;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
     }
 
-    .ai-summary strong { color: var(--foreground); font-weight: 600; }
-    .ai-summary ul, .ai-summary ol { margin-left: 2rem; margin-bottom: 1.2rem; }
-    .ai-summary li { margin-bottom: 0.6rem; }
-    .ai-summary p { margin-bottom: 1rem; }
+    .ai-summary strong { color: var(--foreground); font-weight: 600; font-size: 0.87rem; }
+    .ai-summary ul, .ai-summary ol { margin-left: 1.5rem; margin-bottom: 0.8rem; }
+    .ai-summary li { margin-bottom: 0.3rem; font-size: 0.85rem; }
+    .ai-summary p { margin-bottom: 0.6rem; }
 
     /* Text Report */
     .text-report-section {
@@ -348,6 +348,89 @@ function renderMarkdown(text: string): string {
         return window.marked.parse(text);
     }
     return text.replace(/\n/g, '<br/>');
+}
+
+// Helper to generate entry strategy based on current price, target price, style and risk score
+function generateEntryStrategy(
+    currentPrice: number,
+    targetPrice: number,
+    style: string,
+    riskScore: number,
+    suggestedPosition: number
+): string {
+    if (suggestedPosition === 0) {
+        return '当前价格已超过目标价格，不建议建仓，建议观望或等待回调。';
+    }
+
+    const upsidePct = ((targetPrice - currentPrice) / currentPrice) * 100;
+    
+    // 如果当前价格高于目标价格
+    if (upsidePct < 0) {
+        return '当前价格已超过目标价格，不建议建仓，建议观望或等待回调至目标价格附近再考虑。';
+    }
+
+    // 根据上涨空间和风险评分决定建仓策略
+    if (riskScore >= 6) {
+        return '风险评分较高，建议保持观望，等待风险降低或价格回调后再考虑建仓。';
+    } else if (riskScore >= 4) {
+        // 高风险评分，分批建仓
+        if (upsidePct < 5) {
+            return '上涨空间有限且风险较高，建议分3批建仓，每批间隔2-3周，每批约' + (suggestedPosition / 3).toFixed(1) + '%，以降低市场波动风险。';
+        } else {
+            return '风险较高，建议分3批建仓，每批间隔1-2周，每批约' + (suggestedPosition / 3).toFixed(1) + '%，以降低市场波动风险。';
+        }
+    } else {
+        // 低风险评分
+        if (upsidePct < 5) {
+            return '上涨空间有限，建议分2批建仓，每批间隔1-2周，每批约' + (suggestedPosition / 2).toFixed(1) + '%，谨慎控制仓位。';
+        } else if (upsidePct < 10) {
+            return '可考虑分2批建仓，每批间隔1周，每批约' + (suggestedPosition / 2).toFixed(1) + '%，或一次性建仓但需严格遵守仓位上限。';
+        } else {
+            return '可考虑一次性建仓，但需严格遵守仓位上限' + suggestedPosition + '%，并设置止损。';
+        }
+    }
+}
+
+// Helper to generate take profit strategy based on current price, target price and style
+function generateTakeProfitStrategy(
+    currentPrice: number,
+    targetPrice: number,
+    style: string,
+    currencySymbol: string = '$'
+): string {
+    const upsidePct = ((targetPrice - currentPrice) / currentPrice) * 100;
+    
+    // 如果当前价格已经超过目标价格
+    if (upsidePct < 0) {
+        const overTargetPct = Math.abs(upsidePct);
+        if (overTargetPct >= 20) {
+            return `当前价格已超过目标价格${overTargetPct.toFixed(1)}%，建议立即减仓50%以上或全部卖出锁定利润。目标价格：${currencySymbol}${targetPrice.toFixed(2)}。`;
+        } else if (overTargetPct >= 10) {
+            return `当前价格已超过目标价格${overTargetPct.toFixed(1)}%，建议分批减仓：先减仓30-50%，保留部分仓位继续观察。目标价格：${currencySymbol}${targetPrice.toFixed(2)}。`;
+        } else {
+            return `当前价格已略高于目标价格${overTargetPct.toFixed(1)}%，建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}，可考虑分批止盈或全部止盈锁定利润。`;
+        }
+    }
+    
+    // 根据投资风格决定止盈策略
+    if (style === 'quality' || style === 'value') {
+        // 长期投资风格，可以分批止盈
+        if (upsidePct >= 20) {
+            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈：达到目标价格时止盈50%，超过目标价格10%时再止盈30%，超过目标价格20%时全部止盈。`;
+        } else {
+            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈或全部止盈锁定利润。如价格超过目标价格20%以上，建议立即减仓50%以上或全部卖出。`;
+        }
+    } else if (style === 'growth') {
+        // 成长风格，中等持有期
+        if (upsidePct >= 15) {
+            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈：达到目标价格时止盈40%，超过目标价格15%时再止盈40%，超过目标价格25%时全部止盈。`;
+        } else {
+            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈或全部止盈锁定利润。如价格超过目标价格20%以上，建议立即减仓50%以上或全部卖出。`;
+        }
+    } else {
+        // 趋势风格，短期持有
+        return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，建议全部止盈锁定利润。如价格超过目标价格10%以上，建议立即全部卖出。`;
+    }
 }
 
 // Investment Philosophy Component (constant)
@@ -757,21 +840,7 @@ export default function Home() {
                             {taskStep || '正在连接 Gemini 进行深度推演...'}
                         </p>
 
-                        {/* Task Status Info */}
-                        {taskStatus && (
-                            <div className="mt-4 text-sm text-muted-foreground">
-                                <p>任务ID: {taskStatus.id}</p>
-                                <p>状态: {
-                                    taskStatus.status === 'pending' ? '等待中' :
-                                    taskStatus.status === 'processing' ? '处理中' :
-                                    taskStatus.status === 'completed' ? '已完成' :
-                                    taskStatus.status === 'failed' ? '失败' : taskStatus.status
-                                }</p>
-                                {taskStatus.created_at && (
-                                    <p>创建时间: {new Date(taskStatus.created_at).toLocaleString('zh-CN')}</p>
-                                )}
-                            </div>
-                        )}
+                        {/* Task Status Info - Hidden per user request */}
                     </div>
                 )}
 
@@ -922,7 +991,7 @@ export default function Home() {
                                 <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
                                     <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
                                         <i className="bi bi-file-text"></i>
-                                        完整分析报告
+                                        ALPHAGBM 分析报告
                                     </h5>
                                 </div>
                                 <div style={{ padding: '1.5rem', lineHeight: 1.8, fontSize: '1rem' }}>
@@ -1039,72 +1108,99 @@ export default function Home() {
                                     {/* Section 4: Valuation Analysis */}
                                     <div className="text-report-section">
                                         <div className="text-report-title">四、估值分析 (M - 市场情绪)</div>
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div>
-                                                <div className="text-report-label">当前价格 (P)</div>
-                                                <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.currency_symbol}{d.price?.toFixed(2)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-report-label">52周价格区间</div>
-                                                <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
-                                                    {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
+                                        
+                                        {/* 价格与技术面 */}
+                                        <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>价格与技术面</div>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div>
+                                                    <div className="text-report-label">当前价格</div>
+                                                    <div className="text-report-value" style={{ fontSize: '1.1rem', fontWeight: 600 }}>{d.currency_symbol}{d.price?.toFixed(2)}</div>
                                                 </div>
-                                                <small style={{ color: 'var(--muted-foreground)' }}>当前位于{pricePosition.toFixed(1)}%分位</small>
-                                            </div>
-                                            <div>
-                                                <div className="text-report-label">技术趋势</div>
-                                                <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
-                                                    {d.price > d.ma50 && d.ma50 > d.ma200 ? '多头排列' : d.price < d.ma200 ? '空头趋势' : '震荡整理'}
+                                                <div>
+                                                    <div className="text-report-label">52周区间</div>
+                                                    <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
+                                                        {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
+                                                    </div>
+                                                    <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>位于{pricePosition.toFixed(1)}%分位</small>
                                                 </div>
-                                                <small style={{ color: 'var(--muted-foreground)' }}>MA50: {d.currency_symbol}{d.ma50?.toFixed(2) || 'N/A'} | MA200: {d.currency_symbol}{d.ma200?.toFixed(2) || 'N/A'}</small>
+                                                <div>
+                                                    <div className="text-report-label">技术趋势</div>
+                                                    <div className="text-report-value" style={{ fontSize: '0.95rem', fontWeight: 500 }}>
+                                                        {d.price > d.ma50 && d.ma50 > d.ma200 ? '多头排列' : d.price < d.ma200 ? '空头趋势' : '震荡整理'}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-report-label">均线系统</div>
+                                                    <div className="text-report-value" style={{ fontSize: '0.85rem' }}>
+                                                        MA50: {d.currency_symbol}{d.ma50?.toFixed(2) || 'N/A'}<br/>
+                                                        MA200: {d.currency_symbol}{d.ma200?.toFixed(2) || 'N/A'}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
+
+                                        {/* 估值指标 */}
                                         {!d.is_etf_or_fund && (
-                                            <div className="grid grid-cols-3 gap-4 mt-4">
-                                                <div>
-                                                    <div className="text-report-label">市盈率 (PE)</div>
-                                                    <div className={`text-report-value ${d.pe && d.pe > 30 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                        {d.pe ? d.pe.toFixed(2) : 'N/A'}
+                                            <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>估值指标</div>
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <div className="text-report-label">市盈率 (PE)</div>
+                                                        <div className={`text-report-value ${d.pe && d.pe > 30 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                                                            {d.pe ? d.pe.toFixed(2) : 'N/A'}
+                                                        </div>
+                                                        <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
+                                                            {d.pe && d.pe > 30 ? '估值偏高' : d.pe && d.pe > 15 ? '估值合理' : d.pe > 0 ? '估值偏低' : '数据不足'}
+                                                        </small>
                                                     </div>
-                                                    <small style={{ color: 'var(--muted-foreground)' }}>{d.pe && d.pe > 30 ? '估值偏高' : d.pe && d.pe > 15 ? '估值合理' : d.pe > 0 ? '估值偏低' : '数据不足'}</small>
-                                                </div>
-                                                <div>
-                                                    <div className="text-report-label">预期市盈率 (Forward PE)</div>
-                                                    <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.forward_pe ? d.forward_pe.toFixed(2) : 'N/A'}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-report-label">PEG 比率</div>
-                                                    <div className="text-report-value" style={{ fontSize: '1.1rem' }}>{d.peg ? d.peg.toFixed(2) : 'N/A'}</div>
-                                                    <small style={{ color: 'var(--muted-foreground)' }}>{d.peg && d.peg < 1 ? '估值合理' : d.peg > 0 ? '估值偏高' : '数据不足'}</small>
+                                                    <div>
+                                                        <div className="text-report-label">预期市盈率 (Forward PE)</div>
+                                                        <div className="text-report-value" style={{ fontSize: '1.1rem', fontWeight: 600 }}>{d.forward_pe ? d.forward_pe.toFixed(2) : 'N/A'}</div>
+                                                        <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
+                                                            {d.forward_pe && d.forward_pe < d.pe ? '预期改善' : d.forward_pe && d.forward_pe > d.pe ? '预期恶化' : ''}
+                                                        </small>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-report-label">PEG 比率</div>
+                                                        <div className="text-report-value" style={{ fontSize: '1.1rem', fontWeight: 600 }}>{d.peg ? d.peg.toFixed(2) : 'N/A'}</div>
+                                                        <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
+                                                            {d.peg && d.peg < 1 ? '估值合理' : d.peg > 0 ? '估值偏高' : '数据不足'}
+                                                        </small>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* VIX and Put/Call Ratio */}
+                                        {/* 市场情绪指标 */}
                                         {d.options_data && (d.options_data.vix !== null || d.options_data.put_call_ratio !== null) && (
-                                            <div className="grid grid-cols-2 gap-4 mt-4">
-                                                {d.options_data.vix !== null && (
-                                                    <div>
-                                                        <div className="text-report-label">VIX恐慌指数</div>
-                                                        <div className={`text-report-value ${d.options_data.vix > 30 ? 'text-danger' : d.options_data.vix > 20 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                            {d.options_data.vix.toFixed(2)}
+                                            <div style={{ marginBottom: '1.5rem' }}>
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>市场情绪指标</div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {d.options_data.vix !== null && (
+                                                        <div>
+                                                            <div className="text-report-label">VIX恐慌指数</div>
+                                                            <div className={`text-report-value ${d.options_data.vix > 30 ? 'text-danger' : d.options_data.vix > 20 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                                                                {d.options_data.vix.toFixed(2)}
+                                                            </div>
+                                                            <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
+                                                                {d.options_data.vix_change ? (d.options_data.vix_change > 0 ? '↑' : '↓') + Math.abs(d.options_data.vix_change).toFixed(1) + '%' : ''} 
+                                                                {d.options_data.vix > 30 ? ' | 高波动风险' : d.options_data.vix > 20 ? ' | 中等波动' : ' | 低波动'}
+                                                            </small>
                                                         </div>
-                                                        <small style={{ color: 'var(--muted-foreground)' }}>
-                                                            {d.options_data.vix_change ? (d.options_data.vix_change > 0 ? '↑' : '↓') + Math.abs(d.options_data.vix_change).toFixed(1) + '%' : ''} {d.options_data.vix > 30 ? '高波动风险' : d.options_data.vix > 20 ? '中等波动' : '低波动'}
-                                                        </small>
-                                                    </div>
-                                                )}
-                                                {d.options_data.put_call_ratio !== null && (
-                                                    <div>
-                                                        <div className="text-report-label">Put/Call比率</div>
-                                                        <div className={`text-report-value ${d.options_data.put_call_ratio > 1.2 ? 'text-danger' : d.options_data.put_call_ratio > 1.0 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem' }}>
-                                                            {d.options_data.put_call_ratio.toFixed(2)}
+                                                    )}
+                                                    {d.options_data.put_call_ratio !== null && (
+                                                        <div>
+                                                            <div className="text-report-label">Put/Call比率</div>
+                                                            <div className={`text-report-value ${d.options_data.put_call_ratio > 1.2 ? 'text-danger' : d.options_data.put_call_ratio > 1.0 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                                                                {d.options_data.put_call_ratio.toFixed(2)}
+                                                            </div>
+                                                            <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
+                                                                {d.options_data.put_call_ratio > 1.2 ? '看跌情绪强' : d.options_data.put_call_ratio > 1.0 ? '略偏看跌' : d.options_data.put_call_ratio < 0.8 ? '看涨情绪' : '中性'}
+                                                            </small>
                                                         </div>
-                                                        <small style={{ color: 'var(--muted-foreground)' }}>
-                                                            {d.options_data.put_call_ratio > 1.2 ? '看跌情绪强' : d.options_data.put_call_ratio > 1.0 ? '略偏看跌' : d.options_data.put_call_ratio < 0.8 ? '看涨情绪' : '中性'}
-                                                        </small>
-                                                    </div>
-                                                )}
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
 
@@ -1239,8 +1335,9 @@ export default function Home() {
                                         <div style={{ color: 'var(--muted-foreground)' }}>
                                             <p><strong style={{ color: 'var(--foreground)' }}>投资评级：</strong><span className={rating.class} style={{ fontSize: '1.1rem', fontWeight: 600 }}>{rating.text}</span></p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>目标价格：</strong>{d.currency_symbol}{(d.target_price || d.price)?.toFixed(2)}（基于PE估值、增长率和技术面综合计算）</p>
-                                            <p><strong style={{ color: 'var(--foreground)' }}>建议仓位：</strong><span style={{ color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 600 }}>{r.suggested_position}%</span>（基于{styleName}风格和风险评分）</p>
-                                            <p><strong style={{ color: 'var(--foreground)' }}>建仓策略：</strong>{r.score >= 4 ? '建议分3批建仓，每批间隔1-2周，以降低市场波动风险。' : '可考虑一次性建仓，但需严格遵守仓位上限，并设置止损。'}</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>建议仓位：</strong><span style={{ color: r.suggested_position === 0 ? 'var(--bear)' : 'var(--primary)', fontSize: '1.1rem', fontWeight: 600 }}>{r.suggested_position}%</span>（基于{styleName}风格、风险评分和价格动态调整）</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>建仓策略：</strong>{generateEntryStrategy(d.price || 0, d.target_price || d.price || 0, style, r.score, r.suggested_position)}</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>止盈建议：</strong>{generateTakeProfitStrategy(d.price || 0, d.target_price || d.price || 0, style, d.currency_symbol || '$')}</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>止损建议：</strong>建议设置止损价格为{d.currency_symbol}{d.stop_loss_price?.toFixed(2) || (d.price * 0.85).toFixed(2)}（{d.stop_loss_method || '动态止损'}），严格执行止损纪律。</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>持有周期：</strong>根据{styleName}风格，建议持有{style === 'quality' ? '长期（1-3年）' : style === 'value' ? '中期（6-12个月）' : style === 'growth' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
                                         </div>

@@ -353,8 +353,8 @@ def calculate_ev_model(data, risk_result, style):
             ev_3months['ev'] * weight_3months
         )
         
-        # 基于 EV 生成推荐
-        recommendation = generate_ev_recommendation(ev_weighted, ev_1week, ev_1month, ev_3months, risk_result)
+        # 基于 EV 生成推荐（传入data以便检查目标价格）
+        recommendation = generate_ev_recommendation(ev_weighted, ev_1week, ev_1month, ev_3months, risk_result, data)
         
         # 计算 EV 评级（0-10 分）
         ev_score = calculate_ev_score(ev_weighted, risk_result)
@@ -392,7 +392,7 @@ def calculate_ev_model(data, risk_result, style):
         }
 
 
-def generate_ev_recommendation(ev_weighted, ev_1week, ev_1month, ev_3months, risk_result):
+def generate_ev_recommendation(ev_weighted, ev_1week, ev_1month, ev_3months, risk_result, data=None):
     """
     基于 EV 生成交易推荐
     
@@ -400,6 +400,7 @@ def generate_ev_recommendation(ev_weighted, ev_1week, ev_1month, ev_3months, ris
         ev_weighted: 加权综合 EV
         ev_1week, ev_1month, ev_3months: 各时间视界的 EV
         risk_result: 风险分析结果
+        data: 市场数据（可选，用于检查目标价格）
     
     返回:
         推荐字典
@@ -426,6 +427,18 @@ def generate_ev_recommendation(ev_weighted, ev_1week, ev_1month, ev_3months, ris
             action = 'STRONG_AVOID'
             reason = '短期下行压力较大，技术面和情绪面偏弱'
             confidence = 'high'
+        
+        # 价格调整：如果目标价低于当前价，不应该建议增持
+        if data:
+            current_price = data.get('price', 0)
+            target_price = data.get('target_price', 0)
+            if current_price > 0 and target_price > 0 and target_price < current_price:
+                # 目标价低于当前价，不应该建议增持
+                if action in ['STRONG_BUY', 'BUY']:
+                    action = 'HOLD'
+                    reason = f'目标价({target_price:.2f})低于当前价({current_price:.2f})，不建议增持'
+                    confidence = 'medium'
+                    logger.info(f"目标价低于当前价，将推荐从{action}调整为HOLD")
         
         # 风险调整：如果风险过高，降级推荐
         risk_score = risk_result.get('score', 0)

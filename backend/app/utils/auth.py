@@ -100,7 +100,32 @@ def require_auth(f):
             else:
                 # Cache miss - verify token using Supabase Auth
                 logger.debug("Cache miss - fetching user from Supabase")
-                user_response = supabase.auth.get_user(token)
+                
+                # Add timeout and retry for Supabase auth calls
+                import time
+                max_retries = 2
+                retry_delay = 0.5
+                user_response = None
+                
+                for attempt in range(max_retries + 1):
+                    try:
+                        user_response = supabase.auth.get_user(token)
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        if attempt < max_retries:
+                            logger.warning(f"Supabase auth attempt {attempt + 1} failed, retrying: {e}")
+                            time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                        else:
+                            logger.error(f"Supabase auth failed after {max_retries + 1} attempts: {e}")
+                            # Check if it's a network/SSL error
+                            error_str = str(e).lower()
+                            if 'ssl' in error_str or 'timeout' in error_str or 'connection' in error_str:
+                                return jsonify({
+                                    'error': 'Authentication service temporarily unavailable. Please try again.',
+                                    'details': 'Network connection error during authentication'
+                                }), 503  # Service Unavailable
+                            else:
+                                return jsonify({'error': 'Invalid token'}), 401
 
                 if not user_response or not user_response.user:
                     return jsonify({'error': 'Invalid token'}), 401

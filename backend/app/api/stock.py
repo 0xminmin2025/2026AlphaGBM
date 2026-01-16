@@ -54,6 +54,41 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
         try:
             target_price = analysis_engine.calculate_target_price(market_data, risk_result, style)
             market_data['target_price'] = target_price
+            
+            # 根据目标价格和当前价格动态调整仓位
+            current_price = market_data.get('price', 0)
+            if current_price > 0 and target_price > 0:
+                # 计算上涨空间百分比
+                upside_pct = (target_price - current_price) / current_price
+                
+                # 根据上涨空间调整仓位
+                # 如果目标价低于当前价，大幅降低仓位（不建议买入）
+                if upside_pct < 0:
+                    # 目标价低于当前价，仓位调整为0或极小值
+                    price_adjustment = 0.0
+                    risk_result['price_adjustment'] = price_adjustment
+                    risk_result['suggested_position'] = 0.0
+                    logger.info(f"目标价({target_price:.2f})低于当前价({current_price:.2f})，建议仓位调整为0%")
+                elif upside_pct < 0.05:  # 上涨空间 < 5%
+                    price_adjustment = 0.3  # 大幅降低仓位
+                elif upside_pct < 0.10:  # 上涨空间 5-10%
+                    price_adjustment = 0.6  # 适度降低仓位
+                elif upside_pct < 0.20:  # 上涨空间 10-20%
+                    price_adjustment = 0.9  # 轻微降低仓位
+                elif upside_pct < 0.30:  # 上涨空间 20-30%
+                    price_adjustment = 1.0  # 正常仓位
+                else:  # 上涨空间 > 30%
+                    price_adjustment = 1.1  # 可以适当增加仓位（但不超过基础上限）
+                    price_adjustment = min(price_adjustment, 1.2)  # 最多增加20%
+                
+                # 应用价格调整
+                base_position = risk_result.get('suggested_position', 0)
+                adjusted_position = base_position * price_adjustment
+                risk_result['price_adjustment'] = price_adjustment
+                risk_result['suggested_position'] = round(adjusted_position, 1)
+                risk_result['upside_potential_pct'] = round(upside_pct * 100, 2)
+                
+                logger.info(f"价格调整: 当前价={current_price:.2f}, 目标价={target_price:.2f}, 上涨空间={upside_pct:.2%}, 仓位调整系数={price_adjustment:.2f}, 最终仓位={adjusted_position:.1f}%")
         except Exception as e:
             logger.warning(f"计算目标价格时发生异常: {e}")
             market_data['target_price'] = market_data.get('price', 0)  # Default to current price

@@ -3217,9 +3217,11 @@ def analyze_risk_and_position(style, data):
     elif risk_score >= 4: adjustment = 0.4
     elif risk_score >= 2: adjustment = 0.7
     
-    suggested_position = max_cap * adjustment
+    # 价格相关调整系数（基于目标价格和当前价格的关系）
+    # 注意：这里先计算基础仓位，价格调整会在API层进行
+    price_adjustment = 1.0  # 默认值，将在API层根据目标价格调整
     
-    # 注意：目标价格在app.py中会在风险计算后计算，所以价格相关的仓位调整会在app.py中进行
+    suggested_position = max_cap * adjustment
     
     return {
         "score": risk_score,
@@ -3227,6 +3229,7 @@ def analyze_risk_and_position(style, data):
         "flags": risk_flags,
         "suggested_position": round(suggested_position, 1),
         "is_etf_or_fund": False,
-        "fund_type": None
+        "fund_type": None,
+        "price_adjustment": price_adjustment  # 占位符，将在API层更新
     }
 
