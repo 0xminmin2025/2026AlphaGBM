@@ -4,6 +4,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import { LanguageToggle } from '../ui/language-toggle';
 import LoadingScreen from '../ui/LoadingScreen';
+import FeedbackButton from '../FeedbackButton';
 import { useTranslation } from 'react-i18next';
 import { Menu, X } from 'lucide-react';
 
@@ -161,6 +162,9 @@ export default function MainLayout() {
                     </p>
                 </div>
             </footer>
+
+            {/* Feedback Button */}
+            <FeedbackButton />
         </div>
     );
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Chart from 'chart.js/auto';
 import { Menu, X } from 'lucide-react';
 import axios from 'axios';
+import FeedbackButton from '@/components/FeedbackButton';
 
 // Original CSS from home/index.html
 const originalStyles = `
@@ -1073,6 +1074,9 @@ export default function Landing() {
                     </div>
                 </footer>
             </main>
+            
+            {/* Feedback Button */}
+            <FeedbackButton />
         </div>
     );
 }
