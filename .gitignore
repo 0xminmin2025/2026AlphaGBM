@@ -1,3 +1,6 @@
+*.properties
+*.zip
+
 # Python
 __pycache__/
 *.py[cod]

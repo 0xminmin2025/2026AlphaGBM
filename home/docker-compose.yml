@@ -1,9 +1,0 @@
-services:
-  alphag-static:
-    build:
-      context: .
-    ports:
-      - "8085:80"
-    volumes:
-      - ./index.html:/usr/share/nginx/html/index.html:ro
-    restart: always

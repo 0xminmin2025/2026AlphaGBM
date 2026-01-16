@@ -1,5 +1,0 @@
-venv/
-*.pem
-*.properties
-
-__pycache__/
