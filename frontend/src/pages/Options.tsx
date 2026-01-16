@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,13 @@ import { useNavigate } from 'react-router-dom';
 import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
+
+// Declare global types for Chart.js
+declare global {
+    interface Window {
+        Chart: any;
+    }
+}
 
 // CSS matching original options.html
 const styles = `
@@ -345,6 +352,131 @@ const styles = `
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Option Detail Modal */
+    .option-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+
+    .option-modal {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        max-width: 600px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        position: relative;
+    }
+
+    .option-modal-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: var(--card);
+        z-index: 10;
+    }
+
+    .option-modal-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--foreground);
+    }
+
+    .option-modal-close {
+        background: transparent;
+        border: none;
+        color: var(--muted-foreground);
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+
+    .option-modal-close:hover {
+        background: var(--muted);
+        color: var(--foreground);
+    }
+
+    .option-modal-content {
+        padding: 1.5rem;
+    }
+
+    .option-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .option-info-item {
+        background: var(--muted);
+        padding: 0.75rem;
+        border-radius: 8px;
+        border-left: 3px solid var(--primary);
+    }
+
+    .option-info-label {
+        font-size: 0.75rem;
+        color: var(--muted-foreground);
+        margin-bottom: 0.25rem;
+    }
+
+    .option-info-value {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--foreground);
+    }
+
+    .option-max-loss {
+        background: var(--bear);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+
+    .option-max-loss-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-bottom: 0.5rem;
+    }
+
+    .option-max-loss-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .option-chart-container {
+        margin-top: 1.5rem;
+        padding: 0.75rem;
+        background: var(--muted);
+        border-radius: 8px;
+        position: relative;
+        height: 220px;
+    }
 `;
 
 type OptionData = {
@@ -428,6 +560,13 @@ export default function Options() {
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
     const [taskStep, setTaskStep] = useState('');
+
+    // Option detail modal state
+    const [selectedOption, setSelectedOption] = useState<OptionData | null>(null);
+    const [stockHistory, setStockHistory] = useState<{ dates: string[], prices: number[] } | null>(null);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const chartRef = useRef<HTMLCanvasElement>(null);
+    const chartInstance = useRef<any>(null);
 
     // Initialize task polling hook
     const { startPolling } = useTaskPolling({
@@ -673,6 +812,111 @@ export default function Options() {
     // Use historical chain data if viewing history, otherwise use current chain
     const displayChain = isHistoricalView ? historicalChain : chain;
     const displayStockPrice = isHistoricalView ? (historicalChain?.real_stock_price || stockPrice) : stockPrice;
+
+    // Handle option click to show detail modal
+    const handleOptionClick = async (option: OptionData) => {
+        setSelectedOption(option);
+        setLoadingHistory(true);
+        
+        // Fetch stock history (1 month)
+        try {
+            const response = await api.get(`/options/stock-history/${ticker}`, {
+                params: { days: 30 }
+            });
+            
+            console.log('Stock history API response:', response.data);
+            
+            if (response.data) {
+                let dates: string[] = [];
+                let prices: number[] = [];
+                
+                // API returns: {symbol: string, data: [{time, open, high, low, close}]}
+                if (response.data.data && Array.isArray(response.data.data)) {
+                    const data = response.data.data;
+                    dates = data.map((item: any) => {
+                        if (item.time) {
+                            const date = new Date(item.time * 1000); // time is in seconds
+                            return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                        }
+                        return '';
+                    }).filter((d: string) => d);
+                    
+                    prices = data.map((item: any) => {
+                        const price = item.close || item.price || 0;
+                        return typeof price === 'number' ? price : parseFloat(price);
+                    }).filter((p: number) => !isNaN(p) && p > 0);
+                } 
+                // Fallback: if already in {dates, prices} format
+                else if (response.data.dates && response.data.prices) {
+                    dates = response.data.dates;
+                    prices = response.data.prices.map((p: any) => typeof p === 'number' ? p : parseFloat(p)).filter((p: number) => !isNaN(p) && p > 0);
+                }
+                
+                if (dates.length > 0 && prices.length > 0 && dates.length === prices.length) {
+                    console.log('Setting stock history:', { datesCount: dates.length, pricesCount: prices.length });
+                    setStockHistory({ dates, prices });
+                } else {
+                    console.error('Invalid stock history format:', { datesLength: dates.length, pricesLength: prices.length });
+                    setStockHistory(null);
+                }
+            } else {
+                setStockHistory(null);
+            }
+        } catch (error) {
+            console.error('Error fetching stock history:', error);
+            setStockHistory(null);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    // Close modal
+    const closeModal = () => {
+        setSelectedOption(null);
+        setStockHistory(null);
+        if (chartInstance.current) {
+            chartInstance.current.destroy();
+            chartInstance.current = null;
+        }
+    };
+
+    // Calculate max loss for option
+    const calculateMaxLoss = (option: OptionData, currentStockPrice: number): number => {
+        const premium = option.premium || ((option.bid_price + option.ask_price) / 2) || option.latest_price || 0;
+        
+        if (strategy === 'sell_put') {
+            // Sell Put: Max loss = Strike - Premium (if stock goes to 0)
+            return option.strike - premium;
+        } else if (strategy === 'sell_call') {
+            // Sell Call: Max loss is unlimited, but we calculate theoretical max at 2x current price
+            return (currentStockPrice * 2) - option.strike - premium;
+        } else if (strategy === 'buy_call') {
+            // Buy Call: Max loss = Premium paid
+            return premium;
+        } else { // buy_put
+            // Buy Put: Max loss = Premium paid
+            return premium;
+        }
+    };
+
+    // Calculate stop loss price
+    const calculateStopLoss = (option: OptionData, currentStockPrice: number): number => {
+        const premium = option.premium || ((option.bid_price + option.ask_price) / 2) || option.latest_price || 0;
+        
+        if (strategy === 'sell_put') {
+            // Sell Put: Stop loss when stock price drops below strike - premium * 2
+            return Math.max(0, option.strike - (premium * 2));
+        } else if (strategy === 'sell_call') {
+            // Sell Call: Stop loss when stock price rises above strike + premium * 2
+            return option.strike + (premium * 2);
+        } else if (strategy === 'buy_call') {
+            // Buy Call: Stop loss at 50% of premium
+            return currentStockPrice; // Stop loss is based on option price, not stock price
+        } else { // buy_put
+            // Buy Put: Stop loss at 50% of premium
+            return currentStockPrice; // Stop loss is based on option price, not stock price
+        }
+    };
 
     // Get all options using useMemo to avoid recalculating on every render
     // IMPORTANT: All hooks must be called before any early returns
@@ -1346,6 +1590,8 @@ export default function Options() {
                                                 <tr
                                                     key={opt.identifier}
                                                     className={isRecommended ? 'recommended-row' : ''}
+                                                    onClick={() => handleOptionClick(opt)}
+                                                    style={{ cursor: 'pointer' }}
                                                 >
                                                     <td style={{ fontWeight: 600 }}>${opt.strike}</td>
                                                     <td>${formatNumber(opt.latest_price)}</td>
@@ -1469,6 +1715,369 @@ export default function Options() {
                     }}
                     symbolFilter={ticker}
                 />
+            </div>
+
+            {/* Option Detail Modal */}
+            {selectedOption && (
+                <OptionDetailModal
+                    option={selectedOption}
+                    stockPrice={displayStockPrice || 0}
+                    strategy={strategy}
+                    stockHistory={stockHistory}
+                    loadingHistory={loadingHistory}
+                    onClose={closeModal}
+                    chartRef={chartRef}
+                    chartInstance={chartInstance}
+                />
+            )}
+        </div>
+    );
+}
+
+// Option Detail Modal Component
+function OptionDetailModal({
+    option,
+    stockPrice,
+    strategy,
+    stockHistory,
+    loadingHistory,
+    onClose,
+    chartRef,
+    chartInstance
+}: {
+    option: OptionData;
+    stockPrice: number;
+    strategy: Strategy;
+    stockHistory: { dates: string[], prices: number[] } | null;
+    loadingHistory: boolean;
+    onClose: () => void;
+    chartRef: React.RefObject<HTMLCanvasElement>;
+    chartInstance: React.MutableRefObject<any>;
+}) {
+    const strategyLabels: Record<Strategy, string> = {
+        'sell_put': '卖出看跌 (Sell Put)',
+        'sell_call': '卖出看涨 (Sell Call)',
+        'buy_call': '买入看涨 (Buy Call)',
+        'buy_put': '买入看跌 (Buy Put)'
+    };
+
+    // Calculate premium correctly
+    const premium = option.premium || 
+        ((option.bid_price != null && option.ask_price != null) 
+            ? (option.bid_price + option.ask_price) / 2 
+            : (option.latest_price || 0));
+    
+    console.log('Option detail modal data:', {
+        option: {
+            strike: option.strike,
+            bid_price: option.bid_price,
+            ask_price: option.ask_price,
+            latest_price: option.latest_price,
+            premium: option.premium
+        },
+        calculatedPremium: premium,
+        stockPrice,
+        strategy
+    });
+    
+    // Calculate max loss
+    const calculateMaxLoss = (): number => {
+        if (strategy === 'sell_put') {
+            // Sell Put: Max loss = Strike - Premium (if stock goes to 0)
+            return Math.max(0, option.strike - premium);
+        } else if (strategy === 'sell_call') {
+            // Sell Call: Max loss is unlimited, but we calculate theoretical max at 2x current price
+            return Math.max(0, (stockPrice * 2) - option.strike - premium);
+        } else if (strategy === 'buy_call' || strategy === 'buy_put') {
+            // Buy Call/Put: Max loss = Premium paid
+            return premium;
+        }
+        return 0;
+    };
+
+    const maxLoss = calculateMaxLoss();
+    
+    // Calculate stop loss price
+    const calculateStopLoss = (): number => {
+        if (strategy === 'sell_put') {
+            // Sell Put: Stop loss when stock price drops below strike - premium * 2
+            return Math.max(0, option.strike - (premium * 2));
+        } else if (strategy === 'sell_call') {
+            // Sell Call: Stop loss when stock price rises above strike + premium * 2
+            return option.strike + (premium * 2);
+        } else if (strategy === 'buy_call' || strategy === 'buy_put') {
+            // Buy Call/Put: Stop loss is based on option price (50% loss)
+            // For display purposes, show stock price where option would be worthless
+            return stockPrice;
+        }
+        return stockPrice;
+    };
+
+    const stopLossPrice = calculateStopLoss();
+
+    // Render chart with reference lines
+    useEffect(() => {
+        if (!stockHistory || !chartRef.current) {
+            console.log('Chart conditions not met:', { stockHistory: !!stockHistory, chartRef: !!chartRef.current });
+            return;
+        }
+
+        // Wait for Chart.js to be available
+        if (!window.Chart) {
+            console.log('Chart.js not loaded yet');
+            const checkChart = setInterval(() => {
+                if (window.Chart) {
+                    clearInterval(checkChart);
+                    // Retry after Chart.js is loaded
+                    setTimeout(() => {
+                        if (stockHistory && chartRef.current) {
+                            renderChart();
+                        }
+                    }, 100);
+                }
+            }, 100);
+            return () => clearInterval(checkChart);
+        }
+
+        renderChart();
+
+        function renderChart() {
+            if (!stockHistory || !chartRef.current || !window.Chart) return;
+
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+
+            const ctx = chartRef.current.getContext('2d');
+            if (!ctx) {
+                console.error('Could not get canvas context');
+                return;
+            }
+
+            // Ensure prices are numbers
+            const prices = stockHistory.prices
+                .map(p => typeof p === 'number' ? p : parseFloat(p))
+                .filter(p => !isNaN(p) && p > 0);
+            
+            if (prices.length === 0) {
+                console.error('No valid prices in stockHistory:', stockHistory);
+                return;
+            }
+
+            // Ensure dates match prices length
+            const dates = stockHistory.dates.slice(0, prices.length);
+            
+            console.log('Chart rendering:', {
+                datesCount: dates.length,
+                pricesCount: prices.length,
+                firstPrice: prices[0],
+                lastPrice: prices[prices.length - 1],
+                stockPrice,
+                strike: option.strike,
+                stopLossPrice
+            });
+
+            const allPrices = [...prices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
+            if (allPrices.length === 0) {
+                console.error('No valid prices for chart');
+                return;
+            }
+            
+            const minPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+            const priceRange = maxPrice - minPrice;
+            const padding = priceRange > 0 ? priceRange * 0.1 : maxPrice * 0.05;
+
+            try {
+                chartInstance.current = new window.Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [
+                            {
+                                label: '股价',
+                                data: prices,
+                                borderColor: 'hsl(178, 78%, 32%)',
+                                backgroundColor: 'rgba(13, 155, 151, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 0,
+                                borderWidth: 1.5,
+                                spanGaps: false
+                            },
+                            {
+                                label: '执行价',
+                                data: Array(dates.length).fill(option.strike),
+                                borderColor: 'hsl(38, 92%, 50%)',
+                                borderDash: [5, 5],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false
+                            },
+                            {
+                                label: '现价',
+                                data: Array(dates.length).fill(stockPrice),
+                                borderColor: 'hsl(142, 76%, 36%)',
+                                borderDash: [5, 5],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false
+                            },
+                            {
+                                label: '止损价',
+                                data: Array(dates.length).fill(stopLossPrice),
+                                borderColor: 'hsl(0, 72%, 51%)',
+                                borderDash: [5, 5],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    color: 'hsl(240, 5%, 64.9%)',
+                                    font: { size: 9 },
+                                    usePointStyle: true,
+                                    padding: 8,
+                                    boxWidth: 10,
+                                    boxHeight: 10
+                                }
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#fff',
+                                bodyColor: '#fff',
+                                borderColor: 'hsl(178, 78%, 32%)',
+                                borderWidth: 1,
+                                titleFont: { size: 10 },
+                                bodyFont: { size: 9 },
+                                padding: 8
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: 'hsl(240, 5%, 64.9%)',
+                                    font: { size: 8 },
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    padding: 4
+                                },
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.05)',
+                                    drawBorder: false
+                                }
+                            },
+                            y: {
+                                min: Math.max(0, minPrice - padding),
+                                max: maxPrice + padding,
+                                ticks: {
+                                    color: 'hsl(240, 5%, 64.9%)',
+                                    font: { size: 8 },
+                                    padding: 4,
+                                    callback: function(value: any) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                },
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.05)',
+                                    drawBorder: false
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error creating chart:', error);
+            }
+        }
+
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+                chartInstance.current = null;
+            }
+        };
+    }, [stockHistory, stockPrice, option.strike, stopLossPrice]);
+
+    return (
+        <div className="option-modal-overlay" onClick={onClose}>
+            <div className="option-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="option-modal-header">
+                    <div className="option-modal-title">
+                        {strategyLabels[strategy]} - ${option.strike}
+                    </div>
+                    <button className="option-modal-close" onClick={onClose}>
+                        ×
+                    </button>
+                </div>
+                <div className="option-modal-content">
+                    {/* Important Info Grid */}
+                    <div className="option-info-grid">
+                        <div className="option-info-item">
+                            <div className="option-info-label">行权价</div>
+                            <div className="option-info-value">${option.strike.toFixed(2)}</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">当前股价</div>
+                            <div className="option-info-value">${stockPrice.toFixed(2)}</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">期权价格</div>
+                            <div className="option-info-value">${premium.toFixed(2)}</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">隐含波动率</div>
+                            <div className="option-info-value">{(option.implied_vol * 100).toFixed(1)}%</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">Delta</div>
+                            <div className="option-info-value">{option.delta.toFixed(3)}</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">到期日</div>
+                            <div className="option-info-value">{option.expiry_date}</div>
+                        </div>
+                    </div>
+
+                    {/* Max Loss */}
+                    <div className="option-max-loss">
+                        <div className="option-max-loss-label">最大亏损</div>
+                        <div className="option-max-loss-value">${maxLoss.toFixed(2)}</div>
+                    </div>
+
+                    {/* Chart */}
+                    <div style={{ marginTop: '1.5rem' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--foreground)' }}>
+                            过去一个月股价走势
+                        </div>
+                        {loadingHistory ? (
+                            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div className="spinner"></div>
+                            </div>
+                        ) : stockHistory ? (
+                            <div className="option-chart-container">
+                                <canvas ref={chartRef}></canvas>
+                            </div>
+                        ) : (
+                            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)' }}>
+                                无法加载历史价格数据
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
