@@ -99,7 +99,12 @@ const styles = `
 
     @media (max-width: 640px) {
         .option-table {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
+        }
+
+        .option-table th {
+            font-size: 0.65rem;
+            padding: 0.4rem 0.2rem;
         }
 
         .option-table th,
@@ -116,8 +121,8 @@ const styles = `
         z-index: 10;
         padding: 0.75rem 0.5rem;
         text-align: center;
-        font-size: 0.875rem;
-        font-weight: 600;
+        font-size: 0.75rem;
+        font-weight: 500;
         color: var(--foreground);
         transition: background-color 0.2s;
     }
@@ -357,6 +362,7 @@ type OptionData = {
     vega?: number;
     put_call: string;
     expiry_date: string;
+    premium?: number;
     scores?: {
         total_score?: number;
         annualized_return?: number;
@@ -1231,56 +1237,82 @@ export default function Options() {
                                             onClick={() => handleSort('strike')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            Strike (行权价){getSortIndicator('strike')}
+                                            <div>行权价</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Strike{getSortIndicator('strike')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('latest')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            Latest (最新价){getSortIndicator('latest')}
+                                            <div>最新价</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('bid')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            Bid/Ask (买/卖价){getSortIndicator('bid')}
+                                            <div>买/卖价</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('volume')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            Vol/OI (成交量/持仓量){getSortIndicator('volume')}
+                                            <div>成交量/持仓量</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('iv')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            IV (隐含波动率){getSortIndicator('iv')}
+                                            <div>隐含波动率</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('delta')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            Delta (Delta值){getSortIndicator('delta')}
+                                            <div>Delta值</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
+                                        </th>
+                                        <th 
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>行权概率</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
+                                        </th>
+                                        <th 
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>价格差</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
+                                        </th>
+                                        <th 
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>权利金</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Premium</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('annualized_return')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            年化收益 (Annualized Return){getSortIndicator('annualized_return')}
+                                            <div>年化收益</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized Return{getSortIndicator('annualized_return')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('score')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            评分 (Score){getSortIndicator('score')}
+                                            <div>评分</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Score{getSortIndicator('score')}</div>
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredOptions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
+                                            <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
                                                 没有符合条件的期权数据
                                             </td>
                                         </tr>
@@ -1288,6 +1320,23 @@ export default function Options() {
                                         filteredOptions.map(opt => {
                                             const totalScore = getOptionScore(opt);
                                             const isRecommended = totalScore >= 60;
+                                            
+                                            // 计算行权概率：优先使用assignment_probability，否则用delta的绝对值
+                                            const exerciseProb = opt.scores?.assignment_probability 
+                                                ? (opt.scores.assignment_probability * 100) 
+                                                : (opt.delta ? Math.abs(opt.delta) * 100 : 0);
+                                            
+                                            // 计算价格差：CALL是strike - stockPrice，PUT是stockPrice - strike
+                                            const stockPrice = displayStockPrice || 0;
+                                            const priceDiff = opt.put_call === 'CALL' 
+                                                ? opt.strike - stockPrice 
+                                                : stockPrice - opt.strike;
+                                            
+                                            // 计算权利金：优先使用premium，否则用中间价
+                                            const premium = opt.premium || 
+                                                ((opt.bid_price && opt.ask_price) 
+                                                    ? (opt.bid_price + opt.ask_price) / 2 
+                                                    : opt.latest_price || 0);
 
                                             return (
                                                 <tr
@@ -1300,6 +1349,15 @@ export default function Options() {
                                                     <td><small>{opt.volume} / {opt.open_interest}</small></td>
                                                     <td>{formatPercent(opt.implied_vol)}</td>
                                                     <td>{formatNumber(opt.delta, 3)}</td>
+                                                    <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
+                                                        {exerciseProb.toFixed(1)}%
+                                                    </td>
+                                                    <td style={{ color: priceDiff > 0 ? 'var(--bull)' : priceDiff < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                        {priceDiff >= 0 ? '+' : ''}{formatNumber(priceDiff, 2)}
+                                                    </td>
+                                                    <td style={{ fontWeight: 500 }}>
+                                                        ${formatNumber(premium, 2)}
+                                                    </td>
                                                     <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
                                                         {opt.scores?.annualized_return?.toFixed(1)}%
                                                     </td>
