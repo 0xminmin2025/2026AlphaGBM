@@ -94,4 +94,48 @@ def create_app(config_class=Config):
         except Exception as e:
             return {'success': False, 'error': str(e)}, 500
 
+    # Flask CLI command to update holding dates
+    @app.cli.command('update-holding-dates')
+    def update_holding_dates_command():
+        """Update all portfolio holdings' created_at to 2026-01-01"""
+        from .models import PortfolioHolding
+        from sqlalchemy import text
+        from datetime import datetime
+        
+        target_date = datetime(2026, 1, 1, 0, 0, 0)
+        
+        try:
+            # Count holdings
+            result = db.session.execute(text("SELECT COUNT(*) FROM portfolio_holdings"))
+            total_count = result.scalar()
+            print(f"Found {total_count} portfolio holdings")
+            
+            # Update all holdings
+            result = db.session.execute(
+                text("UPDATE portfolio_holdings SET created_at = :target_date WHERE created_at != :target_date"),
+                {"target_date": target_date}
+            )
+            updated_count = result.rowcount
+            db.session.commit()
+            
+            if updated_count > 0:
+                print(f"✅ Successfully updated {updated_count} holdings' created_at to 2026-01-01")
+            else:
+                print("✅ All holdings already have created_at = 2026-01-01")
+            
+            # Verify
+            print("\nVerifying updates...")
+            result = db.session.execute(
+                text("SELECT ticker, style, created_at FROM portfolio_holdings ORDER BY ticker LIMIT 5")
+            )
+            for row in result:
+                print(f"  {row[0]} ({row[1]}): {row[2]}")
+                
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
     return app

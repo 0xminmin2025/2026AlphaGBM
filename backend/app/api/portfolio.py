@@ -1,13 +1,52 @@
 from flask import Blueprint, request, jsonify, g
 from ..models import db, PortfolioHolding, DailyProfitLoss, StyleProfit
 from ..utils.serialization import convert_numpy_types
+from ..scheduler import get_exchange_rates, convert_to_usd
 import yfinance as yf
 import logging
 from datetime import datetime, timedelta
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, text
 
 portfolio_bp = Blueprint('portfolio', __name__, url_prefix='/api/portfolio')
 logger = logging.getLogger(__name__)
+
+@portfolio_bp.route('/update-holding-dates', methods=['POST'])
+def update_holding_dates():
+    """
+    Update all portfolio holdings' created_at date to 2026-01-01
+    This is a one-time operation to set the base date for all holdings
+    """
+    try:
+        target_date = datetime(2026, 1, 1, 0, 0, 0)
+        
+        # Count holdings first
+        result = db.session.execute(text("SELECT COUNT(*) FROM portfolio_holdings"))
+        total_count = result.scalar()
+        
+        # Update all holdings
+        result = db.session.execute(
+            text("UPDATE portfolio_holdings SET created_at = :target_date WHERE created_at != :target_date"),
+            {"target_date": target_date}
+        )
+        updated_count = result.rowcount
+        db.session.commit()
+        
+        logger.info(f"Updated {updated_count} holdings' created_at to 2026-01-01")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated {updated_count} holdings to 2026-01-01',
+            'total_holdings': total_count,
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating holding dates: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @portfolio_bp.route('/holdings', methods=['GET'])
 def get_portfolio_holdings():
@@ -82,12 +121,38 @@ def get_portfolio_holdings():
 
             holdings_by_style[holding.style.lower()].append(holding_data)
 
+        # Get exchange rates for currency conversion
+        exchange_rates = get_exchange_rates()
+
         # Get style statistics from latest daily data
         style_stats = {}
         styles = ['quality', 'value', 'growth', 'momentum']
 
         for style in styles:
-            # Get latest profit data for this style
+            # Calculate current values from holdings first (most accurate)
+            # IMPORTANT: Convert all holdings to USD before summing
+            holdings_for_style = holdings_by_style[style]
+            total_cost_usd = 0.0
+            total_current_usd = 0.0
+
+            for h in holdings_for_style:
+                # Convert cost and current value to USD
+                cost_amount = h['cost'] * h['shares']
+                current_amount = h['current'] * h['shares']
+                currency = h.get('currency', 'USD')
+                
+                cost_usd = convert_to_usd(cost_amount, currency, exchange_rates)
+                current_usd = convert_to_usd(current_amount, currency, exchange_rates)
+                
+                total_cost_usd += cost_usd
+                total_current_usd += current_usd
+
+            if total_cost_usd > 0:
+                current_profit_percent = ((total_current_usd - total_cost_usd) / total_cost_usd) * 100
+            else:
+                current_profit_percent = 0.0
+
+            # Get latest profit data for this style from database
             latest_style_profit = StyleProfit.query.filter_by(style=style).order_by(
                 desc(StyleProfit.trading_date)
             ).first()
@@ -97,38 +162,28 @@ def get_portfolio_holdings():
                 desc(StyleProfit.trading_date)
             ).offset(1).first()
 
-            if latest_style_profit:
-                profit_loss_percent = latest_style_profit.style_profit_loss_percent
+            # Calculate daily change
+            daily_change = 0.0
+            if latest_style_profit and yesterday_style_profit:
+                # Use database values if available
+                daily_change = (latest_style_profit.style_profit_loss_percent -
+                              yesterday_style_profit.style_profit_loss_percent)
+            elif latest_style_profit:
+                # If only one day of data, compare with current calculated value
+                daily_change = current_profit_percent - latest_style_profit.style_profit_loss_percent
 
-                # Calculate daily change
-                daily_change = 0.0
-                if yesterday_style_profit:
-                    daily_change = (latest_style_profit.style_profit_loss_percent -
-                                  yesterday_style_profit.style_profit_loss_percent)
+            # Always use real-time calculated values for accuracy
+            # Database values may be stale or inaccurate
+            profit_loss_percent = current_profit_percent
+            market_value = total_current_usd
+            investment = total_cost_usd
 
-                style_stats[style] = {
-                    'profitLossPercent': f"{profit_loss_percent:.1f}",
-                    'vsYesterdayPercent': f"{daily_change:.1f}",
-                    'market_value': latest_style_profit.style_market_value,
-                    'investment': latest_style_profit.style_investment
-                }
-            else:
-                # Fallback to calculated values from holdings
-                holdings_for_style = holdings_by_style[style]
-                total_cost = sum(h['cost'] * h['shares'] for h in holdings_for_style)
-                total_current = sum(h['current'] * h['shares'] for h in holdings_for_style)
-
-                if total_cost > 0:
-                    profit_percent = ((total_current - total_cost) / total_cost) * 100
-                else:
-                    profit_percent = 0
-
-                style_stats[style] = {
-                    'profitLossPercent': f"{profit_percent:.1f}",
-                    'vsYesterdayPercent': "0.0",
-                    'market_value': total_current,
-                    'investment': total_cost
-                }
+            style_stats[style] = {
+                'profitLossPercent': f"{profit_loss_percent:.1f}",
+                'vsYesterdayPercent': f"{daily_change:.1f}",
+                'market_value': market_value,
+                'investment': investment
+            }
 
         # Get historical data for chart (last 30 days)
         chart_data = []

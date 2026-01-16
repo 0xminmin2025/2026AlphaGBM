@@ -190,9 +190,9 @@ export default function Landing() {
         },
         styles: {
             title: i18n.language === 'zh' ? "投资理念与四大风格" : "Model Philosophy & 4 Styles",
-            desc: i18n.language === 'zh' ? "基于G=B+M模型，系统自动适配您的投资风格" : "Based on G=B+M Model, adapting to your investment style",
+            desc: "", // Removed: "基于G=B+M模型，系统自动适配您的投资风格"
             cards: [
-                { name: i18n.language === 'zh' ? "质量策略" : "Quality", color: "text-emerald-400", desc: i18n.language === 'zh' ? "护城河深、财务稳健。适合长期持有。" : "Wide moat, strong financials. Long-term." },
+                { name: i18n.language === 'zh' ? "质量策略" : "Quality", color: "text-emerald-400", desc: i18n.language === 'zh' ? "护城河深、财务稳健。" : "Wide moat, strong financials." },
                 { name: i18n.language === 'zh' ? "价值策略" : "Value", color: "text-blue-400", desc: i18n.language === 'zh' ? "低估值、安全边际。寻找错杀机会。" : "Undervalued, safety margin. Mid-term." },
                 { name: i18n.language === 'zh' ? "成长策略" : "Growth", color: "text-purple-400", desc: i18n.language === 'zh' ? "高营收增速。容忍高估值换取成长。" : "High revenue growth. High risk tolerance." },
                 { name: i18n.language === 'zh' ? "趋势策略" : "Momentum", color: "text-orange-400", desc: i18n.language === 'zh' ? "价格动量驱动。快进快出跟随趋势。" : "Price action driven. Short-term trading." }
@@ -213,7 +213,8 @@ export default function Landing() {
                 { question: "AlphaGBM 支持哪些市场的股票分析？", answer: "AlphaGBM 支持三大市场：美股（AAPL、TSLA）、港股（0700.HK、2525.HK）、A股（600519、000001）。系统自动识别市场类型，无需手动添加后缀。覆盖全市场数据，打破信息壁垒，一站式完成多市场投资分析。" },
                 { question: "AlphaGBM 的 G=B+M 模型是什么？", answer: "G=B+M 是 AlphaGBM 的核心投资模型，G (Gain) 代表收益，B (Basics) 代表基本面，M (Momentum) 代表动量。模型将股票收益解构为基本面支撑与市场动量的叠加，通过量化分析识别收益与内在价值的偏离，帮助投资者发现投资机会。适用于所有投资风格。" },
                 { question: "AlphaGBM 的期权分析功能有哪些？", answer: "AlphaGBM 期权分析模块提供专业的期权策略分析，包括波动率分析、希腊字母（Greeks）计算、期权链数据、隐含波动率（IV）分析等。系统基于概率计算，帮助您寻找非对称收益机会。支持多种策略构建，为期权交易提供量化决策支持。" },
-                { question: "AlphaGBM 如何进行风险量化评估？", answer: "AlphaGBM 采用 0-10 分动态风险评级系统，综合评估基本面风险（营收增长、利润率、估值水平）、技术面风险（价格位置、成交量异常）、市场情绪风险（VIX 恐慌指数、Put/Call 比率）、宏观风险（利率、汇率、经济指标）等多个维度。结合 VIX 和 Greeks 等量化指标，精准识别危险信号。" }
+                { question: "AlphaGBM 如何进行风险量化评估？", answer: "AlphaGBM 采用 0-10 分动态风险评级系统，综合评估基本面风险（营收增长、利润率、估值水平）、技术面风险（价格位置、成交量异常）、市场情绪风险（VIX 恐慌指数、Put/Call 比率）、宏观风险（利率、汇率、经济指标）等多个维度。结合 VIX 和 Greeks 等量化指标，精准识别危险信号。" },
+                { question: "AlphaGBM 的实盘追踪功能如何运作？", answer: "AlphaGBM 提供四大投资风格组合的实盘追踪，每个组合初始资金25万美元，共100万美元。系统每日自动计算盈亏、更新持仓市值，并提供累计收益走势图。所有数据实时更新，帮助投资者了解不同风格策略的实际表现。" }
             ]
         },
         cta: {
@@ -572,6 +573,27 @@ export default function Landing() {
                         </div>
                     </section>
 
+                    {/* Styles Section - Moved before Portfolio */}
+                    <section id="styles" className="py-6 sm:py-8 bg-slate-900/30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
+                        <div className="max-w-7xl mx-auto">
+                            <div className="text-center mb-6 sm:mb-8">
+                                <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-2">{content.styles.title}</h2>
+                                {content.styles.desc && (
+                                    <p className="text-[var(--text-secondary)] text-sm sm:text-base">{content.styles.desc}</p>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                                {content.styles.cards.map((style, index) => (
+                                    <div key={index} className="glass-card p-3 sm:p-4 rounded-xl relative overflow-hidden group">
+                                        <div className={`absolute top-0 left-0 w-1 h-full ${style.color.replace('text', 'bg').replace('-400', '-500')}`}></div>
+                                        <h3 className={`text-base sm:text-lg font-bold mb-1.5 ${style.color}`}>{style.name}</h3>
+                                        <p className="text-[var(--text-secondary)] text-xs sm:text-sm leading-relaxed">{style.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Portfolio Section */}
                     <section id="portfolio" className="my-12 sm:my-20 px-4 sm:px-0">
                         <div className="text-center mb-8 sm:mb-12">
@@ -794,41 +816,22 @@ export default function Landing() {
                     </section>
                 </div>
 
-                {/* Styles Section */}
-                <section id="styles" className="py-12 sm:py-20 bg-slate-900/30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                    <div className="max-w-7xl mx-auto">
-                        <div className="text-center mb-10 sm:mb-16">
-                            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight lg:text-4xl mb-4">{content.styles.title}</h2>
-                            <p className="text-[var(--text-secondary)] text-sm sm:text-base">{content.styles.desc}</p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                            {content.styles.cards.map((style, index) => (
-                                <div key={index} className="glass-card p-4 sm:p-6 rounded-xl relative overflow-hidden group">
-                                    <div className={`absolute top-0 left-0 w-1 h-full ${style.color.replace('text', 'bg').replace('-400', '-500')}`}></div>
-                                    <h3 className={`text-lg sm:text-xl font-bold mb-2 ${style.color}`}>{style.name}</h3>
-                                    <p className="text-[var(--text-secondary)] text-sm leading-relaxed">{style.desc}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
                 {/* Features Section */}
-                <section id="features" className="py-12 sm:py-20 px-4 sm:px-0">
+                <section id="features" className="py-6 sm:py-8 px-4 sm:px-0">
                     <div className="max-w-5xl mx-auto">
-                        <div className="text-center mb-8 sm:mb-12">
-                            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight lg:text-4xl mb-6 sm:mb-8">{content.features.title}</h2>
+                        <div className="text-center mb-4 sm:mb-6">
+                            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-2">{content.features.title}</h2>
                         </div>
-                        <div className="glass-card rounded-xl p-4 sm:p-8">
-                            <div className="space-y-3 sm:space-y-4">
+                        <div className="glass-card rounded-xl p-3 sm:p-5">
+                            <div className="space-y-2 sm:space-y-2.5">
                                 {content.features.items.map((feature, idx) => (
-                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 border-b border-slate-700/50 last:border-b-0 gap-2 sm:gap-0">
+                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-2 border-b border-slate-700/50 last:border-b-0 gap-1.5 sm:gap-0">
                                         <div className="flex-1">
-                                            <span className="text-base sm:text-lg font-semibold text-white">{feature.title}</span>
+                                            <span className="text-sm sm:text-base font-semibold text-white">{feature.title}</span>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-slate-500 hidden sm:inline">|</span>
-                                            <span className="text-[var(--text-secondary)] font-mono text-xs sm:text-sm">{feature.desc}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-slate-500 hidden sm:inline text-xs">|</span>
+                                            <span className="text-[var(--text-secondary)] font-mono text-xs">{feature.desc}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -838,16 +841,16 @@ export default function Landing() {
                 </section>
 
                 {/* FAQ */}
-                <section id="faq" className="py-12 sm:py-20 px-4 sm:px-0">
+                <section id="faq" className="py-6 sm:py-8 px-4 sm:px-0">
                     <div className="max-w-7xl mx-auto">
-                        <div className="text-center mb-8 sm:mb-12">
-                            <h2 className="text-2xl sm:text-3xl font-bold mb-4">{content.faq.title}</h2>
+                        <div className="text-center mb-4 sm:mb-6">
+                            <h2 className="text-xl sm:text-2xl font-bold mb-2">{content.faq.title}</h2>
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                             {content.faq.items.map((item, idx) => (
-                                <div key={idx} className="glass-card rounded-xl p-4 sm:p-6">
-                                    <h3 className="text-base sm:text-lg font-semibold text-white mb-3">{item.question}</h3>
-                                    <p className="text-[var(--text-secondary)] leading-relaxed text-sm sm:text-base">{item.answer}</p>
+                                <div key={idx} className="glass-card rounded-xl p-3 sm:p-4">
+                                    <h3 className="text-sm sm:text-base font-semibold text-white mb-2">{item.question}</h3>
+                                    <p className="text-[var(--text-secondary)] leading-relaxed text-xs sm:text-sm">{item.answer}</p>
                                 </div>
                             ))}
                         </div>
