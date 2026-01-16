@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -253,6 +253,63 @@ const styles = `
         background: rgba(13, 155, 151, 0.1);
     }
 
+    /* Range filter styles - yellow sliders with continuous appearance */
+    .range-filter {
+        -webkit-appearance: none;
+        appearance: none;
+        height: 6px;
+        background: rgba(255, 215, 0, 0.3);
+        border-radius: 3px;
+        outline: none;
+        margin: 0;
+    }
+
+    .range-filter::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        background: #FFD700;
+        border: 2px solid #FFA500;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(255, 215, 0, 0.4);
+    }
+
+    .range-filter::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        background: #FFD700;
+        border: 2px solid #FFA500;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(255, 215, 0, 0.4);
+    }
+
+    .range-filter::-webkit-slider-track {
+        height: 6px;
+        background: rgba(255, 215, 0, 0.3);
+        border-radius: 3px;
+    }
+
+    .range-filter::-moz-range-track {
+        height: 6px;
+        background: rgba(255, 215, 0, 0.3);
+        border-radius: 3px;
+    }
+
+    .range-filter:hover::-webkit-slider-thumb {
+        background: #FFED4E;
+        box-shadow: 0 3px 6px rgba(255, 215, 0, 0.6);
+        transform: scale(1.1);
+    }
+
+    .range-filter:hover::-moz-range-thumb {
+        background: #FFED4E;
+        box-shadow: 0 3px 6px rgba(255, 215, 0, 0.6);
+        transform: scale(1.1);
+    }
+
     .btn-primary {
         background: var(--primary);
         border: none;
@@ -357,6 +414,10 @@ export default function Options() {
     // Sorting state
     const [sortColumn, setSortColumn] = useState<string>('score');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    // Filter state
+    const [strikeRange, setStrikeRange] = useState<[number, number]>([0, 0]);
+    const [returnRange, setReturnRange] = useState<[number, number]>([0, 0]);
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
@@ -495,6 +556,33 @@ export default function Options() {
 
         console.log('Filtered options:', options.length);
 
+        // Apply filters
+        try {
+            if (strikeRange[0] > 0 && strikeRange[1] > 0) {
+                const minStrike = Math.min(strikeRange[0], strikeRange[1]);
+                const maxStrike = Math.max(strikeRange[0], strikeRange[1]);
+                if (isFinite(minStrike) && isFinite(maxStrike)) {
+                    options = options.filter(opt => {
+                        const strike = opt.strike;
+                        return isFinite(strike) && strike >= minStrike && strike <= maxStrike;
+                    });
+                }
+            }
+
+            if (returnRange[0] !== 0 || returnRange[1] !== 0) {
+                const minReturn = Math.min(returnRange[0], returnRange[1]);
+                const maxReturn = Math.max(returnRange[0], returnRange[1]);
+                if (isFinite(minReturn) && isFinite(maxReturn)) {
+                    options = options.filter(opt => {
+                        const annualReturn = opt.scores?.annualized_return || 0;
+                        return isFinite(annualReturn) && annualReturn >= minReturn && annualReturn <= maxReturn;
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error applying filters:', error);
+        }
+
         // Sort based on selected column and direction
         options.sort((a, b) => {
             let valueA: number | null = null;
@@ -548,6 +636,13 @@ export default function Options() {
             if (valueA === null) return 1;
             if (valueB === null) return -1;
 
+            // Ensure values are finite
+            if (!isFinite(valueA) || !isFinite(valueB)) {
+                if (!isFinite(valueA) && !isFinite(valueB)) return 0;
+                if (!isFinite(valueA)) return 1;
+                return -1;
+            }
+
             const diff = valueA - valueB;
             return sortDirection === 'asc' ? diff : -diff;
         });
@@ -591,6 +686,59 @@ export default function Options() {
     // Use historical chain data if viewing history, otherwise use current chain
     const displayChain = isHistoricalView ? historicalChain : chain;
     const displayStockPrice = isHistoricalView ? (historicalChain?.real_stock_price || stockPrice) : stockPrice;
+
+    // Get all options using useMemo to avoid recalculating on every render
+    const allOptions = useMemo((): OptionData[] => {
+        if (!displayChain) return [];
+
+        let options: OptionData[] = [];
+        if (strategy === 'sell_put' || strategy === 'buy_put') {
+            options = Array.isArray(displayChain.puts) ? [...displayChain.puts] : [];
+        } else {
+            options = Array.isArray(displayChain.calls) ? [...displayChain.calls] : [];
+        }
+        return options;
+    }, [displayChain, strategy]);
+
+    // Calculate ranges for filters
+    useEffect(() => {
+        if (!displayChain || allOptions.length === 0) {
+            setStrikeRange([0, 0]);
+            setReturnRange([0, 0]);
+            return;
+        }
+
+        try {
+            const strikes = allOptions.map(opt => opt.strike).filter(s => s > 0 && !isNaN(s) && isFinite(s));
+            const returns = allOptions
+                .map(opt => opt.scores?.annualized_return || 0)
+                .filter(r => r !== 0 && !isNaN(r) && isFinite(r));
+
+            if (strikes.length > 0) {
+                const minStrike = Math.min(...strikes);
+                const maxStrike = Math.max(...strikes);
+                if (isFinite(minStrike) && isFinite(maxStrike) && minStrike < maxStrike) {
+                    setStrikeRange([minStrike, maxStrike]);
+                }
+            } else {
+                setStrikeRange([0, 0]);
+            }
+
+            if (returns.length > 0) {
+                const minReturn = Math.min(...returns);
+                const maxReturn = Math.max(...returns);
+                if (isFinite(minReturn) && isFinite(maxReturn) && minReturn < maxReturn) {
+                    setReturnRange([minReturn, maxReturn]);
+                }
+            } else {
+                setReturnRange([0, 0]);
+            }
+        } catch (error) {
+            console.error('Error calculating filter ranges:', error);
+            setStrikeRange([0, 0]);
+            setReturnRange([0, 0]);
+        }
+    }, [displayChain?.symbol, displayChain?.expiry_date, strategy, allOptions.length]);
 
     const filteredOptions = getFilteredOptions();
     const topRecommendations = filteredOptions.filter(o => getOptionScore(o) >= 60).slice(0, 5);
@@ -956,6 +1104,124 @@ export default function Options() {
                         <div className={strategy.includes('call') ? 'header-calls' : 'header-puts'}>
                             {strategy.includes('call') ? 'CALLS (看涨)' : 'PUTS (看跌)'} - {strategyLabels[strategy]}
                         </div>
+                        
+                        {/* Filter Controls */}
+                        {(() => {
+                            try {
+                                if (!allOptions || allOptions.length === 0) return null;
+                                
+                                const strikes = allOptions
+                                    .map(o => o?.strike)
+                                    .filter(s => s != null && s > 0 && !isNaN(s) && isFinite(s));
+                                const returns = allOptions
+                                    .map(o => o?.scores?.annualized_return || 0)
+                                    .filter(r => r !== 0 && !isNaN(r) && isFinite(r));
+                                
+                                if (strikes.length === 0 || returns.length === 0) {
+                                    return null;
+                                }
+                                
+                                const strikeMin = Math.min(...strikes);
+                                const strikeMax = Math.max(...strikes);
+                                const returnMin = Math.min(...returns);
+                                const returnMax = Math.max(...returns);
+                                
+                                // Ensure valid ranges
+                                if (!isFinite(strikeMin) || !isFinite(strikeMax) || !isFinite(returnMin) || !isFinite(returnMax)) {
+                                    return null;
+                                }
+                                
+                                // Ensure min < max
+                                if (strikeMin >= strikeMax || returnMin >= returnMax) {
+                                    return null;
+                                }
+                                
+                                const currentStrikeMin = Math.min(strikeRange[0], strikeRange[1]);
+                                const currentStrikeMax = Math.max(strikeRange[0], strikeRange[1]);
+                                const currentReturnMin = Math.min(returnRange[0], returnRange[1]);
+                                const currentReturnMax = Math.max(returnRange[0], returnRange[1]);
+                                
+                                return (
+                                    <div className="p-4" style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Strike Price Filter */}
+                                            <div>
+                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                    行权价范围: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
+                                                </label>
+                                                <div className="flex items-center gap-1">
+                                                    <input
+                                                        type="range"
+                                                        min={strikeMin}
+                                                        max={strikeMax}
+                                                        step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
+                                                        value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[0]))}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            setStrikeRange([val, Math.max(val, strikeRange[1])]);
+                                                        }}
+                                                        className="flex-1 range-filter"
+                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min={strikeMin}
+                                                        max={strikeMax}
+                                                        step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
+                                                        value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[1]))}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            setStrikeRange([Math.min(val, strikeRange[0]), val]);
+                                                        }}
+                                                        className="flex-1 range-filter"
+                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Annualized Return Filter */}
+                                            <div>
+                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                    年化收益范围: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
+                                                </label>
+                                                <div className="flex items-center gap-1">
+                                                    <input
+                                                        type="range"
+                                                        min={returnMin}
+                                                        max={returnMax}
+                                                        step={Math.max(0.1, (returnMax - returnMin) / 100)}
+                                                        value={Math.max(returnMin, Math.min(returnMax, returnRange[0]))}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            setReturnRange([val, Math.max(val, returnRange[1])]);
+                                                        }}
+                                                        className="flex-1 range-filter"
+                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min={returnMin}
+                                                        max={returnMax}
+                                                        step={Math.max(0.1, (returnMax - returnMin) / 100)}
+                                                        value={Math.max(returnMin, Math.min(returnMax, returnRange[1]))}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            setReturnRange([Math.min(val, returnRange[0]), val]);
+                                                        }}
+                                                        className="flex-1 range-filter"
+                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            } catch (error) {
+                                console.error('Error rendering filter controls:', error);
+                                return null;
+                            }
+                        })()}
+
                         <div style={{ overflowX: 'auto' }}>
                             <div className="table-container">
                                 <table className="option-table">
