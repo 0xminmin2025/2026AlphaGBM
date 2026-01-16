@@ -282,12 +282,9 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                       <span className="text-lg sm:text-xl font-bold text-[#0D9B97]">
                         {item.symbol}
                       </span>
-                      <span className={`px-2 py-1 rounded text-xs ${getAnalysisTypeColor(item.analysis_type)}`}>
-                        {getAnalysisTypeLabel(item.analysis_type)}
-                      </span>
-                      {item.option_identifier && (
-                        <span className="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-xs font-mono">
-                          {item.option_identifier}
+                      {item.expiry_date && (
+                        <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
+                          到期日: {item.expiry_date}
                         </span>
                       )}
                       <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
@@ -300,63 +297,43 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-3">
-                    {item.analysis_type === 'basic_chain' ? (
-                      <>
+                  {/* Only show details for basic_chain analysis (the only type we actually use) */}
+                  {item.analysis_type === 'basic_chain' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-3">
+                      {item.strike_price && (
                         <div>
                           <div className="text-xs text-slate-500 mb-1">行权价格</div>
                           <div className="text-sm font-medium text-slate-300">
                             {formatCurrency(item.strike_price)}
                           </div>
                         </div>
+                      )}
+                      {item.option_type && (
                         <div>
                           <div className="text-xs text-slate-500 mb-1">期权类型</div>
                           <div className={`text-sm font-medium ${item.option_type === 'call' ? 'text-green-400' : 'text-red-400'}`}>
                             {item.option_type === 'call' ? 'Call' : 'Put'}
                           </div>
                         </div>
+                      )}
+                      {item.option_score && (
                         <div>
                           <div className="text-xs text-slate-500 mb-1">期权评分</div>
                           <div className="text-sm font-medium text-[#0D9B97]">
-                            {item.option_score ? `${item.option_score}/10` : 'N/A'}
+                            {item.option_score}/10
                           </div>
                         </div>
+                      )}
+                      {item.iv_rank && (
                         <div>
                           <div className="text-xs text-slate-500 mb-1">IV排名</div>
                           <div className="text-sm font-medium text-purple-400">
-                            {item.iv_rank ? `${item.iv_rank}%` : 'N/A'}
+                            {item.iv_rank}%
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <div className="text-xs text-slate-500 mb-1">到期日期</div>
-                          <div className="text-sm font-medium text-slate-300">
-                            {item.expiry_date || 'N/A'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500 mb-1">VRP分析</div>
-                          <div className="text-sm font-medium text-green-400">
-                            {item.vrp_analysis ? '已完成' : 'N/A'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500 mb-1">风险分析</div>
-                          <div className="text-sm font-medium text-yellow-400">
-                            {item.risk_analysis ? '已完成' : 'N/A'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-slate-500 mb-1">分析类型</div>
-                          <div className="text-sm font-medium text-purple-400">
-                            增强分析
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
 
                   {item.ai_summary && (
                     <div className="text-slate-400" style={{

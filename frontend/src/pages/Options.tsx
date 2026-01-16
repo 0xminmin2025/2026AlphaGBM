@@ -119,6 +119,11 @@ const styles = `
         font-size: 0.875rem;
         font-weight: 600;
         color: var(--foreground);
+        transition: background-color 0.2s;
+    }
+
+    .option-table th:hover {
+        background-color: rgba(13, 155, 151, 0.2);
     }
 
     .option-table td {
@@ -349,6 +354,10 @@ export default function Options() {
     const [historicalChain, setHistoricalChain] = useState<OptionChainResponse | null>(null);
     const [isHistoricalView, setIsHistoricalView] = useState(false);
 
+    // Sorting state
+    const [sortColumn, setSortColumn] = useState<string>('score');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
     const [taskStep, setTaskStep] = useState('');
@@ -486,11 +495,61 @@ export default function Options() {
 
         console.log('Filtered options:', options.length);
 
-        // Sort by score (highest first)
+        // Sort based on selected column and direction
         options.sort((a, b) => {
-            const scoreA = getOptionScore(a);
-            const scoreB = getOptionScore(b);
-            return scoreB - scoreA;
+            let valueA: number | null = null;
+            let valueB: number | null = null;
+
+            switch (sortColumn) {
+                case 'strike':
+                    valueA = a.strike;
+                    valueB = b.strike;
+                    break;
+                case 'latest':
+                    valueA = a.latest_price || 0;
+                    valueB = b.latest_price || 0;
+                    break;
+                case 'bid':
+                    valueA = a.bid_price || 0;
+                    valueB = b.bid_price || 0;
+                    break;
+                case 'ask':
+                    valueA = a.ask_price || 0;
+                    valueB = b.ask_price || 0;
+                    break;
+                case 'volume':
+                    valueA = a.volume || 0;
+                    valueB = b.volume || 0;
+                    break;
+                case 'open_interest':
+                    valueA = a.open_interest || 0;
+                    valueB = b.open_interest || 0;
+                    break;
+                case 'iv':
+                    valueA = a.implied_vol || 0;
+                    valueB = b.implied_vol || 0;
+                    break;
+                case 'delta':
+                    valueA = a.delta || 0;
+                    valueB = b.delta || 0;
+                    break;
+                case 'annualized_return':
+                    valueA = a.scores?.annualized_return || 0;
+                    valueB = b.scores?.annualized_return || 0;
+                    break;
+                case 'score':
+                default:
+                    valueA = getOptionScore(a);
+                    valueB = getOptionScore(b);
+                    break;
+            }
+
+            if (valueA === null && valueB === null) return 0;
+            if (valueA === null) return 1;
+            if (valueB === null) return -1;
+
+            const diff = valueA - valueB;
+            return sortDirection === 'asc' ? diff : -diff;
         });
 
         return options;
@@ -535,6 +594,24 @@ export default function Options() {
 
     const filteredOptions = getFilteredOptions();
     const topRecommendations = filteredOptions.filter(o => getOptionScore(o) >= 60).slice(0, 5);
+
+    // Handle column header click for sorting
+    const handleSort = (column: string) => {
+        if (sortColumn === column) {
+            // Toggle direction if clicking the same column
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            // Set new column and default to descending
+            setSortColumn(column);
+            setSortDirection('desc');
+        }
+    };
+
+    // Get sort indicator for table header
+    const getSortIndicator = (column: string) => {
+        if (sortColumn !== column) return null;
+        return sortDirection === 'asc' ? ' ↑' : ' ↓';
+    };
 
     return (
         <div className="animate-in fade-in" style={{ color: 'var(--foreground)' }}>
@@ -884,14 +961,54 @@ export default function Options() {
                                 <table className="option-table">
                                 <thead>
                                     <tr>
-                                        <th>Strike (行权价)</th>
-                                        <th>Latest (最新价)</th>
-                                        <th>Bid/Ask (买/卖价)</th>
-                                        <th>Vol/OI (成交量/持仓量)</th>
-                                        <th>IV (隐含波动率)</th>
-                                        <th>Delta (Delta值)</th>
-                                        <th>年化收益 (Annualized Return)</th>
-                                        <th>评分 (Score)</th>
+                                        <th 
+                                            onClick={() => handleSort('strike')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            Strike (行权价){getSortIndicator('strike')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('latest')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            Latest (最新价){getSortIndicator('latest')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('bid')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            Bid/Ask (买/卖价){getSortIndicator('bid')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('volume')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            Vol/OI (成交量/持仓量){getSortIndicator('volume')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('iv')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            IV (隐含波动率){getSortIndicator('iv')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('delta')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            Delta (Delta值){getSortIndicator('delta')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('annualized_return')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            年化收益 (Annualized Return){getSortIndicator('annualized_return')}
+                                        </th>
+                                        <th 
+                                            onClick={() => handleSort('score')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            评分 (Score){getSortIndicator('score')}
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
