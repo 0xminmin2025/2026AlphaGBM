@@ -170,11 +170,11 @@ const styles = `
         display: inline-block;
         background: var(--primary);
         color: white;
-        padding: 0.5rem 1.2rem;
-        border-radius: 8px;
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
         font-weight: 700;
-        font-size: 1.2rem;
-        margin: 0 0.4rem;
+        font-size: 0.9rem;
+        margin: 0 0.25rem;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     }
 
@@ -183,11 +183,11 @@ const styles = `
 
     .pillar-item {
         background: var(--muted);
-        border-left: 4px solid var(--primary);
-        padding: 1rem 1.25rem;
+        border-left: 3px solid var(--primary);
+        padding: 0.6rem 0.9rem;
         border-radius: 6px;
-        font-size: 0.95rem;
-        line-height: 1.6;
+        font-size: 0.8rem;
+        line-height: 1.4;
         transition: all 0.2s;
     }
 
@@ -200,9 +200,9 @@ const styles = `
     .style-badge {
         background: var(--muted);
         border: 1px solid var(--border);
-        padding: 0.65rem 1.25rem;
+        padding: 0.4rem 0.9rem;
         border-radius: 24px;
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         color: var(--foreground);
         text-align: center;
     }
@@ -358,24 +358,24 @@ function InvestmentPhilosophy() {
         <div className="philosophy-card shadow-md mb-4">
             <div
                 className="cursor-pointer"
-                style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: expanded ? '1px solid var(--border)' : 'none' }}
+                style={{ padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: expanded ? '1px solid var(--border)' : 'none' }}
                 onClick={() => setExpanded(!expanded)}
             >
-                <div className="flex items-center gap-3" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1.3rem' }}>
+                <div className="flex items-center gap-2" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
                     <i className="bi bi-lightbulb-fill"></i>
                     <span>Alpha GBM 投资理念</span>
                 </div>
-                <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.9rem' }}>
+                <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.8rem' }}>
                     <span>{expanded ? '收起' : '展开'}</span>
                     <i className={`bi bi-chevron-${expanded ? 'up' : 'down'}`}></i>
                 </div>
             </div>
             {expanded && (
-                <div style={{ padding: '1.5rem' }}>
+                <div style={{ padding: '1rem' }}>
                     {/* Core Model */}
-                    <div style={{ marginBottom: '2rem' }}>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', lineHeight: 1.7 }}>
-                            <strong style={{ color: 'var(--foreground)' }}>核心模型：<span className="philosophy-formula">G = B + M</span></strong>
+                    <div style={{ marginBottom: '1.2rem' }}>
+                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                            <strong style={{ color: 'var(--foreground)', fontSize: '0.85rem' }}>核心模型：<span className="philosophy-formula">G = B + M</span></strong>
                             。我们将股票收益<span className="philosophy-formula">G (Gain)</span>解构为基本面
                             <span className="philosophy-formula bull">B (Basics)</span>与市场动量
                             <span className="philosophy-formula warning">M (Momentum)</span>的叠加。通过量化分析识别收益与内在价值的偏离，寻找投资机会。
@@ -383,28 +383,28 @@ function InvestmentPhilosophy() {
                     </div>
 
                     {/* Five Pillars */}
-                    <div style={{ marginBottom: '2rem' }}>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.5rem', fontSize: '1rem' }}>五大支柱投资框架</strong>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mt-3">
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>怀疑主义</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>始终质疑，寻找不买入的理由</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>事前验尸</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>假设投资失败，提前识别风险点</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>严格风控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>硬数据计算，设置仓位上限和止损</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>风格纪律</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>严格遵守投资风格，不偏离策略</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>量化决策</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>用数据说话，减少情绪干扰</div></div>
+                    <div style={{ marginBottom: '1.2rem' }}>
+                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>五大支柱投资框架</strong>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 mt-2">
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>怀疑主义</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>始终质疑，寻找不买入的理由</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>事前验尸</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>假设投资失败，提前识别风险点</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>严格风控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>硬数据计算，设置仓位上限和止损</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>风格纪律</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>严格遵守投资风格，不偏离策略</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>量化决策</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>用数据说话，减少情绪干扰</div></div>
                         </div>
                     </div>
 
                     {/* Investment Styles */}
                     <div>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.5rem', fontSize: '1rem' }}>投资风格</strong>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>投资风格</strong>
+                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', marginBottom: '0.5rem', lineHeight: 1.4 }}>
                             系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制：
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Quality</strong>质量 - 财务稳健</div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Value</strong>价值 - 寻找低估</div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Growth</strong>成长 - 追求增长</div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.4rem' }}>Momentum</strong>趋势 - 跟随动量</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Quality</strong><span style={{ fontSize: '0.75rem' }}>质量 - 财务稳健</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Value</strong><span style={{ fontSize: '0.75rem' }}>价值 - 寻找低估</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Growth</strong><span style={{ fontSize: '0.75rem' }}>成长 - 追求增长</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Momentum</strong><span style={{ fontSize: '0.75rem' }}>趋势 - 跟随动量</span></div>
                         </div>
                     </div>
                 </div>

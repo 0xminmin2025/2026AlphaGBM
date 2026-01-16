@@ -153,17 +153,31 @@ const styles = `
     }
 
     .strategy-btn {
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
+        padding: 0.4rem 0.8rem;
+        border-radius: 0.375rem;
         border: 1px solid var(--border);
         background: var(--muted);
         color: var(--foreground);
         cursor: pointer;
         transition: all 0.2s;
+        font-size: 0.875rem;
+        font-weight: 500;
+        white-space: nowrap;
     }
 
-    .strategy-btn:hover { background: var(--primary); color: white; }
-    .strategy-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .strategy-btn:hover { 
+        background: var(--primary); 
+        color: white; 
+        border-color: var(--primary);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(13, 155, 151, 0.2);
+    }
+    .strategy-btn.active { 
+        background: var(--primary); 
+        color: white; 
+        border-color: var(--primary);
+        box-shadow: 0 2px 6px rgba(13, 155, 151, 0.3);
+    }
 
     .form-control, .form-select {
         background: var(--muted);
@@ -173,10 +187,65 @@ const styles = `
         border-radius: 0.5rem;
     }
 
+    .form-control::placeholder {
+        color: var(--muted-foreground);
+        opacity: 0.7;
+    }
+
     .form-control:focus, .form-select:focus {
         border-color: var(--primary);
         box-shadow: 0 0 0 2px rgba(13, 155, 151, 0.2);
         outline: none;
+    }
+
+    .philosophy-card {
+        background: var(--card);
+        border: 1px solid var(--primary);
+        border-radius: 8px;
+    }
+
+    .philosophy-formula {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin: 0 0.25rem;
+    }
+
+    .philosophy-formula.bull { background: var(--bull); }
+    .philosophy-formula.warning { background: var(--warning); }
+
+    .pillar-item {
+        background: var(--muted);
+        border-left: 3px solid var(--primary);
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        transition: all 0.2s;
+    }
+
+    .pillar-item:hover {
+        background: var(--card-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .style-badge {
+        background: var(--muted);
+        border: 1px solid var(--border);
+        padding: 0.4rem 0.9rem;
+        border-radius: 24px;
+        font-size: 0.8rem;
+        text-align: center;
+        transition: all 0.2s;
+    }
+
+    .style-badge:hover {
+        border-color: var(--primary);
+        background: rgba(13, 155, 151, 0.1);
     }
 
     .btn-primary {
@@ -257,10 +326,10 @@ type OptionChainResponse = {
 type Strategy = 'sell_put' | 'buy_put' | 'sell_call' | 'buy_call';
 
 const strategyLabels: Record<Strategy, string> = {
-    'sell_put': 'Sell Put',
-    'buy_put': 'Buy Put',
-    'sell_call': 'Sell Call',
-    'buy_call': 'Buy Call'
+    'sell_put': 'Sell Put (卖出看跌)',
+    'buy_put': 'Buy Put (买入看跌)',
+    'sell_call': 'Sell Call (卖出看涨)',
+    'buy_call': 'Buy Call (买入看涨)'
 };
 
 export default function Options() {
@@ -378,7 +447,10 @@ export default function Options() {
     // When expiry selected, fetch chain
     const handleExpirySelect = (expiry: string) => {
         setSelectedExpiry(expiry);
-        fetchChain(expiry);
+        // 选择到期日后立即运行分析（此时策略和股票代码都已选择）
+        if (expiry && strategy && ticker) {
+            fetchChain(expiry);
+        }
     };
 
     // Get the appropriate score based on strategy
@@ -516,12 +588,6 @@ export default function Options() {
 
             {/* Options Analysis Tab */}
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
-                    {/* Header */}
-                    <div className="header-section">
-                        <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>期权智能分析</h1>
-                        <p style={{ color: 'var(--muted-foreground)' }}>基于 G = B + M 模型与波动率曲面的期权策略扫描</p>
-                    </div>
-
             {/* Error Alert */}
             {error && (
                 <div className="mb-4 p-4 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--bear)', color: 'var(--bear)' }}>
@@ -531,33 +597,85 @@ export default function Options() {
 
             {/* Controls */}
             <div className="controls-section">
-                <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block mb-2" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem' }}>股票代码 (Symbol)</label>
-                        <div className="flex gap-2">
-                            <Input
-                                type="text"
-                                value={ticker}
-                                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                                placeholder="如 AAPL, NVDA"
-                                className="form-control flex-1"
-                            />
-                            <Button onClick={fetchExpirations} disabled={expirationsLoading} className="btn-primary">
-                                <i className="bi bi-arrow-clockwise mr-2"></i>
-                                {expirationsLoading ? '加载中...' : '加载日期'}
-                            </Button>
+                <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                    <i className="bi bi-graph-up"></i>
+                    期权智能分析
+                </h5>
+
+                {/* Step 1: 选择股票代码 - 占一行 */}
+                <div className="mb-4 flex items-center gap-3">
+                    <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>步骤1：</span> 录入股票代码（Symbol)
+                    </label>
+                    <Input
+                        type="text"
+                        value={ticker}
+                        onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                        placeholder="如 AAPL, NVDA"
+                        className="form-control flex-1"
+                    />
+                </div>
+
+                {/* Step 2: 选择策略 - 占一行 */}
+                <div className="mb-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            <span style={{ color: strategy ? 'var(--primary)' : (ticker ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤2：</span> 选择策略（Strategy)
+                        </label>
+                        <div className="flex gap-2 flex-1 flex-wrap" style={{ minWidth: 0 }}>
+                        {(Object.keys(strategyLabels) as Strategy[]).map(s => (
+                            <button
+                                key={s}
+                                className={`strategy-btn ${strategy === s ? 'active' : ''}`}
+                                onClick={() => setStrategy(s)}
+                                disabled={!ticker}
+                                style={{ 
+                                    opacity: ticker ? 1 : 0.5, 
+                                    cursor: ticker ? 'pointer' : 'not-allowed',
+                                    flex: '1 1 0',
+                                    minWidth: '100px'
+                                }}
+                            >
+                                {strategyLabels[s]}
+                            </button>
+                        ))}
                         </div>
                     </div>
+                </div>
 
-                    <div className="flex-1 min-w-[200px]">
-                        <label className="block mb-2" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem' }}>到期日 (Expiration)</label>
+                {/* Step 3 & 4: 加载日期 + 选择到期日 - 占一行 */}
+                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <div className="flex-1 min-w-[200px] flex items-center gap-3">
+                        <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
+                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (ticker && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤3：</span> 点击加载到期日（Load)
+                        </label>
+                        <Button 
+                            onClick={fetchExpirations} 
+                            disabled={expirationsLoading || !ticker || !strategy} 
+                            className="btn-primary flex-1"
+                        >
+                            {expirationsLoading ? (
+                                <i className="bi bi-arrow-clockwise mr-2"></i>
+                            ) : expirations.length > 0 ? (
+                                <i className="bi bi-check-circle mr-2"></i>
+                            ) : (
+                                <i className="bi bi-arrow-clockwise mr-2"></i>
+                            )}
+                            {expirationsLoading ? '加载中...' : '加载日期'}
+                        </Button>
+                    </div>
+
+                    <div className="flex-1 min-w-[200px] flex items-center gap-3">
+                        <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
+                            <span style={{ color: selectedExpiry ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤4：</span> 选择到期日(Expiration)
+                        </label>
                         <select
                             value={selectedExpiry}
                             onChange={(e) => handleExpirySelect(e.target.value)}
-                            className="form-select w-full"
+                            className="form-select flex-1"
                             disabled={expirations.length === 0}
                         >
-                            <option value="">{expirations.length > 0 ? '请选择到期日' : '请先加载日期'}</option>
+                            <option value="">{expirations.length > 0 ? '请选择到期日' : '请先完成步骤 3'}</option>
                             {expirations.map(exp => (
                                 <option key={exp.date} value={exp.date}>
                                     {exp.date} {exp.period_tag === 'm' ? '(月权)' : '(周权)'}
@@ -566,22 +684,18 @@ export default function Options() {
                         </select>
                     </div>
                 </div>
+            </div>
 
-                {/* Strategy Selector */}
-                <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-                    <label className="block mb-3" style={{ color: 'var(--foreground)', fontSize: '1rem', fontWeight: 600 }}>
-                        选择策略
-                    </label>
-                    <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 flex-wrap">
-                        {(Object.keys(strategyLabels) as Strategy[]).map(s => (
-                            <button
-                                key={s}
-                                className={`strategy-btn ${strategy === s ? 'active' : ''}`}
-                                onClick={() => setStrategy(s)}
-                            >
-                                {strategyLabels[s]}
-                            </button>
-                        ))}
+            {/* Header */}
+            <div className="header-section" style={{ marginTop: '1.5rem', marginBottom: '1rem', padding: '1rem' }}>
+                {/* 期权分析五大支柱 */}
+                <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-2">
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>流动性优先</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>优先选择高成交量、高持仓量的期权</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>IV分析</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>评估隐含波动率的历史分位数，寻找IV异常</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>风险调整</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>计算年化收益与风险比，设置止损点</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>策略匹配</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>根据市场环境选择合适的多空策略</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>实时监控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>开市期间实时查看数据，避免依赖过时信息</div></div>
                     </div>
                 </div>
             </div>
@@ -658,24 +772,22 @@ export default function Options() {
                 <div className="space-y-6">
                     {/* Results Header */}
                     <div className="card p-4">
-                        <div className="flex justify-between items-center mb-4">
-                            <div>
-                                <h2 style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                                    分析结果: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
-                                </h2>
-                                <div style={{ color: 'var(--muted-foreground)', marginTop: '0.5rem' }}>
-                                    当前价格: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
-                                    <span className="mx-3">|</span>
-                                    到期日: <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
-                                    <span className="mx-3">|</span>
-                                    策略: <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{strategyLabels[strategy]}</span>
-                                    {isHistoricalView && (
-                                        <>
-                                            <span className="mx-3">|</span>
-                                            <span style={{ color: 'var(--primary)', fontWeight: 600 }}>历史数据</span>
-                                        </>
-                                    )}
-                                </div>
+                        <div className="text-center">
+                            <h2 style={{ fontSize: '1.3rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                                分析结果: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
+                            </h2>
+                            <div style={{ color: 'var(--muted-foreground)' }}>
+                                当前价格: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
+                                <span className="mx-3">|</span>
+                                到期日: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
+                                <span className="mx-3">|</span>
+                                策略: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{strategyLabels[strategy]}</span>
+                                {isHistoricalView && (
+                                    <>
+                                        <span className="mx-3">|</span>
+                                        <span style={{ color: 'var(--muted-foreground)', fontWeight: 600 }}>历史数据</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -721,6 +833,47 @@ export default function Options() {
                         </div>
                     )}
 
+                    {/* Risk Warning */}
+                    <div className="card p-4" style={{
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        border: '2px solid var(--warning)',
+                        borderRadius: '0.5rem',
+                        marginBottom: '1.5rem'
+                    }}>
+                        <div className="flex items-start gap-3">
+                            <i className="bi bi-exclamation-triangle-fill" style={{
+                                color: 'var(--warning)',
+                                fontSize: '1.5rem',
+                                flexShrink: 0,
+                                marginTop: '0.2rem'
+                            }}></i>
+                            <div style={{ flex: 1 }}>
+                                <h3 style={{
+                                    fontSize: '1.1rem',
+                                    fontWeight: 600,
+                                    color: 'var(--warning)',
+                                    marginBottom: '0.75rem'
+                                }}>
+                                    期权交易风险提示
+                                </h3>
+                                <div style={{ color: 'var(--foreground)', lineHeight: 1.8 }}>
+                                    <p style={{ marginBottom: '0.5rem' }}>
+                                        <strong>高风险警告：</strong>期权交易具有极高的风险，可能导致全部本金损失。期权价格波动剧烈，杠杆效应显著，不适合风险承受能力较低的投资者。请充分了解期权交易的风险特性，谨慎决策。
+                                    </p>
+                                    <p style={{ marginBottom: '0.5rem' }}>
+                                        <strong>财报前后高风险期：</strong>财报发布前后（通常为财报日前3-5天至财报日后1-2天）是期权交易的极高风险期。在此期间，股价可能出现剧烈波动，隐含波动率（IV）通常会显著上升，期权价格波动幅度可能远超预期。建议在财报期间避免或大幅减少期权交易，或使用更保守的策略。
+                                    </p>
+                                    <p style={{ marginBottom: '0.5rem' }}>
+                                        <strong>数据说明：</strong>当前分析结果基于历史数据和实时市场数据计算得出，仅供参考。期权市场瞬息万变，数据具有时效性。
+                                    </p>
+                                    <p style={{ marginBottom: 0, fontWeight: 600, color: 'var(--warning)' }}>
+                                        <strong>实盘操作建议：</strong>实盘交易时，请务必在开市期间直接查看实时行情，结合最新市场动态进行决策。建议一边查看实时数据，一边进行操作，避免依赖过时数据。
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Options Table */}
                     <div className="option-col-section">
                         <div className={strategy.includes('call') ? 'header-calls' : 'header-puts'}>
@@ -731,14 +884,14 @@ export default function Options() {
                                 <table className="option-table">
                                 <thead>
                                     <tr>
-                                        <th>Strike</th>
-                                        <th>Latest</th>
-                                        <th>Bid/Ask</th>
-                                        <th>Vol/OI</th>
-                                        <th>IV</th>
-                                        <th>Delta</th>
-                                        <th>年化收益</th>
-                                        <th>评分</th>
+                                        <th>Strike (行权价)</th>
+                                        <th>Latest (最新价)</th>
+                                        <th>Bid/Ask (买/卖价)</th>
+                                        <th>Vol/OI (成交量/持仓量)</th>
+                                        <th>IV (隐含波动率)</th>
+                                        <th>Delta (Delta值)</th>
+                                        <th>年化收益 (Annualized Return)</th>
+                                        <th>评分 (Score)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -808,21 +961,64 @@ export default function Options() {
                     onViewFullReport={(optionData) => {
                         // Display historical option analysis data directly
                         console.log('Displaying historical options analysis:', optionData);
-                        setHistoricalChain(optionData.data);
+                        
+                        // Check if data exists
+                        if (!optionData) {
+                            console.error('No option data provided');
+                            setError('无法加载历史分析数据：数据为空');
+                            return;
+                        }
+                        
+                        // The backend returns the complete analysis response directly
+                        // It might be wrapped in 'data' field, or it might be the chain data itself
+                        // Check both possibilities
+                        let chainData = optionData.data;
+                        
+                        // If no 'data' field, the optionData itself might be the chain data
+                        // Check if it has chain-like properties (symbol, calls, puts, etc.)
+                        if (!chainData && (optionData.symbol || optionData.calls || optionData.puts)) {
+                            chainData = optionData;
+                        }
+                        
+                        if (!chainData) {
+                            console.error('No chain data found in optionData:', optionData);
+                            console.error('Available keys:', Object.keys(optionData));
+                            setError('无法加载历史分析数据：缺少期权链数据');
+                            return;
+                        }
+                        
+                        // Verify it has the required chain structure
+                        if (!chainData.symbol && !chainData.calls && !chainData.puts) {
+                            console.error('Invalid chain data structure:', chainData);
+                            console.error('Available keys:', Object.keys(chainData));
+                            setError('无法加载历史分析数据：数据格式不正确');
+                            return;
+                        }
+                        
+                        // Set the historical chain data
+                        setHistoricalChain(chainData);
                         setIsHistoricalView(true);
                         setActiveTab('analysis');
+                        
                         // Extract ticker and other info from historical data
-                        const symbol = optionData.history_metadata?.symbol;
-                        const expiryDate = optionData.history_metadata?.expiry_date;
+                        const symbol = optionData.history_metadata?.symbol || chainData.symbol;
+                        const expiryDate = optionData.history_metadata?.expiry_date || chainData.expiry_date;
+                        
                         if (symbol) {
                             setTicker(symbol);
                         }
                         if (expiryDate) {
                             setSelectedExpiry(expiryDate);
                         }
-                        if (optionData.data?.real_stock_price) {
-                            setStockPrice(optionData.data.real_stock_price);
+                        if (chainData?.real_stock_price) {
+                            setStockPrice(chainData.real_stock_price);
                         }
+                        
+                        // Try to extract strategy from chain data if available
+                        if (chainData.strategy) {
+                            setStrategy(chainData.strategy as Strategy);
+                        }
+                        
                         // Scroll to the top to show the analysis
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
