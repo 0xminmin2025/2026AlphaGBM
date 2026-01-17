@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
+import { useTranslation } from 'react-i18next';
 
 // Now each history item contains the complete analysis data
 interface CompleteAnalysisData {
@@ -29,6 +30,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
   onViewFullReport,
   tickerFilter
 }) => {
+  const { t } = useTranslation();
   const [allHistory, setAllHistory] = useState<CompleteAnalysisData[]>([]);  // Cache all loaded data
   const [filteredHistory, setFilteredHistory] = useState<CompleteAnalysisData[]>([]);  // Filtered data for display
   const [loading, setLoading] = useState(false);  // Start as false, load on demand
@@ -192,10 +194,10 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
   if (loading && !isDataLoaded) {
     return (
       <div className="card shadow-lg" style={{ padding: '2rem' }}>
-        <div className="text-center">
-          <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-          <p style={{ color: 'var(--muted-foreground)' }}>加载分析历史中...</p>
-        </div>
+          <div className="text-center">
+            <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+            <p style={{ color: 'var(--muted-foreground)' }}>{t('stock.history.loadingHistory')}</p>
+          </div>
       </div>
     );
   }
@@ -205,7 +207,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
       <div className="card bg-[#0f0f11] border-white/10 shadow-lg mb-4 p-4 sm:p-6">
         <h5 className="mb-4 flex items-center gap-2 text-lg sm:text-xl font-semibold">
           <i className="bi bi-clock-history"></i>
-          分析历史
+          {t('stock.history.title')}
         </h5>
 
         {/* Real-time Search & Refresh */}
@@ -213,7 +215,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
           <input
             type="text"
             className="flex-1 px-3 py-2 bg-[#27272a] border border-white/20 rounded-md text-white placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-2 focus:ring-[#0D9B97]/20"
-            placeholder="搜索股票代码... (实时搜索)"
+            placeholder={t('stock.history.searchPlaceholder')}
             value={searchTicker}
             onChange={(e) => handleSearchChange(e.target.value.toUpperCase())}
           />
@@ -227,11 +229,11 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
             }`}
           >
             <i className={`bi ${loading ? 'bi-arrow-repeat' : 'bi-arrow-clockwise'} mr-2 ${loading ? 'spinner' : ''}`}></i>
-            {loading ? '加载中...' : '刷新'}
+            {loading ? t('stock.history.loading') : t('stock.history.refresh')}
           </Button>
           <div className="flex items-center gap-2 text-slate-400 text-sm px-2 py-1">
             <i className="bi bi-database"></i>
-            <span>{filteredHistory.length}/{allHistory.length} 项</span>
+            <span>{filteredHistory.length}/{allHistory.length} {t('stock.history.items')}</span>
           </div>
         </div>
 
@@ -244,16 +246,16 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
         {!isDataLoaded ? (
           <div className="text-center py-20 text-muted">
             <i className="bi bi-download text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-            <p>点击"刷新"按钮开始加载历史分析数据</p>
+            <p>{t('stock.history.clickRefresh')}</p>
             <Button onClick={handleRefresh} className="btn-primary mt-3">
               <i className="bi bi-arrow-clockwise mr-2"></i>
-              加载历史数据
+              {t('stock.history.loadData')}
             </Button>
           </div>
         ) : filteredHistory.length === 0 ? (
           <div className="text-center py-20 text-muted">
             <i className="bi bi-inbox text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-            <p>暂无分析历史记录</p>
+            <p>{t('stock.history.noRecords')}</p>
           </div>
         ) : (
           <div className="max-h-[500px] sm:max-h-[700px] overflow-auto">
@@ -278,7 +280,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                       )}
                       <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
                         <i className="bi bi-clock-history mr-1"></i>
-                        历史分析
+                        {t('stock.report.historicalData')}
                       </span>
                     </div>
                     <span className="text-slate-400 text-sm">
@@ -288,25 +290,25 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-3">
                     <div>
-                      <div className="text-xs text-slate-500 mb-1">当前价格</div>
+                      <div className="text-xs text-slate-500 mb-1">{t('stock.report.header.currentPrice')}</div>
                       <div className="text-sm font-medium text-slate-300">
                         {formatCurrency(item.current_price)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 mb-1">目标价格</div>
+                      <div className="text-xs text-slate-500 mb-1">{t('stock.report.header.targetPrice')}</div>
                       <div className="text-sm font-medium text-green-400">
                         {formatCurrency(item.target_price)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 mb-1">风险评分</div>
+                      <div className="text-xs text-slate-500 mb-1">{t('stock.report.risk.score')}</div>
                       <div className={`text-sm font-medium ${getRiskClass(item.risk_level)}`}>
                         {item.risk_score}/10
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 mb-1">建议仓位</div>
+                      <div className="text-xs text-slate-500 mb-1">{t('stock.report.header.position')}</div>
                       <div className="text-sm font-medium text-[#0D9B97]">
                         {item.position_size}%
                       </div>
@@ -338,7 +340,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                         className="px-3 py-2 bg-[#0D9B97] border border-[#0D9B97] text-white rounded-md hover:bg-[#0D9B97]/80 transition-colors text-sm"
                       >
                         <i className="bi bi-file-earmark-text mr-1"></i>
-                        查看完整报告
+                        {t('stock.history.viewFull')}
                       </Button>
                     )}
                     {onSelectHistory && (
@@ -350,7 +352,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                         className="px-3 py-2 bg-white/10 border border-white/20 text-slate-300 rounded-md hover:bg-white/20 transition-colors text-sm"
                       >
                         <i className="bi bi-arrow-repeat mr-1"></i>
-                        重新分析
+                        {t('stock.history.reanalyze')}
                       </Button>
                     )}
                   </div>

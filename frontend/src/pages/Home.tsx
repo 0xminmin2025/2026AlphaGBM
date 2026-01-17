@@ -625,6 +625,22 @@ export default function Home() {
         return 'risk-low';
     };
 
+    // Helper to translate risk level text
+    const translateRiskLevel = (level: string | null | undefined): string => {
+        if (!level) return '';
+        const levelLower = level.toLowerCase();
+        // If it's already a translation key format, try to translate it
+        if (levelLower === 'overall risk level' || level === '综合风控等级' || level === 'Overall Risk Level') {
+            return t('stock.risk.level.overall');
+        }
+        // Translate common risk level values
+        if (levelLower === 'low' || level === '低') return t('stock.risk.level.low');
+        if (levelLower === 'medium' || level === '中' || levelLower === 'moderate') return t('stock.risk.level.medium');
+        if (levelLower === 'high' || level === '高') return t('stock.risk.level.high');
+        // If no match, return original
+        return level;
+    };
+
     const getSentimentClass = (score: number) => {
         if (score >= 7) return 'text-warning';
         if (score >= 4) return 'text-success';
@@ -930,7 +946,7 @@ export default function Home() {
                                         <i className="bi bi-shield-check mr-2"></i>
                                         {t('stock.metrics.risk')}
                                     </div>
-                                    <div className={`metric-value ${getRiskClass(r.score)}`}>{r.level}</div>
+                                    <div className={`metric-value ${getRiskClass(r.score)}`}>{translateRiskLevel(r.level)}</div>
                                     <small className="text-danger" style={{ fontSize: '0.85rem' }}>Score: {r.score}/10</small>
                                 </div>
 
@@ -1338,7 +1354,7 @@ export default function Home() {
                                             </div>
                                             <div>
                                                 <div className="text-report-label">{t('stock.report.risk.level')}</div>
-                                                <div className={`text-report-value ${getRiskClass(r.score)}`} style={{ fontSize: '1.1rem' }}>{r.level}</div>
+                                                <div className={`text-report-value ${getRiskClass(r.score)}`} style={{ fontSize: '1.1rem' }}>{translateRiskLevel(r.level)}</div>
                                             </div>
                                         </div>
                                         {r.flags && r.flags.length > 0 ? (
