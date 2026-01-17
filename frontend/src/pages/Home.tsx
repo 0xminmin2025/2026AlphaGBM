@@ -877,7 +877,7 @@ export default function Home() {
                             <div className="ml-auto">
                                 <span className="badge-primary">
                                     <i className="bi bi-archive mr-1"></i>
-                                    历史数据
+                                    {t('stock.report.historicalData')}
                                 </span>
                             </div>
                         </div>
@@ -994,7 +994,7 @@ export default function Home() {
                                     <div className="overflow-auto" style={{ maxHeight: '650px', padding: '1.5rem' }}>
                                         <div
                                             className="ai-summary"
-                                            dangerouslySetInnerHTML={{ __html: renderMarkdown(result.report || '分析数据不可用') }}
+                                            dangerouslySetInnerHTML={{ __html: renderMarkdown(result.report || t('stock.report.noDataAvailable')) }}
                                         />
                                     </div>
                                 </div>
@@ -1139,27 +1139,27 @@ export default function Home() {
                                         
                                         {/* 价格与技术面 */}
                                         <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
-                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>价格与技术面</div>
+                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>{t('stock.report.valuation.price')}</div>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                 <div>
-                                                    <div className="text-report-label">当前价格</div>
+                                                    <div className="text-report-label">{t('stock.report.valuation.currentPrice')}</div>
                                                     <div className="text-report-value" style={{ fontSize: '1.1rem', fontWeight: 600 }}>{d.currency_symbol}{d.price?.toFixed(2)}</div>
                                                 </div>
                                                 <div>
-                                                    <div className="text-report-label">52周区间</div>
+                                                    <div className="text-report-label">{t('stock.report.valuation.week52')}</div>
                                                     <div className="text-report-value" style={{ fontSize: '0.95rem' }}>
                                                         {d.currency_symbol}{d.week52_low?.toFixed(2)} - {d.currency_symbol}{d.week52_high?.toFixed(2)}
                                                     </div>
-                                                    <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>位于{pricePosition.toFixed(1)}%分位</small>
+                                                    <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>{t('stock.report.valuation.percentile', { percent: pricePosition.toFixed(1) })}</small>
                                                 </div>
                                                 <div>
-                                                    <div className="text-report-label">技术趋势</div>
+                                                    <div className="text-report-label">{t('stock.report.valuation.trend')}</div>
                                                     <div className="text-report-value" style={{ fontSize: '0.95rem', fontWeight: 500 }}>
-                                                        {d.price > d.ma50 && d.ma50 > d.ma200 ? '多头排列' : d.price < d.ma200 ? '空头趋势' : '震荡整理'}
+                                                        {d.price > d.ma50 && d.ma50 > d.ma200 ? t('stock.report.valuation.trendBull') : d.price < d.ma200 ? t('stock.report.valuation.trendBear') : t('stock.report.valuation.trendSideways')}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <div className="text-report-label">均线系统</div>
+                                                    <div className="text-report-label">{t('stock.report.valuation.ma')}</div>
                                                     <div className="text-report-value" style={{ fontSize: '0.85rem' }}>
                                                         MA50: {d.currency_symbol}{d.ma50?.toFixed(2) || 'N/A'}<br/>
                                                         MA200: {d.currency_symbol}{d.ma200?.toFixed(2) || 'N/A'}
@@ -1171,29 +1171,29 @@ export default function Home() {
                                         {/* 估值指标 */}
                                         {!d.is_etf_or_fund && (
                                             <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
-                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>估值指标</div>
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>{t('stock.report.valuation.indicators')}</div>
                                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                                     <div>
-                                                        <div className="text-report-label">市盈率 (PE)</div>
+                                                        <div className="text-report-label">{t('stock.report.valuation.pe')}</div>
                                                         <div className={`text-report-value ${d.pe && d.pe > 30 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem', fontWeight: 600 }}>
                                                             {d.pe ? d.pe.toFixed(2) : 'N/A'}
                                                         </div>
                                                         <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
-                                                            {d.pe && d.pe > 30 ? '估值偏高' : d.pe && d.pe > 15 ? '估值合理' : d.pe > 0 ? '估值偏低' : '数据不足'}
+                                                            {d.pe && d.pe > 30 ? t('stock.report.valuation.expensive') : d.pe && d.pe > 15 ? t('stock.report.valuation.reasonable') : d.pe > 0 ? t('stock.report.valuation.cheap') : t('stock.report.overview.noData')}
                                                         </small>
                                                     </div>
                                                     <div>
-                                                        <div className="text-report-label">预期市盈率 (Forward PE)</div>
+                                                        <div className="text-report-label">{t('stock.report.valuation.forwardPe')}</div>
                                                         <div className="text-report-value" style={{ fontSize: '1.1rem', fontWeight: 600 }}>{d.forward_pe ? d.forward_pe.toFixed(2) : 'N/A'}</div>
                                                         <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
-                                                            {d.forward_pe && d.forward_pe < d.pe ? '预期改善' : d.forward_pe && d.forward_pe > d.pe ? '预期恶化' : ''}
+                                                            {d.forward_pe && d.forward_pe < d.pe ? t('stock.report.valuation.improving') : d.forward_pe && d.forward_pe > d.pe ? t('stock.report.valuation.deteriorating') : ''}
                                                         </small>
                                                     </div>
                                                     <div>
-                                                        <div className="text-report-label">PEG 比率</div>
+                                                        <div className="text-report-label">{t('stock.report.valuation.peg')}</div>
                                                         <div className="text-report-value" style={{ fontSize: '1.1rem', fontWeight: 600 }}>{d.peg ? d.peg.toFixed(2) : 'N/A'}</div>
                                                         <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
-                                                            {d.peg && d.peg < 1 ? '估值合理' : d.peg > 0 ? '估值偏高' : '数据不足'}
+                                                            {d.peg && d.peg < 1 ? t('stock.report.valuation.reasonable') : d.peg > 0 ? t('stock.report.valuation.expensive') : t('stock.report.overview.noData')}
                                                         </small>
                                                     </div>
                                                 </div>
@@ -1203,28 +1203,28 @@ export default function Home() {
                                         {/* 市场情绪指标 */}
                                         {d.options_data && (d.options_data.vix !== null || d.options_data.put_call_ratio !== null) && (
                                             <div style={{ marginBottom: '1.5rem' }}>
-                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>市场情绪指标</div>
+                                                <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.8rem', fontWeight: 500 }}>{t('stock.report.valuation.sentiment')}</div>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     {d.options_data.vix !== null && (
                                                         <div>
-                                                            <div className="text-report-label">VIX恐慌指数</div>
+                                                            <div className="text-report-label">{t('stock.report.valuation.vix')}</div>
                                                             <div className={`text-report-value ${d.options_data.vix > 30 ? 'text-danger' : d.options_data.vix > 20 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem', fontWeight: 600 }}>
                                                                 {d.options_data.vix.toFixed(2)}
                                                             </div>
                                                             <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
                                                                 {d.options_data.vix_change ? (d.options_data.vix_change > 0 ? '↑' : '↓') + Math.abs(d.options_data.vix_change).toFixed(1) + '%' : ''} 
-                                                                {d.options_data.vix > 30 ? ' | 高波动风险' : d.options_data.vix > 20 ? ' | 中等波动' : ' | 低波动'}
+                                                                {d.options_data.vix > 30 ? t('stock.report.valuation.highVol') : d.options_data.vix > 20 ? t('stock.report.valuation.midVol') : t('stock.report.valuation.lowVol')}
                                                             </small>
                                                         </div>
                                                     )}
                                                     {d.options_data.put_call_ratio !== null && (
                                                         <div>
-                                                            <div className="text-report-label">Put/Call比率</div>
+                                                            <div className="text-report-label">{t('stock.report.valuation.putCall')}</div>
                                                             <div className={`text-report-value ${d.options_data.put_call_ratio > 1.2 ? 'text-danger' : d.options_data.put_call_ratio > 1.0 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1.1rem', fontWeight: 600 }}>
                                                                 {d.options_data.put_call_ratio.toFixed(2)}
                                                             </div>
                                                             <small style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>
-                                                                {d.options_data.put_call_ratio > 1.2 ? '看跌情绪强' : d.options_data.put_call_ratio > 1.0 ? '略偏看跌' : d.options_data.put_call_ratio < 0.8 ? '看涨情绪' : '中性'}
+                                                                {d.options_data.put_call_ratio > 1.2 ? t('stock.report.valuation.bearish') : d.options_data.put_call_ratio > 1.0 ? t('stock.report.valuation.slightlyBearish') : d.options_data.put_call_ratio < 0.8 ? t('stock.report.valuation.bullish') : t('stock.report.valuation.neutral')}
                                                             </small>
                                                         </div>
                                                     )}
@@ -1235,45 +1235,45 @@ export default function Home() {
                                         {/* Macro Data */}
                                         {d.macro_data && (d.macro_data.treasury_10y !== null || d.macro_data.dxy !== null || d.macro_data.gold !== null || d.macro_data.oil !== null) && (
                                             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                                                <div className="text-report-title" style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>宏观经济环境</div>
+                                                <div className="text-report-title" style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>{t('stock.report.valuation.macro')}</div>
                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                     {d.macro_data.treasury_10y !== null && (
                                                         <div>
-                                                            <div className="text-report-label">10年美债收益率</div>
+                                                            <div className="text-report-label">{t('stock.report.valuation.treasury')}</div>
                                                             <div className={`text-report-value ${d.macro_data.treasury_10y > 4.5 ? 'text-danger' : d.macro_data.treasury_10y > 3.5 ? 'text-warning' : 'text-success'}`} style={{ fontSize: '1rem' }}>
                                                                 {d.macro_data.treasury_10y.toFixed(2)}%
                                                             </div>
                                                             <small style={{ color: 'var(--muted-foreground)' }}>
-                                                                {d.macro_data.treasury_10y_change ? (d.macro_data.treasury_10y_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.treasury_10y_change).toFixed(2) + '%' : ''} {d.macro_data.treasury_10y > 4.5 ? '流动性收紧' : '正常'}
+                                                                {d.macro_data.treasury_10y_change ? (d.macro_data.treasury_10y_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.treasury_10y_change).toFixed(2) + '%' : ''} {d.macro_data.treasury_10y > 4.5 ? t('stock.report.valuation.tight') : t('stock.report.valuation.normal')}
                                                             </small>
                                                         </div>
                                                     )}
                                                     {d.macro_data.dxy !== null && (
                                                         <div>
-                                                            <div className="text-report-label">美元指数</div>
+                                                            <div className="text-report-label">{t('stock.report.valuation.dxy')}</div>
                                                             <div className={`text-report-value ${d.macro_data.dxy > 105 ? 'text-warning' : ''}`} style={{ fontSize: '1rem' }}>
                                                                 {d.macro_data.dxy.toFixed(2)}
                                                             </div>
                                                             <small style={{ color: 'var(--muted-foreground)' }}>
-                                                                {d.macro_data.dxy_change ? (d.macro_data.dxy_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.dxy_change).toFixed(2) + '%' : ''} {d.macro_data.dxy > 105 ? '强势美元' : '正常'}
+                                                                {d.macro_data.dxy_change ? (d.macro_data.dxy_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.dxy_change).toFixed(2) + '%' : ''} {d.macro_data.dxy > 105 ? t('stock.report.valuation.strongDollar') : t('stock.report.valuation.normal')}
                                                             </small>
                                                         </div>
                                                     )}
                                                     {d.macro_data.gold !== null && (
                                                         <div>
-                                                            <div className="text-report-label">黄金价格</div>
+                                                            <div className="text-report-label">{t('stock.report.valuation.gold')}</div>
                                                             <div className="text-report-value" style={{ fontSize: '1rem' }}>${d.macro_data.gold.toFixed(2)}</div>
                                                             <small style={{ color: 'var(--muted-foreground)' }}>
-                                                                {d.macro_data.gold_change ? (d.macro_data.gold_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.gold_change).toFixed(2) + '%' : ''} {d.macro_data.gold_change > 2 ? '避险情绪' : '正常'}
+                                                                {d.macro_data.gold_change ? (d.macro_data.gold_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.gold_change).toFixed(2) + '%' : ''} {d.macro_data.gold_change > 2 ? t('stock.report.valuation.safeHaven') : t('stock.report.valuation.normal')}
                                                             </small>
                                                         </div>
                                                     )}
                                                     {d.macro_data.oil !== null && (
                                                         <div>
-                                                            <div className="text-report-label">原油价格</div>
+                                                            <div className="text-report-label">{t('stock.report.valuation.oil')}</div>
                                                             <div className="text-report-value" style={{ fontSize: '1rem' }}>${d.macro_data.oil.toFixed(2)}</div>
                                                             <small style={{ color: 'var(--muted-foreground)' }}>
-                                                                {d.macro_data.oil_change ? (d.macro_data.oil_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.oil_change).toFixed(2) + '%' : ''} 正常
+                                                                {d.macro_data.oil_change ? (d.macro_data.oil_change > 0 ? '↑' : '↓') + Math.abs(d.macro_data.oil_change).toFixed(2) + '%' : ''} {t('stock.report.valuation.normal')}
                                                             </small>
                                                         </div>
                                                     )}
@@ -1284,30 +1284,30 @@ export default function Home() {
                                         {/* Earnings Date Reminder */}
                                         {d.earnings_dates && Array.isArray(d.earnings_dates) && d.earnings_dates.length > 0 && (
                                             <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: '3px solid var(--primary)', borderRadius: '4px' }}>
-                                                <strong style={{ color: 'var(--primary)' }}>财报日期提醒：</strong>
-                                                <span style={{ color: 'var(--muted-foreground)' }}>预计财报日期：{d.earnings_dates.join(', ')}。财报发布前后通常伴随较大波动，建议提前调整仓位。</span>
+                                                <strong style={{ color: 'var(--primary)' }}>{t('stock.report.valuation.earnings')}</strong>
+                                                <span style={{ color: 'var(--muted-foreground)' }}>{t('stock.report.valuation.earningsText', { dates: d.earnings_dates.join(', ') })}</span>
                                             </div>
                                         )}
 
                                         {/* Economic Events */}
                                         {d.macro_data && (d.macro_data.fed_meetings?.length > 0 || d.macro_data.cpi_releases?.length > 0 || d.macro_data.china_events?.length > 0) && (
                                             <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: '3px solid #8b5cf6', borderRadius: '4px' }}>
-                                                <strong style={{ color: '#8b5cf6' }}>重要经济事件提醒：</strong>
+                                                <strong style={{ color: '#8b5cf6' }}>{t('stock.report.valuation.events')}</strong>
                                                 <div style={{ color: 'var(--muted-foreground)', marginTop: '0.5rem' }}>
                                                     {d.macro_data.fed_meetings?.length > 0 && (
                                                         <div style={{ marginBottom: '0.5rem' }}>
-                                                            <strong style={{ color: 'var(--primary)' }}>🇺🇸 美国：</strong>
+                                                            <strong style={{ color: 'var(--primary)' }}>{t('stock.report.valuation.us')}</strong>
                                                             <div style={{ marginLeft: '1rem', marginTop: '0.3rem' }}>
-                                                                <div>美联储利率决议：{d.macro_data.fed_meetings.map((m: any) => `${m.date} (${m.days_until}天后${m.has_dot_plot ? '，含点阵图' : ''})`).join('、')}</div>
+                                                                <div>{t('stock.report.valuation.fed')}{d.macro_data.fed_meetings.map((m: any) => `${m.date} (${t('stock.report.valuation.daysLater', { days: m.days_until })}${m.has_dot_plot ? t('stock.report.valuation.hasDotPlot') : ''})`).join(i18n.language === 'zh' ? '、' : ', ')}</div>
                                                             </div>
                                                         </div>
                                                     )}
                                                     {d.macro_data.china_events?.length > 0 && (
                                                         <div style={{ marginBottom: '0.5rem' }}>
-                                                            <strong style={{ color: 'var(--bear)' }}>🇨🇳 中国：</strong>
+                                                            <strong style={{ color: 'var(--bear)' }}>{t('stock.report.valuation.china')}</strong>
                                                             <div style={{ marginLeft: '1rem', marginTop: '0.3rem' }}>
                                                                 {d.macro_data.china_events.map((e: any, idx: number) => (
-                                                                    <div key={idx}>{e.type}：{e.date} ({e.days_until}天后{e.data_month ? `，${e.data_month}数据` : ''})</div>
+                                                                    <div key={idx}>{e.type}：{e.date} ({t('stock.report.valuation.daysLater', { days: e.days_until })}{e.data_month ? t('stock.report.valuation.dataMonth', { month: e.data_month }) : ''})</div>
                                                                 ))}
                                                             </div>
                                                         </div>
@@ -1319,10 +1319,10 @@ export default function Home() {
                                         {/* Geopolitical Risk */}
                                         {d.macro_data?.geopolitical_risk !== null && d.macro_data?.geopolitical_risk !== undefined && (
                                             <div style={{ marginTop: '1rem', padding: '0.8rem', backgroundColor: '#1e293b', borderLeft: `3px solid ${d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)'}`, borderRadius: '4px' }}>
-                                                <strong style={{ color: d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)' }}>地缘政治风险指数：</strong>
+                                                <strong style={{ color: d.macro_data.geopolitical_risk >= 7 ? 'var(--bear)' : d.macro_data.geopolitical_risk >= 5 ? 'var(--warning)' : 'var(--bull)' }}>{t('stock.report.valuation.geopolitical')}</strong>
                                                 <span style={{ color: 'var(--foreground)', fontSize: '1.1rem', fontWeight: 600, marginLeft: '0.5rem' }}>{d.macro_data.geopolitical_risk}/10</span>
                                                 <span style={{ color: 'var(--muted-foreground)', marginLeft: '0.5rem' }}>
-                                                    {d.macro_data.geopolitical_risk >= 7 ? '高风险 - 地缘政治紧张局势加剧' : d.macro_data.geopolitical_risk >= 5 ? '中等风险 - 需关注地缘政治动态' : '低风险 - 地缘政治环境相对稳定'}
+                                                    {d.macro_data.geopolitical_risk >= 7 ? t('stock.report.valuation.geoHigh') : d.macro_data.geopolitical_risk >= 5 ? t('stock.report.valuation.geoMedium') : t('stock.report.valuation.geoLow')}
                                                 </span>
                                             </div>
                                         )}
@@ -1366,7 +1366,7 @@ export default function Home() {
                                             <p><strong style={{ color: 'var(--foreground)' }}>{t('stock.report.advice.position')}</strong><span style={{ color: r.suggested_position === 0 ? 'var(--bear)' : 'var(--primary)', fontSize: '1.1rem', fontWeight: 600 }}>{r.suggested_position}%</span>{t('stock.report.advice.positionDesc', { style: styleName })}</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>{t('stock.report.advice.entry')}</strong>{generateEntryStrategy(d.price || 0, d.target_price || d.price || 0, style, r.score, r.suggested_position, t)}</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>{t('stock.report.advice.takeprofit')}</strong>{generateTakeProfitStrategy(d.price || 0, d.target_price || d.price || 0, style, d.currency_symbol || '$', t)}</p>
-                                            <p><strong style={{ color: 'var(--foreground)' }}>{t('stock.report.advice.stop')}</strong>{t('stock.report.advice.stopText', { symbol: d.currency_symbol, price: d.stop_loss_price?.toFixed(2) || (d.price * 0.85).toFixed(2), method: d.stop_loss_method || t('stock.report.advice.stopText').split('（')[1]?.split('）')[0] || 'Dynamic Stop Loss' })}</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>{t('stock.report.advice.stop')}</strong>{t('stock.report.advice.stopText', { symbol: d.currency_symbol, price: d.stop_loss_price?.toFixed(2) || (d.price * 0.85).toFixed(2), method: d.stop_loss_method || t('stock.report.advice.stopMethod') })}</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>{t('stock.report.advice.holding')}</strong>{t('stock.report.advice.holdingText', { 
                                                 style: styleName, 
                                                 period: style === 'quality' ? t('stock.report.advice.holdingQuality') : 

@@ -274,6 +274,7 @@ const resources = {
             "stock.report.advice.takeprofit": "Take Profit Advice:",
             "stock.report.advice.stop": "Stop Loss Advice:",
             "stock.report.advice.stopText": "Suggest setting stop-loss price at {{symbol}}{{price}} ({{method}}), strictly enforce stop-loss discipline.",
+            "stock.report.advice.stopMethod": "Dynamic Stop Loss",
             "stock.report.advice.holding": "Holding Period:",
             "stock.report.advice.holdingQuality": "Long-term (1-3 years)",
             "stock.report.advice.holdingValue": "Medium-term (6-12 months)",
@@ -293,6 +294,10 @@ const resources = {
             "stock.marketWarnings.urgency.immediate": "[Urgent]",
             "stock.marketWarnings.urgency.soon": "[Soon]",
             "stock.marketWarnings.urgency.monitor": "[Monitor]",
+            "stock.report.historicalData": "Historical Data",
+            "stock.report.noDataAvailable": "Analysis data unavailable",
+            "stock.report.valuation.us": "🇺🇸 United States:",
+            "stock.report.valuation.hasDotPlot": ", with dot plot",
 
             // Privacy Policy
             "privacy.title": "Privacy Policy",
@@ -727,6 +732,7 @@ const resources = {
             "stock.report.advice.takeprofit": "止盈建议：",
             "stock.report.advice.stop": "止损建议：",
             "stock.report.advice.stopText": "建议设置止损价格为{{symbol}}{{price}}（{{method}}），严格执行止损纪律。",
+            "stock.report.advice.stopMethod": "动态止损",
             "stock.report.advice.holding": "持有周期：",
             "stock.report.advice.holdingQuality": "长期（1-3年）",
             "stock.report.advice.holdingValue": "中期（6-12个月）",
@@ -746,6 +752,10 @@ const resources = {
             "stock.marketWarnings.urgency.immediate": "[紧急]",
             "stock.marketWarnings.urgency.soon": "[近期]",
             "stock.marketWarnings.urgency.monitor": "[监控]",
+            "stock.report.historicalData": "历史数据",
+            "stock.report.noDataAvailable": "分析数据不可用",
+            "stock.report.valuation.us": "🇺🇸 美国：",
+            "stock.report.valuation.hasDotPlot": "，含点阵图",
 
             // 隐私声明
             "privacy.title": "数据隐私声明",
