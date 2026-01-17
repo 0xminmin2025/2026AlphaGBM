@@ -329,20 +329,8 @@ const styles = `
     }
 `;
 
-// Style descriptions matching original
-const styleDescriptions: Record<string, string> = {
-    'quality': 'Quality (质量): 关注财务稳健、盈利能力强、债务水平低的优质公司，适合长期持有，最大仓位20%',
-    'value': 'Value (价值): 寻找被市场低估的股票，关注低PE、低PEG，追求安全边际，最大仓位10%',
-    'growth': 'Growth (成长): 追求高营收增长和盈利增长的公司，容忍较高估值，最大仓位15%',
-    'momentum': 'Momentum (趋势): 跟随市场趋势和价格动量，快进快出，风险较高，最大仓位5%'
-};
-
-const styleNames: Record<string, string> = {
-    'quality': '质量 (Quality)',
-    'value': '价值 (Value)',
-    'growth': '成长 (Growth)',
-    'momentum': '趋势 (Momentum)'
-};
+// Style descriptions matching original - will be replaced with translations
+// Keeping for now for backwards compatibility, will be replaced in component
 
 // Helper to render markdown
 function renderMarkdown(text: string): string {
@@ -358,37 +346,38 @@ function generateEntryStrategy(
     targetPrice: number,
     style: string,
     riskScore: number,
-    suggestedPosition: number
+    suggestedPosition: number,
+    t: (key: string, params?: any) => string
 ): string {
     if (suggestedPosition === 0) {
-        return '当前价格已超过目标价格，不建议建仓，建议观望或等待回调。';
+        return t('stock.entry.overTarget');
     }
 
     const upsidePct = ((targetPrice - currentPrice) / currentPrice) * 100;
     
     // 如果当前价格高于目标价格
     if (upsidePct < 0) {
-        return '当前价格已超过目标价格，不建议建仓，建议观望或等待回调至目标价格附近再考虑。';
+        return t('stock.entry.overTargetNear');
     }
 
     // 根据上涨空间和风险评分决定建仓策略
     if (riskScore >= 6) {
-        return '风险评分较高，建议保持观望，等待风险降低或价格回调后再考虑建仓。';
+        return t('stock.entry.highRisk');
     } else if (riskScore >= 4) {
         // 高风险评分，分批建仓
         if (upsidePct < 5) {
-            return '上涨空间有限且风险较高，建议分3批建仓，每批间隔2-3周，每批约' + (suggestedPosition / 3).toFixed(1) + '%，以降低市场波动风险。';
+            return t('stock.entry.highRiskLimited', { percent: (suggestedPosition / 3).toFixed(1) });
         } else {
-            return '风险较高，建议分3批建仓，每批间隔1-2周，每批约' + (suggestedPosition / 3).toFixed(1) + '%，以降低市场波动风险。';
+            return t('stock.entry.highRiskNormal', { percent: (suggestedPosition / 3).toFixed(1) });
         }
     } else {
         // 低风险评分
         if (upsidePct < 5) {
-            return '上涨空间有限，建议分2批建仓，每批间隔1-2周，每批约' + (suggestedPosition / 2).toFixed(1) + '%，谨慎控制仓位。';
+            return t('stock.entry.lowRiskLimited', { percent: (suggestedPosition / 2).toFixed(1) });
         } else if (upsidePct < 10) {
-            return '可考虑分2批建仓，每批间隔1周，每批约' + (suggestedPosition / 2).toFixed(1) + '%，或一次性建仓但需严格遵守仓位上限。';
+            return t('stock.entry.lowRiskMedium', { percent: (suggestedPosition / 2).toFixed(1) });
         } else {
-            return '可考虑一次性建仓，但需严格遵守仓位上限' + suggestedPosition + '%，并设置止损。';
+            return t('stock.entry.lowRiskHigh', { percent: suggestedPosition });
         }
     }
 }
@@ -398,7 +387,8 @@ function generateTakeProfitStrategy(
     currentPrice: number,
     targetPrice: number,
     style: string,
-    currencySymbol: string = '$'
+    currencySymbol: string = '$',
+    t: (key: string, params?: any) => string
 ): string {
     const upsidePct = ((targetPrice - currentPrice) / currentPrice) * 100;
     
@@ -406,11 +396,11 @@ function generateTakeProfitStrategy(
     if (upsidePct < 0) {
         const overTargetPct = Math.abs(upsidePct);
         if (overTargetPct >= 20) {
-            return `当前价格已超过目标价格${overTargetPct.toFixed(1)}%，建议立即减仓50%以上或全部卖出锁定利润。目标价格：${currencySymbol}${targetPrice.toFixed(2)}。`;
+            return t('stock.takeprofit.overTarget20', { percent: overTargetPct.toFixed(1), symbol: currencySymbol, price: targetPrice.toFixed(2) });
         } else if (overTargetPct >= 10) {
-            return `当前价格已超过目标价格${overTargetPct.toFixed(1)}%，建议分批减仓：先减仓30-50%，保留部分仓位继续观察。目标价格：${currencySymbol}${targetPrice.toFixed(2)}。`;
+            return t('stock.takeprofit.overTarget10', { percent: overTargetPct.toFixed(1), symbol: currencySymbol, price: targetPrice.toFixed(2) });
         } else {
-            return `当前价格已略高于目标价格${overTargetPct.toFixed(1)}%，建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}，可考虑分批止盈或全部止盈锁定利润。`;
+            return t('stock.takeprofit.overTargetLow', { percent: overTargetPct.toFixed(1), symbol: currencySymbol, price: targetPrice.toFixed(2) });
         }
     }
     
@@ -418,20 +408,20 @@ function generateTakeProfitStrategy(
     if (style === 'quality' || style === 'value') {
         // 长期投资风格，可以分批止盈
         if (upsidePct >= 20) {
-            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈：达到目标价格时止盈50%，超过目标价格10%时再止盈30%，超过目标价格20%时全部止盈。`;
+            return t('stock.takeprofit.qualityHigh', { symbol: currencySymbol, price: targetPrice.toFixed(2) });
         } else {
-            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈或全部止盈锁定利润。如价格超过目标价格20%以上，建议立即减仓50%以上或全部卖出。`;
+            return t('stock.takeprofit.qualityNormal', { symbol: currencySymbol, price: targetPrice.toFixed(2) });
         }
     } else if (style === 'growth') {
         // 成长风格，中等持有期
         if (upsidePct >= 15) {
-            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈：达到目标价格时止盈40%，超过目标价格15%时再止盈40%，超过目标价格25%时全部止盈。`;
+            return t('stock.takeprofit.growthHigh', { symbol: currencySymbol, price: targetPrice.toFixed(2) });
         } else {
-            return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，可考虑分批止盈或全部止盈锁定利润。如价格超过目标价格20%以上，建议立即减仓50%以上或全部卖出。`;
+            return t('stock.takeprofit.growthNormal', { symbol: currencySymbol, price: targetPrice.toFixed(2) });
         }
     } else {
         // 趋势风格，短期持有
-        return `建议设置止盈价格为${currencySymbol}${targetPrice.toFixed(2)}（目标价格）。当价格达到目标价格时，建议全部止盈锁定利润。如价格超过目标价格10%以上，建议立即全部卖出。`;
+        return t('stock.takeprofit.momentum', { symbol: currencySymbol, price: targetPrice.toFixed(2) });
     }
 }
 
@@ -460,37 +450,33 @@ function InvestmentPhilosophy() {
                 <div style={{ padding: '1rem' }}>
                     {/* Core Model */}
                     <div style={{ marginBottom: '1.2rem' }}>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                            <strong style={{ color: 'var(--foreground)', fontSize: '0.85rem' }}>核心模型：<span className="philosophy-formula">G = B + M</span></strong>
-                            。我们将股票收益<span className="philosophy-formula">G (Gain)</span>解构为基本面
-                            <span className="philosophy-formula bull">B (Basics)</span>与市场动量
-                            <span className="philosophy-formula warning">M (Momentum)</span>的叠加。通过量化分析识别收益与内在价值的偏离，寻找投资机会。
+                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('stock.philosophy.coreModel') }}>
                         </div>
                     </div>
 
                     {/* Five Pillars */}
                     <div style={{ marginBottom: '1.2rem' }}>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>五大支柱投资框架</strong>
+                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>{t('stock.philosophy.fivePillars')}</strong>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 mt-2">
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>怀疑主义</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>始终质疑，寻找不买入的理由</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>事前验尸</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>假设投资失败，提前识别风险点</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>严格风控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>硬数据计算，设置仓位上限和止损</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>风格纪律</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>严格遵守投资风格，不偏离策略</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>量化决策</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>用数据说话，减少情绪干扰</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar1.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar1.desc')}</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar2.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar2.desc')}</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar3.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar3.desc')}</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar4.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar4.desc')}</div></div>
+                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar5.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar5.desc')}</div></div>
                         </div>
                     </div>
 
                     {/* Investment Styles */}
                     <div>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>投资风格</strong>
+                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>{t('stock.philosophy.styles')}</strong>
                         <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', marginBottom: '0.5rem', lineHeight: 1.4 }}>
-                            系统支持四种投资风格，每种风格都有明确的选股标准和仓位限制：
+                            {t('stock.philosophy.stylesDesc')}
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Quality</strong><span style={{ fontSize: '0.75rem' }}>质量 - 财务稳健</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Value</strong><span style={{ fontSize: '0.75rem' }}>价值 - 寻找低估</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Growth</strong><span style={{ fontSize: '0.75rem' }}>成长 - 追求增长</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Momentum</strong><span style={{ fontSize: '0.75rem' }}>趋势 - 跟随动量</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Quality</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.quality')}</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Value</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.value')}</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Growth</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.growth')}</span></div>
+                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Momentum</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.momentum')}</span></div>
                         </div>
                     </div>
                 </div>
@@ -791,19 +777,19 @@ export default function Home() {
                     </form>
 
                     <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
-                        {styleDescriptions[style]}
+                        {t(`stock.style.${style}.desc`)}
                     </div>
 
                     {error && (
                         <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                            <div className="font-semibold mb-2">❌ 分析失败</div>
+                            <div className="font-semibold mb-2">{t('stock.error.title')}</div>
                             <div className="whitespace-pre-wrap break-words max-h-96 overflow-y-auto">
                                 {error.length > 500 ? (
                                     <>
                                         <div>{error.substring(0, 500)}...</div>
                                         <details className="mt-2">
                                             <summary className="cursor-pointer text-red-300 hover:text-red-200">
-                                                查看完整错误信息
+                                                {t('stock.error.viewFull')}
                                             </summary>
                                             <div className="mt-2 p-2 bg-red-500/5 rounded text-xs">
                                                 {error}
@@ -835,7 +821,7 @@ export default function Home() {
                         {taskProgress > 0 && (
                             <div className="max-w-md mx-auto mb-4">
                                 <div className="flex justify-between text-sm mb-1">
-                                    <span className="text-muted">分析进度</span>
+                                    <span className="text-muted">{t('stock.loading.progress')}</span>
                                     <span className="text-primary font-semibold">{taskProgress}%</span>
                                 </div>
                                 <div style={{
@@ -860,7 +846,7 @@ export default function Home() {
 
                         {/* Current Step */}
                         <p className="text-muted">
-                            {taskStep || '正在连接 Gemini 进行深度推演...'}
+                            {taskStep || t('stock.loading.connecting')}
                         </p>
 
                         {/* Task Status Info - Hidden per user request */}
@@ -878,11 +864,11 @@ export default function Home() {
                             <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
                             <div>
                                 <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
-                                    历史分析报告
+                                    {t('stock.history.title')}
                                 </span>
                                 {result.history_metadata.created_at && (
                                     <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
-                                        分析时间：{new Date(result.history_metadata.created_at).toLocaleString('zh-CN')}
+                                        {t('stock.history.analyzedAt')}{new Date(result.history_metadata.created_at).toLocaleString()}
                                     </span>
                                 )}
                             </div>
@@ -902,7 +888,10 @@ export default function Home() {
                     const r = result.risk;
                     const sentiment = d.market_sentiment ?? 5.0;
                     const rating = getRating(r.score);
-                    const styleName = styleNames[style] || '质量 (Quality)';
+                    const styleName = style === 'quality' ? t('landing.styles.quality.name') : 
+                                     style === 'value' ? t('landing.styles.value.name') :
+                                     style === 'growth' ? t('landing.styles.growth.name') :
+                                     t('landing.styles.momentum.name');
                     const pricePosition = d.week52_high && d.week52_low && d.week52_high > d.week52_low
                         ? ((d.price - d.week52_low) / (d.week52_high - d.week52_low) * 100)
                         : 50;
@@ -915,7 +904,7 @@ export default function Home() {
                                 <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                     <div className="metric-label">
                                         <i className="bi bi-graph-up mr-2"></i>
-                                        当前价格 (P)
+                                        {t('stock.metrics.price')}
                                     </div>
                                     <div className="metric-value">{d.currency_symbol}{d.price?.toFixed(2)}</div>
                                     <small className="text-muted" style={{ fontSize: '0.85rem' }}>
@@ -927,17 +916,17 @@ export default function Home() {
                                 <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                     <div className="metric-label">
                                         <i className="bi bi-emoji-smile mr-2"></i>
-                                        市场情绪 (S)
+                                        {t('stock.metrics.sentiment')}
                                     </div>
                                     <div className={`metric-value ${getSentimentClass(sentiment)}`}>{sentiment.toFixed(1)}</div>
-                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>0-10分，越高越乐观</small>
+                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>{t('stock.metrics.sentimentDesc')}</small>
                                 </div>
 
                                 {/* Risk Level */}
                                 <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                     <div className="metric-label">
                                         <i className="bi bi-shield-check mr-2"></i>
-                                        综合风控等级
+                                        {t('stock.metrics.risk')}
                                     </div>
                                     <div className={`metric-value ${getRiskClass(r.score)}`}>{r.level}</div>
                                     <small className="text-danger" style={{ fontSize: '0.85rem' }}>Score: {r.score}/10</small>
@@ -947,10 +936,10 @@ export default function Home() {
                                 <div className="card shadow-md border-primary" style={{ padding: '1.5rem', borderWidth: '2px' }}>
                                     <div className="metric-label text-primary">
                                         <i className="bi bi-pie-chart-fill mr-2"></i>
-                                        建议仓位
+                                        {t('stock.metrics.position')}
                                     </div>
                                     <div className="metric-value text-primary">{r.suggested_position}%</div>
-                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>基于模型限制</small>
+                                    <small className="text-muted" style={{ fontSize: '0.85rem' }}>{t('stock.metrics.positionDesc')}</small>
                                 </div>
                             </div>
 
@@ -962,7 +951,7 @@ export default function Home() {
                                     <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                         <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
                                             <i className="bi bi-graph-up-arrow"></i>
-                                            近12月价格趋势
+                                            {t('stock.chart.title')}
                                         </h5>
                                         <PriceChart dates={d.history_dates} prices={d.history_prices} />
                                     </div>
@@ -971,15 +960,15 @@ export default function Home() {
                                     <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                         <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
                                             <i className="bi bi-exclamation-triangle"></i>
-                                            风险警示
+                                            {t('stock.risks.title')}
                                         </h5>
                                         <ul>
                                             {r.flags && r.flags.length > 0 ? (
                                                 r.flags.map((flag: string, idx: number) => (
-                                                    <li key={idx} className="list-group-item text-danger">[警告] {flag}</li>
+                                                    <li key={idx} className="list-group-item text-danger">{t('stock.risks.warning')} {flag}</li>
                                                 ))
                                             ) : (
-                                                <li className="list-group-item text-success">硬逻辑检测通过，无明显结构性风险。</li>
+                                                <li className="list-group-item text-success">{t('stock.risks.noRisk')}</li>
                                             )}
                                         </ul>
                                     </div>
@@ -996,9 +985,9 @@ export default function Home() {
                                     }}>
                                         <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
                                             <i className="bi bi-stars"></i>
-                                            AI投资分析
+                                            {t('stock.aiReport.title')}
                                         </h5>
-                                        <span className="badge-primary">AI Generated</span>
+                                        <span className="badge-primary">{t('stock.aiReport.generated')}</span>
                                     </div>
                                     <div className="overflow-auto" style={{ maxHeight: '650px', padding: '1.5rem' }}>
                                         <div
@@ -1359,8 +1348,8 @@ export default function Home() {
                                             <p><strong style={{ color: 'var(--foreground)' }}>投资评级：</strong><span className={rating.class} style={{ fontSize: '1.1rem', fontWeight: 600 }}>{rating.text}</span></p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>目标价格：</strong>{d.currency_symbol}{(d.target_price || d.price)?.toFixed(2)}（基于PE估值、增长率和技术面综合计算）</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>建议仓位：</strong><span style={{ color: r.suggested_position === 0 ? 'var(--bear)' : 'var(--primary)', fontSize: '1.1rem', fontWeight: 600 }}>{r.suggested_position}%</span>（基于{styleName}风格、风险评分和价格动态调整）</p>
-                                            <p><strong style={{ color: 'var(--foreground)' }}>建仓策略：</strong>{generateEntryStrategy(d.price || 0, d.target_price || d.price || 0, style, r.score, r.suggested_position)}</p>
-                                            <p><strong style={{ color: 'var(--foreground)' }}>止盈建议：</strong>{generateTakeProfitStrategy(d.price || 0, d.target_price || d.price || 0, style, d.currency_symbol || '$')}</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>建仓策略：</strong>{generateEntryStrategy(d.price || 0, d.target_price || d.price || 0, style, r.score, r.suggested_position, t)}</p>
+                                            <p><strong style={{ color: 'var(--foreground)' }}>止盈建议：</strong>{generateTakeProfitStrategy(d.price || 0, d.target_price || d.price || 0, style, d.currency_symbol || '$', t)}</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>止损建议：</strong>建议设置止损价格为{d.currency_symbol}{d.stop_loss_price?.toFixed(2) || (d.price * 0.85).toFixed(2)}（{d.stop_loss_method || '动态止损'}），严格执行止损纪律。</p>
                                             <p><strong style={{ color: 'var(--foreground)' }}>持有周期：</strong>根据{styleName}风格，建议持有{style === 'quality' ? '长期（1-3年）' : style === 'value' ? '中期（6-12个月）' : style === 'growth' ? '中短期（3-6个月）' : '短期（1-3个月）'}。</p>
                                         </div>
