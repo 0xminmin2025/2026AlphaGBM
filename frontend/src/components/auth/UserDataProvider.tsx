@@ -36,6 +36,7 @@ type PricingData = {
         free: { name: string; features: string[] };
         plus: { name: string; features: string[]; monthly: { price: number } };
         pro: { name: string; features: string[]; monthly: { price: number } };
+        enterprise?: { name: string; features: string[]; price?: number | null };
     };
     topups: {
         '100': { name: string; price: number; validity: string };

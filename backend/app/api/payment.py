@@ -218,7 +218,7 @@ def get_pricing():
                 'name': '免费版',
                 'price': 0,
                 'credits': '每天2次查询',
-                'features': ['基础股票分析', '每日2次免费查询']
+                'features': ['每日2次', '股票分析', '行业报告']
             },
             'plus': {
                 'name': 'Plus会员',
@@ -235,7 +235,7 @@ def get_pricing():
                     'period': 'year',
                     'savings': '节省17%'
                 },
-                'features': ['1000次查询/月', 'AI深度分析', '期权分析', '优先支持']
+                'features': ['1000次查询/月', '股票分析', '期权分析', '行业报告']
             },
             'pro': {
                 'name': 'Pro会员',
@@ -252,7 +252,13 @@ def get_pricing():
                     'period': 'year',
                     'savings': '节省17%'
                 },
-                'features': ['5000次查询/月', '所有功能', '深度研报', '专属支持']
+                'features': ['5000次查询/月', '股票分析', '期权分析', '智能体服务', '行业报告', '投资回顾']
+            },
+            'enterprise': {
+                'name': '企业客户',
+                'price': None,
+                'credits': '定制化',
+                'features': ['API接入', '定制化服务', '联系客服咨询']
             }
         },
         'topups': {

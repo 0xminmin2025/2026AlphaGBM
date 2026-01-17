@@ -81,7 +81,6 @@ def create_app(config_class=Config):
     app.register_blueprint(tasks_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(docs_bp)
-    app.register_blueprint(feedback_bp)
 
     @app.route('/health')
     def health():

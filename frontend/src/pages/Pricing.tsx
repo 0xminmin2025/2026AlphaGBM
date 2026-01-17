@@ -3,7 +3,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Check, Loader2, Sparkles, Zap, Crown } from 'lucide-react';
+import { Check, Loader2, Sparkles, Zap, Crown, Building2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -224,6 +224,10 @@ export default function Pricing() {
         );
     }
 
+    // Debug: Log pricing data
+    console.log('Pricing data:', pricing);
+    console.log('Enterprise plan exists:', !!pricing?.plans?.enterprise);
+
     return (
         <div className="animate-in fade-in">
             <style>{styles}</style>
@@ -252,7 +256,7 @@ export default function Pricing() {
             )}
 
             {/* Pricing Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 max-w-6xl mx-4 sm:mx-auto mb-8 sm:mb-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 max-w-7xl mx-4 sm:mx-auto mb-8 sm:mb-16">
                 {/* Free Plan */}
                 <div className={`pricing-card ${currentPlan === 'free' ? 'current' : ''}`}>
                     {currentPlan === 'free' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
@@ -376,6 +380,48 @@ export default function Pricing() {
                         </Button>
                     )}
                 </div>
+
+                {/* Enterprise Plan */}
+                {pricing.plans.enterprise && (
+                    <div className={`pricing-card ${currentPlan === 'enterprise' ? 'current' : ''}`}>
+                        {currentPlan === 'enterprise' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
+                        <div className="flex items-center gap-3 mb-6 mt-2">
+                            <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                                <Building2 className="w-6 h-6 text-purple-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold">{pricing.plans.enterprise.name}</h3>
+                                <p className="text-sm text-slate-500">定制化解决方案</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-6">
+                            <span className="text-2xl font-bold text-slate-300">定制报价</span>
+                            <span className="text-slate-500 ml-2 text-sm">联系咨询</span>
+                        </div>
+
+                        <div className="space-y-1 mb-8">
+                            {pricing.plans.enterprise.features.map((f: string) => (
+                                <div key={f} className="feature-item">
+                                    <div className="feature-icon">
+                                        <Check className="w-3 h-3 text-green-500" />
+                                    </div>
+                                    <span>{f}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <Button
+                            className="subscribe-btn outline"
+                            onClick={() => {
+                                // 滚动到页面底部，让用户看到右下角的反馈按钮
+                                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+                            }}
+                        >
+                            联系客服
+                        </Button>
+                    </div>
+                )}
             </div>
 
             {/* Top-up Section */}
