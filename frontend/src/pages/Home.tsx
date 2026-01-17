@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
+import { useTranslation } from 'react-i18next';
 
 // Declare global types for Chart.js and marked
 declare global {
@@ -18,6 +19,7 @@ declare global {
 
 // Price Chart Component using Chart.js
 function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) {
+    const { t } = useTranslation();
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
 
@@ -65,11 +67,11 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
             }
         };
     }, [dates, prices]);
-
+    
     if (!dates || !prices || dates.length === 0) {
         return (
             <div className="h-48 flex items-center justify-center text-muted">
-                <p>无历史数据</p>
+                <p>{t('stock.chart.noData')}</p>
             </div>
         );
     }
@@ -81,7 +83,7 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
             </div>
             <div className="mt-4 text-center">
                 <small style={{ color: '#9CA3AF', fontWeight: 400, fontSize: '0.85rem' }}>
-                    {dates[0]} 至 {dates[dates.length - 1]}
+                    {t('stock.chart.dateRange', { start: dates[0], end: dates[dates.length - 1] })}
                 </small>
             </div>
         </div>
@@ -435,6 +437,7 @@ function generateTakeProfitStrategy(
 
 // Investment Philosophy Component (constant)
 function InvestmentPhilosophy() {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(true);
 
     return (
@@ -446,10 +449,10 @@ function InvestmentPhilosophy() {
             >
                 <div className="flex items-center gap-2" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
                     <i className="bi bi-lightbulb-fill"></i>
-                    <span>Alpha GBM 投资理念</span>
+                    <span>{t('stock.philosophy.title')}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.8rem' }}>
-                    <span>{expanded ? '收起' : '展开'}</span>
+                    <span>{expanded ? t('stock.philosophy.collapse') : t('stock.philosophy.expand')}</span>
                     <i className={`bi bi-chevron-${expanded ? 'up' : 'down'}`}></i>
                 </div>
             </div>
@@ -555,6 +558,7 @@ function MarketWarnings({ warnings }: { warnings?: any[] }) {
 export default function Home() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const { t } = useTranslation();
 
     const [ticker, setTicker] = useState('');
     const [style, setStyle] = useState('quality');
@@ -574,7 +578,7 @@ export default function Home() {
             setResult(taskResult);
             setLoading(false);
             setTaskProgress(100);
-            setTaskStep('分析完成！');
+                setTaskStep(t('stock.taskComplete'));
         },
         onTaskError: (errorMsg) => {
             console.error('Task failed:', errorMsg);
@@ -612,7 +616,7 @@ export default function Home() {
 
             if (response.data.success && response.data.task_id) {
                 console.log('Task created:', response.data.task_id);
-                setTaskStep('任务已创建，开始分析...');
+                setTaskStep(t('stock.taskCreated'));
 
                 // Start polling for task status
                 startPolling(response.data.task_id);
@@ -640,10 +644,10 @@ export default function Home() {
     };
 
     const getRating = (score: number) => {
-        if (score >= 6) return { text: '观望', class: 'text-warning' };
-        if (score >= 4) return { text: '中性', class: 'text-warning' };
-        if (score >= 2) return { text: '增持', class: 'text-success' };
-        return { text: '买入', class: 'text-success' };
+        if (score >= 6) return { text: t('stock.rating.watch'), class: 'text-warning' };
+        if (score >= 4) return { text: t('stock.rating.neutral'), class: 'text-warning' };
+        if (score >= 2) return { text: t('stock.rating.add'), class: 'text-success' };
+        return { text: t('stock.rating.buy'), class: 'text-success' };
     };
 
     // Add timeout for auth loading to prevent infinite loading
@@ -661,7 +665,7 @@ export default function Home() {
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="text-center">
                     <div className="spinner mx-auto mb-4"></div>
-                    <p className="text-white">正在加载...</p>
+                    <p className="text-white">{t('stock.loading')}</p>
                 </div>
             </div>
         );
@@ -670,12 +674,12 @@ export default function Home() {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4 text-white">
-                <h1 className="text-4xl font-bold tracking-tight">AlphaGBM 股票分析</h1>
+                <h1 className="text-4xl font-bold tracking-tight">{t('stock.pageTitle')}</h1>
                 <p className="text-lg text-slate-400 max-w-2xl">
-                    请登录以访问期权分析
+                    {t('stock.loginRequired')}
                 </p>
                 <div className="flex gap-4">
-                    <Button onClick={() => navigate('/login')} className="btn-primary" size="lg">登录</Button>
+                    <Button onClick={() => navigate('/login')} className="btn-primary" size="lg">{t('stock.login') || t('nav.login')}</Button>
                 </div>
             </div>
         );
@@ -704,7 +708,7 @@ export default function Home() {
                         }}
                     >
                         <i className="bi bi-graph-up mr-2"></i>
-                        股票分析
+                        {t('stock.tab.analysis')}
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
@@ -722,7 +726,7 @@ export default function Home() {
                         }}
                     >
                         <i className="bi bi-clock-history mr-2"></i>
-                        分析历史
+                        {t('stock.tab.history')}
                     </button>
                 </div>
             </div>
@@ -733,12 +737,12 @@ export default function Home() {
                 <div className="card shadow-lg mb-4 p-4 sm:p-6">
                     <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                         <i className="bi bi-search"></i>
-                        股票智能分析
+                        {t('stock.form.title')}
                     </h5>
 
                     <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
                         <div>
-                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>投资风格</label>
+                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
                             <CustomSelect
                                 options={[
                                     {
@@ -764,14 +768,14 @@ export default function Home() {
                                 ]}
                                 value={style}
                                 onChange={setStyle}
-                                placeholder="选择投资风格"
+                                placeholder={t('stock.form.stylePlaceholder')}
                                 className="w-full"
                             />
                         </div>
                         <div>
-                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>股票代码</label>
+                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.ticker')}</label>
                             <Input
-                                placeholder="输入股票代码，如 AAPL, TSLA, 600519.SS"
+                                placeholder={t('stock.form.tickerPlaceholder')}
                                 value={ticker}
                                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                                 required
@@ -781,7 +785,7 @@ export default function Home() {
                         <div className="flex items-end">
                             <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
                                 <i className="bi bi-graph-up mr-2"></i>
-                                {loading ? '分析中...' : '分析'}
+                                {loading ? t('stock.form.analyzing') : t('stock.form.analyze')}
                             </Button>
                         </div>
                     </form>
