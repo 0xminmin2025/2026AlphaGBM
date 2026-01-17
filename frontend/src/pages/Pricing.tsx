@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Check, Loader2, Sparkles, Zap, Crown, Building2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 
 // Modern pricing page styles
 const styles = `
@@ -179,6 +180,41 @@ export default function Pricing() {
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [currentPlan, setCurrentPlan] = useState<string>('free');
 
+    // Helper function to translate feature text
+    const translateFeature = (feature: string): string => {
+        // Map backend feature text to translation keys
+        const featureMap: Record<string, string> = {
+            '每日2次': 'pricing.feature.daily2',
+            '股票分析': 'pricing.feature.stockAnalysis',
+            '行业报告': 'pricing.feature.industryReport',
+            '1000次查询/月': 'pricing.feature.queries1000',
+            '期权分析': 'pricing.feature.optionsAnalysis',
+            '5000次查询/月': 'pricing.feature.queries5000',
+            '智能体服务': 'pricing.feature.agentService',
+            '投资回顾': 'pricing.feature.investmentReview',
+            'API接入': 'pricing.feature.apiAccess',
+            '定制化服务': 'pricing.feature.customService',
+            '联系客服咨询': 'pricing.feature.contactSupport',
+            '额度加油包（100次）': 'pricing.topup.name',
+        };
+        const translationKey = featureMap[feature];
+        if (translationKey) {
+            return t(translationKey);
+        }
+        // If no mapping found, return original (might already be in target language)
+        return feature;
+    };
+
+    // Helper function to get currency symbol and convert price
+    const getCurrencyAndPrice = (price: number, currency: string = 'cny'): { symbol: string, price: number } => {
+        const isEnglish = i18n.language === 'en';
+        if (isEnglish && currency === 'cny') {
+            // Convert CNY to USD (approximate rate: 7 CNY = 1 USD)
+            return { symbol: t('pricing.currencyUSD'), price: Math.round(price / 7) };
+        }
+        return { symbol: currency === 'cny' ? t('pricing.currencyCNY') : t('pricing.currencyUSD'), price };
+    };
+
     const success = searchParams.get('success');
 
     // Update current plan based on credits data
@@ -271,7 +307,7 @@ export default function Pricing() {
                     </div>
 
                     <div className="mb-6">
-                        <span className="price-tag">¥0</span>
+                        <span className="price-tag">{getCurrencyAndPrice(0).symbol}0</span>
                         <span className="text-slate-500 ml-2">{t('pricing.permanentFree')}</span>
                     </div>
 
@@ -281,7 +317,7 @@ export default function Pricing() {
                                 <div className="feature-icon">
                                     <Check className="w-3 h-3 text-green-500" />
                                 </div>
-                                <span>{f}</span>
+                                <span>{translateFeature(f)}</span>
                             </div>
                         ))}
                     </div>
@@ -309,16 +345,28 @@ export default function Pricing() {
                     </div>
 
                     <div className="mb-6">
-                        <div className="flex items-baseline gap-2">
-                            <span className="price-tag">¥{pricing.plans.plus.monthly.price}</span>
-                            <span className="text-slate-500">{t('pricing.perMonth')}</span>
-                        </div>
+                        {(() => {
+                            const plusMonthly = getCurrencyAndPrice(pricing.plans.plus.monthly.price, pricing.plans.plus.monthly.currency);
+                            return (
+                                <div className="flex items-baseline gap-2">
+                                    <span className="price-tag">{plusMonthly.symbol}{plusMonthly.price}</span>
+                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                </div>
+                            );
+                        })()}
                         {pricing.plans.plus.yearly && (
                             <div className="text-sm text-slate-400 mt-2">
-                                <span>{t('pricing.yearly', { price: pricing.plans.plus.yearly.price })}</span>
-                                {pricing.plans.plus.yearly.savings && (
-                                    <span className="text-green-500 ml-2">（{pricing.plans.plus.yearly.savings}）</span>
-                                )}
+                                {(() => {
+                                    const plusYearly = getCurrencyAndPrice(pricing.plans.plus.yearly.price, pricing.plans.plus.yearly.currency);
+                                    return (
+                                        <>
+                                            <span>{t('pricing.yearly', { price: plusYearly.price }).replace(/¥|\$/, plusYearly.symbol)}</span>
+                                            {pricing.plans.plus.yearly.savings && (
+                                                <span className="text-green-500 ml-2">（{pricing.plans.plus.yearly.savings.match(/\d+/)?.[0] ? t('pricing.savings', { percent: pricing.plans.plus.yearly.savings.match(/\d+/)?.[0] || '17' }) : pricing.plans.plus.yearly.savings}）</span>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>
@@ -329,7 +377,7 @@ export default function Pricing() {
                                 <div className="feature-icon">
                                     <Check className="w-3 h-3 text-green-500" />
                                 </div>
-                                <span>{f}</span>
+                                <span>{translateFeature(f)}</span>
                             </div>
                         ))}
                     </div>
@@ -362,16 +410,28 @@ export default function Pricing() {
                     </div>
 
                     <div className="mb-6">
-                        <div className="flex items-baseline gap-2">
-                            <span className="price-tag">¥{pricing.plans.pro.monthly.price}</span>
-                            <span className="text-slate-500">{t('pricing.perMonth')}</span>
-                        </div>
+                        {(() => {
+                            const proMonthly = getCurrencyAndPrice(pricing.plans.pro.monthly.price, pricing.plans.pro.monthly.currency);
+                            return (
+                                <div className="flex items-baseline gap-2">
+                                    <span className="price-tag">{proMonthly.symbol}{proMonthly.price}</span>
+                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                </div>
+                            );
+                        })()}
                         {pricing.plans.pro.yearly && (
                             <div className="text-sm text-slate-400 mt-2">
-                                <span>{t('pricing.yearly', { price: pricing.plans.pro.yearly.price })}</span>
-                                {pricing.plans.pro.yearly.savings && (
-                                    <span className="text-green-500 ml-2">（{pricing.plans.pro.yearly.savings}）</span>
-                                )}
+                                {(() => {
+                                    const proYearly = getCurrencyAndPrice(pricing.plans.pro.yearly.price, pricing.plans.pro.yearly.currency);
+                                    return (
+                                        <>
+                                            <span>{t('pricing.yearly', { price: proYearly.price }).replace(/¥|\$/, proYearly.symbol)}</span>
+                                            {pricing.plans.pro.yearly.savings && (
+                                                <span className="text-green-500 ml-2">（{pricing.plans.pro.yearly.savings.match(/\d+/)?.[0] ? t('pricing.savings', { percent: pricing.plans.pro.yearly.savings.match(/\d+/)?.[0] || '17' }) : pricing.plans.pro.yearly.savings}）</span>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>
@@ -382,7 +442,7 @@ export default function Pricing() {
                                 <div className="feature-icon">
                                     <Check className="w-3 h-3 text-green-500" />
                                 </div>
-                                <span>{f}</span>
+                                <span>{translateFeature(f)}</span>
                             </div>
                         ))}
                     </div>
@@ -426,7 +486,7 @@ export default function Pricing() {
                                     <div className="feature-icon">
                                         <Check className="w-3 h-3 text-green-500" />
                                     </div>
-                                    <span>{f}</span>
+                                    <span>{translateFeature(f)}</span>
                                 </div>
                             ))}
                         </div>
@@ -449,11 +509,14 @@ export default function Pricing() {
                 <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6">{t('pricing.topUpTitle')}</h2>
                 <div className="topup-card flex-col sm:flex-row gap-4 sm:gap-6">
                     <div className="flex-1">
-                        <div className="font-semibold text-lg">{pricing.topups['100'].name}</div>
-                        <div className="text-sm text-slate-500">{pricing.topups['100'].validity}</div>
+                        <div className="font-semibold text-lg">{translateFeature(pricing.topups['100'].name) || t('pricing.topup.name')}</div>
+                        <div className="text-sm text-slate-500">{pricing.topups['100'].validity && pricing.topups['100'].validity.includes('3个月') ? t('pricing.topup.validity') : (pricing.topups['100'].validity || t('pricing.topup.validity'))}</div>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-6 justify-between sm:justify-end">
-                        <div className="text-xl sm:text-2xl font-bold">¥{pricing.topups['100'].price}</div>
+                        {(() => {
+                            const topupPrice = getCurrencyAndPrice(pricing.topups['100'].price, pricing.topups['100'].currency);
+                            return <div className="text-xl sm:text-2xl font-bold">{topupPrice.symbol}{topupPrice.price}</div>;
+                        })()}
                         <Button
                             variant="outline"
                             onClick={() => handleSubscribe('topup_100')}
