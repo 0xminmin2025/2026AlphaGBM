@@ -206,8 +206,8 @@ const styles = `
 
     .form-control::placeholder,
     input::placeholder {
-        color: #94a3b8 !important; /* slate-400 - 淡淡的灰色 */
-        opacity: 0.7;
+        color: #64748b !important; /* slate-500 - 浅浅的灰色 */
+        opacity: 0.5;
     }
 
     .form-control:focus, .form-select:focus {
@@ -1102,7 +1102,7 @@ export default function Options() {
                         type="text"
                         value={ticker}
                         onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                        placeholder="如 AAPL, NVDA"
+                        placeholder="如 AAPL, NVDA, TSLA, MSFT, GOOGL, AMZN"
                         className="form-control flex-1"
                     />
                 </div>
