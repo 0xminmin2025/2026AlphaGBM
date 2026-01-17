@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
-import { LanguageToggle } from '../ui/language-toggle';
 import LoadingScreen from '../ui/LoadingScreen';
 import FeedbackButton from '../FeedbackButton';
 import PrivacyPolicy from '../PrivacyPolicy';
 import { useTranslation } from 'react-i18next';
 import { Menu, X } from 'lucide-react';
+import i18n from '@/lib/i18n';
 
 export default function MainLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -24,6 +24,10 @@ export default function MainLayout() {
 
     const closeMobileMenu = () => {
         setIsMobileMenuOpen(false);
+    };
+
+    const toggleLang = () => {
+        i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh');
     };
 
     // Show loading screen when user data is being initially loaded
@@ -60,9 +64,9 @@ export default function MainLayout() {
                         </nav>
 
                         <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2 mr-2 border-r border-white/10 pr-4">
-                                <LanguageToggle />
-                            </div>
+                            <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
+                                {i18n.language === 'zh' ? 'EN' : '中'}
+                            </button>
                             {user ? (
                                 <div className="flex items-center gap-4">
                                     <Link to="/profile" className="text-sm font-medium hover:text-[#0D9B97] text-slate-300">{t('nav.profile')}</Link>
@@ -116,9 +120,9 @@ export default function MainLayout() {
                             </Link>
 
                             <div className="border-t border-white/10 pt-4 mt-4 space-y-4">
-                                <div className="flex items-center gap-2">
-                                    <LanguageToggle />
-                                </div>
+                                <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded hover:bg-slate-800 transition-colors">
+                                    {i18n.language === 'zh' ? 'EN' : '中'}
+                                </button>
                                 {user ? (
                                     <div className="space-y-4">
                                         <Link
