@@ -1727,7 +1727,7 @@ export default function Options() {
                         // Scroll to the top to show the analysis
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    symbolFilter={ticker}
+                    symbolFilter={''}
                 />
             </div>
 
