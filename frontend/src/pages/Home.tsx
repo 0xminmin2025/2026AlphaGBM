@@ -149,6 +149,13 @@ const styles = `
 
     .border-primary { border-color: var(--primary) !important; }
 
+    /* Input placeholder styling */
+    .form-control::placeholder,
+    input::placeholder {
+        color: #94a3b8 !important; /* slate-400 - 淡淡的灰色 */
+        opacity: 0.7;
+    }
+
     .risk-high { color: var(--bear) !important; }
     .risk-med { color: var(--warning) !important; }
     .risk-low { color: var(--bull) !important; }
