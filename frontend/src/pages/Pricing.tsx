@@ -180,6 +180,37 @@ export default function Pricing() {
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [currentPlan, setCurrentPlan] = useState<string>('free');
 
+    // Helper function to translate plan name
+    const translatePlanName = (planKey: string, backendName: string): string => {
+        // Map backend plan names to translation keys
+        const planNameMap: Record<string, string> = {
+            '免费版': 'pricing.free.name',
+            'Plus会员': 'pricing.plus.name',
+            'Pro会员': 'pricing.pro.name',
+            '企业客户': 'pricing.enterprise.name',
+        };
+        
+        // Check if the backend name is in the map
+        if (planNameMap[backendName]) {
+            return t(planNameMap[backendName]);
+        }
+        
+        // Fallback to translation key based on planKey
+        const fallbackKeys: Record<string, string> = {
+            'free': 'pricing.free.name',
+            'plus': 'pricing.plus.name',
+            'pro': 'pricing.pro.name',
+            'enterprise': 'pricing.enterprise.name',
+        };
+        
+        if (fallbackKeys[planKey]) {
+            return t(fallbackKeys[planKey]);
+        }
+        
+        // If no mapping found, return original
+        return backendName;
+    };
+
     // Helper function to translate feature text
     const translateFeature = (feature: string): string => {
         // Map backend feature text to translation keys
@@ -301,7 +332,7 @@ export default function Pricing() {
                             <Sparkles className="w-6 h-6 text-slate-400" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold">{pricing.plans.free.name}</h3>
+                            <h3 className="text-xl font-bold">{translatePlanName('free', pricing.plans.free.name)}</h3>
                             <p className="text-sm text-slate-500">{t('pricing.free.desc')}</p>
                         </div>
                     </div>
@@ -339,7 +370,7 @@ export default function Pricing() {
                             <Zap className="w-6 h-6 text-[#0D9B97]" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold">{pricing.plans.plus.name}</h3>
+                            <h3 className="text-xl font-bold">{translatePlanName('plus', pricing.plans.plus.name)}</h3>
                             <p className="text-sm text-slate-500">{t('pricing.plus.desc')}</p>
                         </div>
                     </div>
@@ -404,7 +435,7 @@ export default function Pricing() {
                             <Crown className="w-6 h-6 text-amber-500" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold">{pricing.plans.pro.name}</h3>
+                            <h3 className="text-xl font-bold">{translatePlanName('pro', pricing.plans.pro.name)}</h3>
                             <p className="text-sm text-slate-500">{t('pricing.pro.desc')}</p>
                         </div>
                     </div>
@@ -470,7 +501,7 @@ export default function Pricing() {
                                 <Building2 className="w-6 h-6 text-purple-500" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold">{pricing.plans.enterprise.name}</h3>
+                                <h3 className="text-xl font-bold">{translatePlanName('enterprise', pricing.plans.enterprise.name)}</h3>
                                 <p className="text-sm text-slate-500">{t('pricing.enterprise.customSolution')}</p>
                             </div>
                         </div>
