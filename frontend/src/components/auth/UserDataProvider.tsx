@@ -33,10 +33,20 @@ type CreditsData = {
 
 type PricingData = {
     plans: {
-        free: { name: string; features: string[] };
-        plus: { name: string; features: string[]; monthly: { price: number } };
-        pro: { name: string; features: string[]; monthly: { price: number } };
-        enterprise?: { name: string; features: string[]; price?: number | null };
+        free: { name: string; features: string[]; credits?: string; price?: number };
+        plus: { 
+            name: string; 
+            features: string[]; 
+            monthly: { price: number; credits?: number; currency?: string; period?: string };
+            yearly?: { price: number; credits?: number; currency?: string; period?: string; savings?: string };
+        };
+        pro: { 
+            name: string; 
+            features: string[]; 
+            monthly: { price: number; credits?: number; currency?: string; period?: string };
+            yearly?: { price: number; credits?: number; currency?: string; period?: string; savings?: string };
+        };
+        enterprise?: { name: string; features: string[]; price?: number | null; credits?: string };
     };
     topups: {
         '100': { name: string; price: number; validity: string };

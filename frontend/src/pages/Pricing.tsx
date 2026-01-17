@@ -309,8 +309,18 @@ export default function Pricing() {
                     </div>
 
                     <div className="mb-6">
-                        <span className="price-tag">¥{pricing.plans.plus.monthly.price}</span>
-                        <span className="text-slate-500 ml-2">{t('pricing.perMonth')}</span>
+                        <div className="flex items-baseline gap-2">
+                            <span className="price-tag">¥{pricing.plans.plus.monthly.price}</span>
+                            <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                        </div>
+                        {pricing.plans.plus.yearly && (
+                            <div className="text-sm text-slate-400 mt-2">
+                                <span>年度：¥{pricing.plans.plus.yearly.price}/年</span>
+                                {pricing.plans.plus.yearly.savings && (
+                                    <span className="text-green-500 ml-2">（{pricing.plans.plus.yearly.savings}）</span>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-1 mb-8">
@@ -352,8 +362,18 @@ export default function Pricing() {
                     </div>
 
                     <div className="mb-6">
-                        <span className="price-tag">¥{pricing.plans.pro.monthly.price}</span>
-                        <span className="text-slate-500 ml-2">{t('pricing.perMonth')}</span>
+                        <div className="flex items-baseline gap-2">
+                            <span className="price-tag">¥{pricing.plans.pro.monthly.price}</span>
+                            <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                        </div>
+                        {pricing.plans.pro.yearly && (
+                            <div className="text-sm text-slate-400 mt-2">
+                                <span>年度：¥{pricing.plans.pro.yearly.price}/年</span>
+                                {pricing.plans.pro.yearly.savings && (
+                                    <span className="text-green-500 ml-2">（{pricing.plans.pro.yearly.savings}）</span>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-1 mb-8">
