@@ -8,17 +8,31 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '@/lib/api';
-
-
-const serviceTypeLabels: Record<string, string> = {
-    'stock_analysis': '股票分析',
-    'option_analysis': '期权分析',
-    'deep_report': '深度研报',
-};
+import i18n from '@/lib/i18n';
 
 export default function Profile() {
     const { user } = useAuth();
     const { t } = useTranslation();
+
+    // Helper function to translate service type
+    const translateServiceType = (serviceType: string): string => {
+        const serviceTypeMap: Record<string, string> = {
+            'stock_analysis': t('profile.service.stockAnalysis'),
+            'option_analysis': t('profile.service.optionAnalysis'),
+            'deep_report': t('profile.service.deepReport'),
+        };
+        return serviceTypeMap[serviceType] || serviceType;
+    };
+
+    // Helper function to translate transaction description
+    const translateDescription = (description: string): string => {
+        // Map common backend descriptions to translation keys
+        const descriptionMap: Record<string, string> = {
+            '购买': t('profile.purchase'),
+            '购买额度': t('profile.purchase'),
+        };
+        return descriptionMap[description] || description;
+    };
     const {
         credits,
         transactions,
@@ -145,7 +159,7 @@ export default function Profile() {
                                             className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white"
                                         >
                                             <Settings className={`w-4 h-4 mr-2 ${manageSubscriptionLoading ? 'animate-spin' : ''}`} />
-                                            {manageSubscriptionLoading ? '正在打开...' : '管理订阅'}
+                                            {manageSubscriptionLoading ? t('profile.opening') : t('profile.manageSubscription')}
                                         </Button>
                                     )}
                                 </div>
@@ -223,7 +237,7 @@ export default function Profile() {
                                 usageLogs.map((log) => (
                                     <TableRow key={log.id} className="border-white/5">
                                         <TableCell className="text-slate-400">
-                                            {new Date(log.created_at).toLocaleString('zh-CN', {
+                                            {new Date(log.created_at).toLocaleString(i18n.language === 'zh' ? 'zh-CN' : 'en-US', {
                                                 month: 'short',
                                                 day: 'numeric',
                                                 hour: '2-digit',
@@ -232,7 +246,7 @@ export default function Profile() {
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className="border-white/20">
-                                                {serviceTypeLabels[log.service_type] || log.service_type}
+                                                {translateServiceType(log.service_type)}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right font-medium text-amber-500">
@@ -317,9 +331,9 @@ export default function Profile() {
                                 transactions.map((transaction, i) => (
                                     <TableRow key={i} className="border-white/5">
                                         <TableCell className="text-slate-400">
-                                            {new Date(transaction.date).toLocaleDateString('zh-CN')}
+                                            {new Date(transaction.date).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : 'en-US')}
                                         </TableCell>
-                                        <TableCell>{transaction.description}</TableCell>
+                                        <TableCell>{translateDescription(transaction.description)}</TableCell>
                                         <TableCell className="font-medium">
                                             {transaction.currency.toUpperCase()} {transaction.amount}
                                         </TableCell>

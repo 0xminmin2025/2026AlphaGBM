@@ -58,6 +58,12 @@ const resources = {
             "profile.noUsageRecords": "No usage records",
             "profile.noTransactionRecords": "No transaction records",
             "profile.totalRecords": "Total {{count}} records",
+            "profile.manageSubscription": "Manage Subscription",
+            "profile.opening": "Opening...",
+            "profile.service.stockAnalysis": "Stock Analysis",
+            "profile.service.optionAnalysis": "Options Analysis",
+            "profile.service.deepReport": "Deep Report",
+            "profile.purchase": "Purchase",
 
             // Pricing Page
             "pricing.title": "Choose Your Plan",
@@ -556,6 +562,12 @@ const resources = {
             "profile.noUsageRecords": "暂无使用记录",
             "profile.noTransactionRecords": "暂无交易记录",
             "profile.totalRecords": "共 {{count}} 条记录",
+            "profile.manageSubscription": "管理订阅",
+            "profile.opening": "正在打开...",
+            "profile.service.stockAnalysis": "股票分析",
+            "profile.service.optionAnalysis": "期权分析",
+            "profile.service.deepReport": "深度研报",
+            "profile.purchase": "购买",
 
             // 定价页面
             "pricing.title": "选择适合您的方案",
