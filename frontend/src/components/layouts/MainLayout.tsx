@@ -5,6 +5,7 @@ import { useUserData } from '@/components/auth/UserDataProvider';
 import { LanguageToggle } from '../ui/language-toggle';
 import LoadingScreen from '../ui/LoadingScreen';
 import FeedbackButton from '../FeedbackButton';
+import PrivacyPolicy from '../PrivacyPolicy';
 import { useTranslation } from 'react-i18next';
 import { Menu, X } from 'lucide-react';
 
@@ -157,9 +158,13 @@ export default function MainLayout() {
             {/* Footer */}
             <footer className="py-6 sm:py-8 border-t border-white/10 bg-[#09090B]">
                 <div className="container flex flex-col items-center justify-center gap-4 text-center px-4 sm:px-8 max-w-7xl mx-auto">
-                    <p className="text-xs sm:text-sm text-slate-500">
-                        {t('footer.copyright')}
-                    </p>
+                    <div className="flex items-center gap-6 flex-wrap justify-center">
+                        <p className="text-xs sm:text-sm text-slate-500">
+                            {t('footer.copyright')}
+                        </p>
+                        <span className="text-slate-600">|</span>
+                        <PrivacyPolicy />
+                    </div>
                 </div>
             </footer>
 

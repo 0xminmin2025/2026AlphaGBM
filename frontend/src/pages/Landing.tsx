@@ -4,6 +4,7 @@ import Chart from 'chart.js/auto';
 import { Menu, X } from 'lucide-react';
 import axios from 'axios';
 import FeedbackButton from '@/components/FeedbackButton';
+import PrivacyPolicy from '@/components/PrivacyPolicy';
 
 // Original CSS from home/index.html
 const originalStyles = `
@@ -1070,7 +1071,11 @@ export default function Landing() {
                             <span className="font-bold text-lg sm:text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>GBM</span></span>
                         </div>
                         <p className="text-slate-600 text-xs sm:text-sm max-w-2xl mx-auto mb-4 leading-relaxed px-4 sm:px-0">{content.footer.disclaimer}</p>
-                        <p className="text-slate-700 text-xs sm:text-sm">{content.footer.copy}</p>
+                        <div className="flex items-center gap-4 flex-wrap justify-center">
+                            <p className="text-slate-700 text-xs sm:text-sm">{content.footer.copy}</p>
+                            <span className="text-slate-700">|</span>
+                            <PrivacyPolicy />
+                        </div>
                     </div>
                 </footer>
             </main>
