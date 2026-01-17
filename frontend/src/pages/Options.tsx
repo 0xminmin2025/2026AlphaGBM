@@ -204,8 +204,9 @@ const styles = `
         border-radius: 0.5rem;
     }
 
-    .form-control::placeholder {
-        color: var(--muted-foreground);
+    .form-control::placeholder,
+    input::placeholder {
+        color: #94a3b8 !important; /* slate-400 - 淡淡的灰色 */
         opacity: 0.7;
     }
 
