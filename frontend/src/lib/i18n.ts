@@ -99,7 +99,7 @@ const resources = {
             "pricing.savings": "Save {{percent}}%",
             "pricing.currencySymbol": "$",
             "pricing.currencyCNY": "¥",
-            "pricing.currencyUSD": "$"
+            "pricing.currencyUSD": "$",
 
             // Common
             "common.pleaseLogin": "Please login first",
@@ -596,7 +596,7 @@ const resources = {
             "pricing.savings": "节省{{percent}}%",
             "pricing.currencySymbol": "¥",
             "pricing.currencyCNY": "¥",
-            "pricing.currencyUSD": "$"
+            "pricing.currencyUSD": "$",
 
             // 通用
             "common.pleaseLogin": "请先登录",
