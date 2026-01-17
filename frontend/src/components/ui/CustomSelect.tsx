@@ -31,7 +31,7 @@ export default function CustomSelect({ options, value, onChange, placeholder, cl
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full bg-[#27272a] border border-white/20 text-[#fafafa] px-4 py-3 rounded-lg text-left flex items-center justify-between transition-all duration-200 hover:border-[#0D9B97]/50 focus:border-[#0D9B97] focus:outline-none focus:ring-2 focus:ring-[#0D9B97]/20"
+                className="w-full h-10 bg-[#27272a] border border-white/20 text-[#fafafa] px-3 py-2 rounded-md text-left flex items-center justify-between transition-all duration-200 hover:border-[#0D9B97]/50 focus:border-[#0D9B97] focus:outline-none focus:ring-2 focus:ring-[#0D9B97]/20 text-sm"
             >
                 <span className="flex-1">
                     {selectedOption ? selectedOption.label : placeholder || 'Select an option...'}

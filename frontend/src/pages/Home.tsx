@@ -758,23 +758,19 @@ export default function Home() {
                                 options={[
                                     {
                                         value: 'quality',
-                                        label: 'Quality (质量)',
-                                        description: '关注财务稳健、盈利能力强、债务水平低的优质公司，适合长期持有，最大仓位20%'
+                                        label: 'Quality (质量)'
                                     },
                                     {
                                         value: 'value',
-                                        label: 'Value (价值)',
-                                        description: '寻找被市场低估的股票，关注低PE、低PEG，追求安全边际，最大仓位10%'
+                                        label: 'Value (价值)'
                                     },
                                     {
                                         value: 'growth',
-                                        label: 'Growth (成长)',
-                                        description: '追求高营收增长和盈利增长的公司，容忍较高估值，最大仓位15%'
+                                        label: 'Growth (成长)'
                                     },
                                     {
                                         value: 'momentum',
-                                        label: 'Momentum (趋势)',
-                                        description: '跟随市场趋势和价格动量，快进快出，风险较高，最大仓位5%'
+                                        label: 'Momentum (趋势)'
                                     }
                                 ]}
                                 value={style}
