@@ -5,6 +5,8 @@ import { Menu, X } from 'lucide-react';
 import axios from 'axios';
 import FeedbackButton from '@/components/FeedbackButton';
 import PrivacyPolicy from '@/components/PrivacyPolicy';
+import i18n from '@/lib/i18n';
+import { translateStockName } from '@/lib/i18n';
 
 // Original CSS from home/index.html
 const originalStyles = `
@@ -128,7 +130,7 @@ const originalStyles = `
 `;
 
 export default function Landing() {
-    const { i18n } = useTranslation();
+    const { i18n, t } = useTranslation();
     const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -154,84 +156,84 @@ export default function Landing() {
     // Strict content mapping
     const content = {
         nav: {
-            home: i18n.language === 'zh' ? "首页" : "Home",
-            portfolio: i18n.language === 'zh' ? "实盘追踪" : "Live Tracking",
-            styles: i18n.language === 'zh' ? "模型理念" : "Model Philosophy",
-            contact: i18n.language === 'zh' ? "关注我们" : "Follow Us",
-            cta: i18n.language === 'zh' ? "立即体验" : "Try Now",
-            lang: i18n.language === 'zh' ? "EN" : "中"
+            home: t('landing.nav.home'),
+            portfolio: t('landing.nav.portfolio'),
+            styles: t('landing.nav.styles'),
+            contact: t('landing.nav.contact'),
+            cta: t('landing.nav.cta'),
+            lang: t('landing.nav.lang')
         },
         portfolio: {
-            title: i18n.language === 'zh' ? "四大风格投资组合实盘追踪" : "Four-Style Portfolio Live Tracking",
-            description: i18n.language === 'zh' ? "四种投资风格组合（质量、价值、成长、趋势），每个组合 25 万美元，共 100 万美元实盘追踪" : "Four investment style portfolios (Quality, Value, Growth, Momentum), each with $250K, total $1M live tracking",
-            quality: i18n.language === 'zh' ? "质量组合" : "Quality Portfolio",
-            value: i18n.language === 'zh' ? "价值组合" : "Value Portfolio",
-            growth: i18n.language === 'zh' ? "成长组合" : "Growth Portfolio",
-            momentum: i18n.language === 'zh' ? "趋势组合" : "Momentum Portfolio",
-            performanceChart: i18n.language === 'zh' ? "累计收益走势图" : "Cumulative Return",
-            viewHoldings: i18n.language === 'zh' ? "查看持仓" : "View Holdings",
-            hideHoldings: i18n.language === 'zh' ? "收起持仓" : "Hide Holdings",
-            stock: i18n.language === 'zh' ? "股票" : "Stock",
-            shares: i18n.language === 'zh' ? "持仓股数" : "Shares",
-            costPrice: i18n.language === 'zh' ? "成本价" : "Cost",
-            currentPrice: i18n.language === 'zh' ? "当前价" : "Current",
-            allocation: i18n.language === 'zh' ? "占比" : "Weight",
-            profitPercent: i18n.language === 'zh' ? "收益率" : "Return",
-            dailyChange: i18n.language === 'zh' ? "今日变化" : "Daily Change",
-            initialCapital: i18n.language === 'zh' ? "初始资金" : "Initial Capital"
+            title: t('landing.portfolio.title'),
+            description: t('landing.portfolio.description'),
+            quality: t('landing.portfolio.quality'),
+            value: t('landing.portfolio.value'),
+            growth: t('landing.portfolio.growth'),
+            momentum: t('landing.portfolio.momentum'),
+            performanceChart: t('landing.portfolio.performanceChart'),
+            viewHoldings: t('landing.portfolio.viewHoldings'),
+            hideHoldings: t('landing.portfolio.hideHoldings'),
+            stock: t('landing.portfolio.stock'),
+            shares: t('landing.portfolio.shares'),
+            costPrice: t('landing.portfolio.costPrice'),
+            currentPrice: t('landing.portfolio.currentPrice'),
+            allocation: t('landing.portfolio.allocation'),
+            profitPercent: t('landing.portfolio.profitPercent'),
+            dailyChange: t('landing.portfolio.dailyChange'),
+            initialCapital: t('landing.portfolio.initialCapital')
         },
         hero: {
             badge: "Powered by LLM",
-            titleSub: i18n.language === 'zh' ? "AI 驱动的机构级投资操作系统" : "AI-Driven Institutional Investment Operating System",
-            subtitle: i18n.language === 'zh' ? "融合股票模型、期权策略与全自动智能体。不预测未来，只计算概率。" : "Integrating stock models, options strategies, and fully autonomous agents. We don't predict the future; we calculate probabilities.",
-            cta_primary: i18n.language === 'zh' ? "立即开启 AI 投资" : "Start AI Investing Now",
-            limit_notice: i18n.language === 'zh' ? "注册即送每日 2 次分析机会" : "Register for 2 free analyses daily"
+            titleSub: t('landing.hero.titleSub'),
+            subtitle: t('landing.hero.subtitle'),
+            cta_primary: t('landing.hero.cta_primary'),
+            limit_notice: t('landing.hero.limit_notice')
         },
         valueProposition: {
-            title: i18n.language === 'zh' ? "三大引擎" : "Three Engines",
+            title: t('landing.engines.title'),
             items: [
-                { icon: "chart-line-up", title: i18n.language === 'zh' ? "股票" : "Stocks", badge: "", desc: i18n.language === 'zh' ? "覆盖美/港/A股，精准识别价值与趋势。" : "Covering US/HK/A-shares, precisely identifying value and trends.", link: "/stock" },
-                { icon: "sigma", title: i18n.language === 'zh' ? "期权" : "Options", badge: "New", desc: i18n.language === 'zh' ? "寻找高概率非对称收益机会。" : "Finding high-probability asymmetric return opportunities.", link: "/options" },
-                { icon: "robot", title: i18n.language === 'zh' ? "智能体" : "Agent", badge: "Coming Soon", desc: i18n.language === 'zh' ? "24/7个性化专业投资助理" : "Your 24/7 personalized professional investment assistant", link: null }
+                { icon: "chart-line-up", title: t('landing.engines.stocks.title'), badge: "", desc: t('landing.engines.stocks.desc'), link: "/stock" },
+                { icon: "sigma", title: t('landing.engines.options.title'), badge: "New", desc: t('landing.engines.options.desc'), link: "/options" },
+                { icon: "robot", title: t('landing.engines.agent.title'), badge: "Coming Soon", desc: t('landing.engines.agent.desc'), link: null }
             ]
         },
         styles: {
-            title: i18n.language === 'zh' ? "投资理念与四大风格" : "Model Philosophy & 4 Styles",
+            title: t('landing.styles.title'),
             desc: "", // Removed: "基于G=B+M模型，系统自动适配您的投资风格"
             cards: [
-                { name: i18n.language === 'zh' ? "质量策略" : "Quality", color: "text-emerald-400", desc: i18n.language === 'zh' ? "护城河深、财务稳健。" : "Wide moat, strong financials." },
-                { name: i18n.language === 'zh' ? "价值策略" : "Value", color: "text-blue-400", desc: i18n.language === 'zh' ? "低估值、安全边际。寻找错杀机会。" : "Undervalued, safety margin. Mid-term." },
-                { name: i18n.language === 'zh' ? "成长策略" : "Growth", color: "text-purple-400", desc: i18n.language === 'zh' ? "高营收增速。容忍高估值换取成长。" : "High revenue growth. High risk tolerance." },
-                { name: i18n.language === 'zh' ? "趋势策略" : "Momentum", color: "text-orange-400", desc: i18n.language === 'zh' ? "价格动量驱动。快进快出跟随趋势。" : "Price action driven. Short-term trading." }
+                { name: t('landing.styles.quality.name'), color: "text-emerald-400", desc: t('landing.styles.quality.desc') },
+                { name: t('landing.styles.value.name'), color: "text-blue-400", desc: t('landing.styles.value.desc') },
+                { name: t('landing.styles.growth.name'), color: "text-purple-400", desc: t('landing.styles.growth.desc') },
+                { name: t('landing.styles.momentum.name'), color: "text-orange-400", desc: t('landing.styles.momentum.desc') }
             ]
         },
         features: {
-            title: i18n.language === 'zh' ? "核心能力" : "Core Capabilities",
+            title: t('landing.capabilities.title'),
             items: [
-                { title: i18n.language === 'zh' ? "深度研报生成" : "Deep Report Generation", desc: "Powered by LLM" },
-                { title: i18n.language === 'zh' ? "风险量化" : "Risk Quantification", desc: "VIX + Greeks" },
-                { title: i18n.language === 'zh' ? "智能仓位管理" : "Smart Position Management", desc: i18n.language === 'zh' ? "凯利公式 + 波动率加权" : "Kelly Formula + Volatility Weighting" }
+                { title: t('landing.capabilities.report.title'), desc: "Powered by LLM" },
+                { title: t('landing.capabilities.risk.title'), desc: "VIX + Greeks" },
+                { title: t('landing.capabilities.position.title'), desc: t('landing.capabilities.position.desc') }
             ]
         },
         faq: {
-            title: i18n.language === 'zh' ? "常见问题" : "FAQ",
+            title: t('landing.faq.title'),
             items: [
-                { question: "AlphaGBM 的股票分析功能如何使用？", answer: "输入股票代码（如 AAPL、600519.SS、0700.HK），选择投资风格（质量、价值、成长、趋势），系统即可生成包含基本面分析、技术面分析、风险评估和仓位建议的完整投资报告。基于 G=B+M 模型，提供机构级的量化分析服务。" },
-                { question: "AlphaGBM 支持哪些市场的股票分析？", answer: "AlphaGBM 支持三大市场：美股（AAPL、TSLA）、港股（0700.HK、2525.HK）、A股（600519、000001）。系统自动识别市场类型，无需手动添加后缀。覆盖全市场数据，打破信息壁垒，一站式完成多市场投资分析。" },
-                { question: "AlphaGBM 的 G=B+M 模型是什么？", answer: "G=B+M 是 AlphaGBM 的核心投资模型，G (Gain) 代表收益，B (Basics) 代表基本面，M (Momentum) 代表动量。模型将股票收益解构为基本面支撑与市场动量的叠加，通过量化分析识别收益与内在价值的偏离，帮助投资者发现投资机会。适用于所有投资风格。" },
-                { question: "AlphaGBM 的期权分析功能有哪些？", answer: "AlphaGBM 期权分析模块提供专业的期权策略分析，包括波动率分析、希腊字母（Greeks）计算、期权链数据、隐含波动率（IV）分析等。系统基于概率计算，帮助您寻找非对称收益机会。支持多种策略构建，为期权交易提供量化决策支持。" },
-                { question: "AlphaGBM 如何进行风险量化评估？", answer: "AlphaGBM 采用 0-10 分动态风险评级系统，综合评估基本面风险（营收增长、利润率、估值水平）、技术面风险（价格位置、成交量异常）、市场情绪风险（VIX 恐慌指数、Put/Call 比率）、宏观风险（利率、汇率、经济指标）等多个维度。结合 VIX 和 Greeks 等量化指标，精准识别危险信号。" },
-                { question: "AlphaGBM 的实盘追踪功能如何运作？", answer: "AlphaGBM 提供四大投资风格组合的实盘追踪，每个组合初始资金25万美元，共100万美元。系统每日自动计算盈亏、更新持仓市值，并提供累计收益走势图。所有数据实时更新，帮助投资者了解不同风格策略的实际表现。" }
+                { question: t('landing.faq.q1.question'), answer: t('landing.faq.q1.answer') },
+                { question: t('landing.faq.q2.question'), answer: t('landing.faq.q2.answer') },
+                { question: t('landing.faq.q3.question'), answer: t('landing.faq.q3.answer') },
+                { question: t('landing.faq.q4.question'), answer: t('landing.faq.q4.answer') },
+                { question: t('landing.faq.q5.question'), answer: t('landing.faq.q5.answer') },
+                { question: t('landing.faq.q6.question'), answer: t('landing.faq.q6.answer') }
             ]
         },
         cta: {
-            title: i18n.language === 'zh' ? "加入 Alpha GBM 社区" : "Join Alpha GBM Community",
-            desc: i18n.language === 'zh' ? "获取内测资格、最新模型更新及深度投资策略。" : "Get Beta access, model updates, and deep strategies.",
-            scan_text: i18n.language === 'zh' ? "扫码关注公众号体验" : "Scan to Follow"
+            title: t('landing.community.title'),
+            desc: t('landing.community.desc'),
+            scan_text: t('landing.community.scan_text')
         },
         footer: {
-            disclaimer: i18n.language === 'zh' ? "免责声明：本系统仅供学习和研究使用，不构成任何投资建议。投资有风险，入市需谨慎。" : "Disclaimer: This system is for educational purposes only and does not constitute investment advice.",
-            copy: "© 2025 Alpha GBM. 基于 G=B+M 投资框架"
+            disclaimer: t('landing.footer.disclaimer'),
+            copy: t('landing.footer.copy')
         }
     };
 
@@ -773,7 +775,7 @@ export default function Landing() {
                                                                 return (
                                                                     <tr key={hidx} className="border-b border-slate-800 last:border-b-0">
                                                                         <td className="py-3 px-2">
-                                                                            <div className="font-medium text-white">{holding.name} ({holding.ticker})</div>
+                                                                            <div className="font-medium text-white">{translateStockName(holding.ticker, t, holding.name)} ({holding.ticker})</div>
                                                                         </td>
                                                                         <td className="py-3 px-2 text-right text-white">{holding.shares}</td>
                                                                         <td className="py-3 px-2 text-right text-white">{currencySymbol}{holding.cost}</td>
@@ -801,7 +803,7 @@ export default function Landing() {
                                                         return (
                                                             <div key={hidx} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
                                                                 <div className="flex justify-between items-center mb-2">
-                                                                    <div className="font-medium text-white text-sm">{holding.name}</div>
+                                                                    <div className="font-medium text-white text-sm">{translateStockName(holding.ticker, t, holding.name)}</div>
                                                                     <div className="text-xs text-slate-400">({holding.ticker})</div>
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-2 text-xs">
