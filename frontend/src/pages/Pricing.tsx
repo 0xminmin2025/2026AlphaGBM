@@ -211,7 +211,7 @@ export default function Pricing() {
             window.location.href = response.data.checkout_url;
         } catch (err) {
             console.error(err);
-            alert("Failed to start checkout");
+            alert(t('pricing.checkoutFailed'));
             setCheckoutLoading(null);
         }
     };
@@ -272,7 +272,7 @@ export default function Pricing() {
 
                     <div className="mb-6">
                         <span className="price-tag">¥0</span>
-                        <span className="text-slate-500 ml-2">永久免费</span>
+                        <span className="text-slate-500 ml-2">{t('pricing.permanentFree')}</span>
                     </div>
 
                     <div className="space-y-1 mb-8">
@@ -315,7 +315,7 @@ export default function Pricing() {
                         </div>
                         {pricing.plans.plus.yearly && (
                             <div className="text-sm text-slate-400 mt-2">
-                                <span>年度：¥{pricing.plans.plus.yearly.price}/年</span>
+                                <span>{t('pricing.yearly', { price: pricing.plans.plus.yearly.price })}</span>
                                 {pricing.plans.plus.yearly.savings && (
                                     <span className="text-green-500 ml-2">（{pricing.plans.plus.yearly.savings}）</span>
                                 )}
@@ -368,7 +368,7 @@ export default function Pricing() {
                         </div>
                         {pricing.plans.pro.yearly && (
                             <div className="text-sm text-slate-400 mt-2">
-                                <span>年度：¥{pricing.plans.pro.yearly.price}/年</span>
+                                <span>{t('pricing.yearly', { price: pricing.plans.pro.yearly.price })}</span>
                                 {pricing.plans.pro.yearly.savings && (
                                     <span className="text-green-500 ml-2">（{pricing.plans.pro.yearly.savings}）</span>
                                 )}
@@ -411,13 +411,13 @@ export default function Pricing() {
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold">{pricing.plans.enterprise.name}</h3>
-                                <p className="text-sm text-slate-500">定制化解决方案</p>
+                                <p className="text-sm text-slate-500">{t('pricing.enterprise.customSolution')}</p>
                             </div>
                         </div>
 
                         <div className="mb-6">
-                            <span className="text-2xl font-bold text-slate-300">定制报价</span>
-                            <span className="text-slate-500 ml-2 text-sm">联系咨询</span>
+                            <span className="text-2xl font-bold text-slate-300">{t('pricing.enterprise.customPricing')}</span>
+                            <span className="text-slate-500 ml-2 text-sm">{t('pricing.enterprise.contactConsult')}</span>
                         </div>
 
                         <div className="space-y-1 mb-8">
@@ -438,7 +438,7 @@ export default function Pricing() {
                                 window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
                             }}
                         >
-                            联系客服
+                            {t('pricing.enterprise.contactService')}
                         </Button>
                     </div>
                 )}

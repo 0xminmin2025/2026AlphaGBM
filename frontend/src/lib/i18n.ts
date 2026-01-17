@@ -76,6 +76,13 @@ const resources = {
             "pricing.pro.desc": "Professional experience",
             "pricing.mostPopular": "🔥 Most Popular",
             "pricing.perMonth": "/month",
+            "pricing.permanentFree": "Permanent Free",
+            "pricing.yearly": "Annual: ¥{{price}}/year",
+            "pricing.enterprise.customSolution": "Customized Solutions",
+            "pricing.enterprise.customPricing": "Custom Pricing",
+            "pricing.enterprise.contactConsult": "Contact for Consultation",
+            "pricing.enterprise.contactService": "Contact Service",
+            "pricing.checkoutFailed": "Failed to start checkout",
 
             // Common
             "common.pleaseLogin": "Please login first",
@@ -549,6 +556,13 @@ const resources = {
             "pricing.pro.desc": "专业级体验",
             "pricing.mostPopular": "🔥 最受欢迎",
             "pricing.perMonth": "/月",
+            "pricing.permanentFree": "永久免费",
+            "pricing.yearly": "年度：¥{{price}}/年",
+            "pricing.enterprise.customSolution": "定制化解决方案",
+            "pricing.enterprise.customPricing": "定制报价",
+            "pricing.enterprise.contactConsult": "联系咨询",
+            "pricing.enterprise.contactService": "联系客服",
+            "pricing.checkoutFailed": "启动支付失败",
 
             // 通用
             "common.pleaseLogin": "请先登录",
