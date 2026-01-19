@@ -401,7 +401,7 @@ const styles = `
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Option Detail Modal */
+    /* Option Detail Modal - Compact */
     .option-modal-overlay {
         position: fixed;
         top: 0;
@@ -413,23 +413,23 @@ const styles = `
         align-items: center;
         justify-content: center;
         z-index: 1000;
-        padding: 1rem;
+        padding: 0.75rem;
     }
 
     .option-modal {
         background: var(--card);
         border: 1px solid var(--border);
-        border-radius: 12px;
-        max-width: 600px;
+        border-radius: 10px;
+        max-width: 480px;
         width: 100%;
-        max-height: 90vh;
+        max-height: 85vh;
         overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
         position: relative;
     }
 
     .option-modal-header {
-        padding: 1.25rem 1.5rem;
+        padding: 0.75rem 1rem;
         border-bottom: 1px solid var(--border);
         display: flex;
         justify-content: space-between;
@@ -441,7 +441,7 @@ const styles = `
     }
 
     .option-modal-title {
-        font-size: 1.1rem;
+        font-size: 0.95rem;
         font-weight: 600;
         color: var(--foreground);
     }
@@ -450,15 +450,15 @@ const styles = `
         background: transparent;
         border: none;
         color: var(--muted-foreground);
-        font-size: 1.5rem;
+        font-size: 1.25rem;
         cursor: pointer;
         padding: 0;
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 6px;
+        border-radius: 5px;
         transition: all 0.2s;
     }
 
@@ -468,31 +468,31 @@ const styles = `
     }
 
     .option-modal-content {
-        padding: 1.5rem;
+        padding: 0.875rem 1rem;
     }
 
     .option-info-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
-        margin-bottom: 1.5rem;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
     }
 
     .option-info-item {
         background: var(--muted);
-        padding: 0.75rem;
-        border-radius: 8px;
-        border-left: 3px solid var(--primary);
+        padding: 0.5rem;
+        border-radius: 6px;
+        border-left: 2px solid var(--primary);
     }
 
     .option-info-label {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
         color: var(--muted-foreground);
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.125rem;
     }
 
     .option-info-value {
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         font-weight: 600;
         color: var(--foreground);
     }
@@ -500,30 +500,31 @@ const styles = `
     .option-max-loss {
         background: var(--bear);
         color: white;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
-        text-align: center;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
 
     .option-max-loss-label {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         opacity: 0.9;
-        margin-bottom: 0.5rem;
     }
 
     .option-max-loss-value {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 700;
     }
 
     .option-chart-container {
-        margin-top: 1.5rem;
-        padding: 0.75rem;
+        margin-top: 0.5rem;
+        padding: 0.5rem;
         background: var(--muted);
-        border-radius: 8px;
+        border-radius: 6px;
         position: relative;
-        height: 220px;
+        height: 160px;
     }
 `;
 
@@ -634,8 +635,6 @@ export default function Options() {
     const [selectedOption, setSelectedOption] = useState<OptionData | null>(null);
     const [stockHistory, setStockHistory] = useState<{ dates: string[], prices: number[] } | null>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
-    const chartRef = useRef<HTMLCanvasElement>(null);
-    const chartInstance = useRef<any>(null);
 
     // Initialize task polling hook
     const { startPolling } = useTaskPolling({
@@ -890,7 +889,7 @@ export default function Options() {
         
         // Fetch stock history (1 month)
         try {
-            const response = await api.get(`/options/stock-history/${ticker}`, {
+            const response = await api.get(`/options/history/${ticker}`, {
                 params: { days: 30 }
             });
             
@@ -944,10 +943,6 @@ export default function Options() {
     const closeModal = () => {
         setSelectedOption(null);
         setStockHistory(null);
-        if (chartInstance.current) {
-            chartInstance.current.destroy();
-            chartInstance.current = null;
-        }
     };
 
     // Calculate max loss for option
@@ -1412,6 +1407,7 @@ export default function Options() {
                                                 backgroundColor: 'rgba(13, 155, 151, 0.15)',
                                                 border: '1px solid var(--primary)'
                                             }}
+                                            onClick={() => handleOptionClick(opt)}
                                         >
                                             <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
                                                 ${opt.strike}
@@ -1896,8 +1892,6 @@ export default function Options() {
                     stockHistory={stockHistory}
                     loadingHistory={loadingHistory}
                     onClose={closeModal}
-                    chartRef={chartRef}
-                    chartInstance={chartInstance}
                 />
             )}
         </div>
@@ -1911,9 +1905,7 @@ function OptionDetailModal({
     strategy,
     stockHistory,
     loadingHistory,
-    onClose,
-    chartRef,
-    chartInstance
+    onClose
 }: {
     option: OptionData;
     stockPrice: number;
@@ -1921,9 +1913,10 @@ function OptionDetailModal({
     stockHistory: { dates: string[], prices: number[] } | null;
     loadingHistory: boolean;
     onClose: () => void;
-    chartRef: React.RefObject<HTMLCanvasElement>;
-    chartInstance: React.MutableRefObject<any>;
 }) {
+    // Create refs inside the modal component
+    const chartRef = useRef<HTMLCanvasElement>(null);
+    const chartInstance = useRef<any>(null);
     const strategyLabels: Record<Strategy, string> = {
         'sell_put': '卖出看跌 (Sell Put)',
         'sell_call': '卖出看涨 (Sell Call)',
@@ -1950,17 +1943,17 @@ function OptionDetailModal({
         strategy
     });
     
-    // Calculate max loss
+    // Calculate max loss (per contract = 100 shares)
     const calculateMaxLoss = (): number => {
         if (strategy === 'sell_put') {
-            // Sell Put: Max loss = Strike - Premium (if stock goes to 0)
-            return Math.max(0, option.strike - premium);
+            // Sell Put: Max loss = (Strike - Premium) * 100 (if stock goes to 0)
+            return Math.max(0, (option.strike - premium) * 100);
         } else if (strategy === 'sell_call') {
-            // Sell Call: Max loss is unlimited, but we calculate theoretical max at 2x current price
-            return Math.max(0, (stockPrice * 2) - option.strike - premium);
+            // Sell Call: Max loss is unlimited, show theoretical max at 2x current price
+            return Math.max(0, ((stockPrice * 2) - option.strike - premium) * 100);
         } else if (strategy === 'buy_call' || strategy === 'buy_put') {
-            // Buy Call/Put: Max loss = Premium paid
-            return premium;
+            // Buy Call/Put: Max loss = Premium paid * 100
+            return premium * 100;
         }
         return 0;
     };
@@ -2037,17 +2030,31 @@ function OptionDetailModal({
             // Ensure dates match prices length
             const dates = stockHistory.dates.slice(0, prices.length);
             
+            // Check if history data matches current stock price (within 20% tolerance)
+            const lastHistoryPrice = prices[prices.length - 1];
+            const priceDiscrepancy = Math.abs(lastHistoryPrice - stockPrice) / stockPrice;
+            const useHistoryData = priceDiscrepancy < 0.20; // Only use history if within 20%
+
             console.log('Chart rendering:', {
                 datesCount: dates.length,
                 pricesCount: prices.length,
                 firstPrice: prices[0],
-                lastPrice: prices[prices.length - 1],
+                lastPrice: lastHistoryPrice,
                 stockPrice,
+                priceDiscrepancy: (priceDiscrepancy * 100).toFixed(1) + '%',
+                useHistoryData,
                 strike: option.strike,
                 stopLossPrice
             });
 
-            const allPrices = [...prices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
+            // If history data doesn't match, scale it to current price range
+            let displayPrices = prices;
+            if (!useHistoryData && stockPrice > 0) {
+                const scaleFactor = stockPrice / lastHistoryPrice;
+                displayPrices = prices.map(p => p * scaleFactor);
+            }
+
+            const allPrices = [...displayPrices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
             if (allPrices.length === 0) {
                 console.error('No valid prices for chart');
                 return;
@@ -2066,7 +2073,7 @@ function OptionDetailModal({
                         datasets: [
                             {
                                 label: '股价',
-                                data: prices,
+                                data: displayPrices,
                                 borderColor: 'hsl(178, 78%, 32%)',
                                 backgroundColor: 'rgba(13, 155, 151, 0.1)',
                                 fill: true,
@@ -2224,26 +2231,26 @@ function OptionDetailModal({
 
                     {/* Max Loss */}
                     <div className="option-max-loss">
-                        <div className="option-max-loss-label">最大亏损</div>
-                        <div className="option-max-loss-value">${maxLoss.toFixed(2)}</div>
+                        <span className="option-max-loss-label">最大亏损 (每手)</span>
+                        <span className="option-max-loss-value">${maxLoss.toFixed(0)}</span>
                     </div>
 
                     {/* Chart */}
-                    <div style={{ marginTop: '1.5rem' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-                            过去一个月股价走势
+                    <div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--muted-foreground)' }}>
+                            近一月走势
                         </div>
                         {loadingHistory ? (
-                            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <div className="spinner"></div>
+                            <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div className="spinner" style={{ width: '24px', height: '24px' }}></div>
                             </div>
                         ) : stockHistory ? (
                             <div className="option-chart-container">
                                 <canvas ref={chartRef}></canvas>
                             </div>
                         ) : (
-                            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)' }}>
-                                无法加载历史价格数据
+                            <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>
+                                无法加载历史数据
                             </div>
                         )}
                     </div>
