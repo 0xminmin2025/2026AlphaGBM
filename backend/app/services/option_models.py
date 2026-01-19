@@ -19,6 +19,25 @@ class OptionStrategy(str, Enum):
     BUY_CALL = "buy_call"          # Long Call
     BUY_PUT = "buy_put"            # Long Put
 
+class RiskReturnProfile(BaseModel):
+    """风险收益风格标签"""
+    style: str                         # 'steady_income', 'high_risk_high_reward', 'balanced', 'hedge'
+    style_label: str                   # 中英双语标签
+    style_label_cn: str                # 纯中文标签
+    style_label_en: str                # 纯英文标签
+    risk_level: str                    # 'low', 'moderate', 'high', 'very_high'
+    risk_color: str                    # 'green', 'yellow', 'orange', 'red'
+    max_loss_pct: float                # 最大亏损百分比
+    max_profit_pct: float              # 最大收益百分比
+    win_probability: float             # 胜率估算 (0-1)
+    risk_reward_ratio: float           # 风险收益比
+    summary: str                       # 一句话总结
+    summary_cn: str                    # 中文总结
+    strategy_type: str                 # 'buyer' or 'seller'
+    time_decay_impact: str             # 'positive', 'negative', 'neutral'
+    volatility_impact: str             # 'positive', 'negative', 'neutral'
+
+
 class OptionScores(BaseModel):
     """Option scoring metrics"""
     sprv: Optional[float] = None   # Sell Put Recommendation Value
@@ -37,6 +56,9 @@ class OptionScores(BaseModel):
     premium_income: Optional[float] = None      # Premium received from selling option
     margin_requirement: Optional[float] = None  # Capital requirement (Cash for PUT, Stock Value for CALL)
     annualized_return: Optional[float] = None   # Annual return %
+
+    # 风险收益风格标签
+    risk_return_profile: Optional[RiskReturnProfile] = None
 
 class OptionData(BaseModel):
     """Enhanced option contract data with scoring"""

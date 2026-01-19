@@ -647,6 +647,72 @@ export default function Landing() {
                             <p className="text-[var(--text-secondary)] max-w-2xl mx-auto text-sm sm:text-base px-4 sm:px-0 leading-relaxed">{content.portfolio.description}</p>
                         </div>
 
+                        {/* Total Portfolio Summary - Cumulative Profit */}
+                        {portfolioData && portfolioData.style_stats && (
+                            <div className="glass-card rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 border border-brand/30">
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                    <div className="text-center sm:text-left">
+                                        <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                                            <i className="ph ph-wallet text-brand"></i>
+                                            {i18n.language === 'zh' ? '投资组合总览' : 'Portfolio Summary'}
+                                        </h3>
+                                        <p className="text-xs text-[var(--text-secondary)] mt-1">
+                                            {i18n.language === 'zh' ? '初始投资: $1,000,000 (4×$250K)' : 'Initial Investment: $1,000,000 (4×$250K)'}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-8">
+                                        {/* Total Market Value */}
+                                        <div className="text-center">
+                                            <div className="text-xs text-[var(--text-secondary)] mb-1">
+                                                {i18n.language === 'zh' ? '当前市值' : 'Market Value'}
+                                            </div>
+                                            <div className="text-lg sm:text-xl font-bold text-white">
+                                                ${(Object.values(portfolioData.style_stats).reduce((sum: number, s: any) => sum + (s.market_value || 0), 0) / 1000).toFixed(0)}K
+                                            </div>
+                                        </div>
+                                        {/* Total Cumulative Profit */}
+                                        <div className="text-center">
+                                            <div className="text-xs text-[var(--text-secondary)] mb-1">
+                                                {i18n.language === 'zh' ? '累积收益' : 'Cumulative Profit'}
+                                            </div>
+                                            {(() => {
+                                                const totalInvestment = Object.values(portfolioData.style_stats).reduce((sum: number, s: any) => sum + (s.investment || 0), 0);
+                                                const totalMarketValue = Object.values(portfolioData.style_stats).reduce((sum: number, s: any) => sum + (s.market_value || 0), 0);
+                                                const totalProfit = totalMarketValue - totalInvestment;
+                                                const totalProfitPercent = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
+                                                const isPositive = totalProfit >= 0;
+                                                return (
+                                                    <div className={`text-xl sm:text-2xl font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                        {isPositive ? '+' : ''}{totalProfitPercent.toFixed(1)}%
+                                                        <span className="text-sm ml-1">
+                                                            ({isPositive ? '+' : ''}${(totalProfit / 1000).toFixed(0)}K)
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                        {/* Today's Change */}
+                                        <div className="text-center">
+                                            <div className="text-xs text-[var(--text-secondary)] mb-1">
+                                                {i18n.language === 'zh' ? '今日变化' : "Today's Change"}
+                                            </div>
+                                            {(() => {
+                                                const todayChange = Object.values(portfolioData.style_stats).reduce((sum: number, s: any) => {
+                                                    return sum + parseFloat(s.vsYesterdayPercent || '0');
+                                                }, 0) / 4; // Average of 4 styles
+                                                const isPositive = todayChange >= 0;
+                                                return (
+                                                    <div className={`text-lg sm:text-xl font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                        {isPositive ? '+' : ''}{todayChange.toFixed(2)}%
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="glass-card rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8">
                             <h3 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6 flex items-center gap-2">
                                 <i className="ph ph-chart-line-up"></i>
@@ -1081,7 +1147,7 @@ export default function Landing() {
                     </div>
                 </footer>
             </main>
-            
+
             {/* Feedback Button */}
             <FeedbackButton />
         </div>

@@ -14,6 +14,7 @@ from ..scoring.sell_put import SellPutScorer
 from ..scoring.sell_call import SellCallScorer
 from ..scoring.buy_put import BuyPutScorer
 from ..scoring.buy_call import BuyCallScorer
+from ..scoring.risk_return_profile import calculate_risk_return_profile, add_profiles_to_options
 from ..advanced.vrp_calculator import VRPCalculator
 from ..advanced.risk_adjuster import RiskAdjuster
 
@@ -65,20 +66,23 @@ class OptionsAnalysisEngine:
             # 2. 获取股票基础数据（用于分析）
             stock_data = self.data_fetcher.get_underlying_stock_data(symbol)
 
-            # 3. 执行策略分析
+            # 3. 先计算VRP（用于后续策略分析）
+            vrp_analysis = self.vrp_calculator.calculate(symbol, options_data, stock_data)
+
+            # 4. 执行策略分析（带风格标签）
             analysis_results = {}
 
             if strategy == 'all':
                 # 分析所有策略
                 for strategy_name in self.scorers.keys():
                     analysis_results[strategy_name] = self._analyze_strategy(
-                        options_data, stock_data, strategy_name
+                        options_data, stock_data, strategy_name, vrp_analysis
                     )
             else:
                 # 分析特定策略
                 if strategy in self.scorers:
                     analysis_results[strategy] = self._analyze_strategy(
-                        options_data, stock_data, strategy
+                        options_data, stock_data, strategy, vrp_analysis
                     )
                 else:
                     return {
@@ -86,8 +90,7 @@ class OptionsAnalysisEngine:
                         'error': f"不支持的策略: {strategy}"
                     }
 
-            # 4. 计算VRP和风险指标
-            vrp_analysis = self.vrp_calculator.calculate(symbol, options_data, stock_data)
+            # 5. 计算风险指标
             risk_analysis = self.risk_adjuster.analyze_portfolio_risk(analysis_results, stock_data)
 
             return {
@@ -110,11 +113,34 @@ class OptionsAnalysisEngine:
                 'error': f"分析失败: {str(e)}"
             }
 
-    def _analyze_strategy(self, options_data: Dict, stock_data: Dict, strategy: str) -> Dict[str, Any]:
-        """分析特定期权策略"""
+    def _analyze_strategy(self, options_data: Dict, stock_data: Dict, strategy: str,
+                         vrp_analysis: Dict = None) -> Dict[str, Any]:
+        """
+        分析特定期权策略
+
+        Args:
+            options_data: 期权数据
+            stock_data: 股票数据
+            strategy: 策略类型
+            vrp_analysis: VRP分析结果（用于风格标签计算）
+
+        Returns:
+            策略分析结果，包含风格标签
+        """
         try:
             scorer = self.scorers[strategy]
-            return scorer.score_options(options_data, stock_data)
+            result = scorer.score_options(options_data, stock_data)
+
+            # 为推荐的期权添加风险收益风格标签
+            if result.get('success') and result.get('recommendations'):
+                result['recommendations'] = add_profiles_to_options(
+                    result['recommendations'],
+                    stock_data,
+                    strategy,
+                    vrp_analysis
+                )
+
+            return result
         except Exception as e:
             logger.error(f"策略 {strategy} 分析失败: {e}")
             return {
@@ -176,19 +202,29 @@ class OptionsAnalysisEngine:
                 if result.get('success') and result.get('recommendations'):
                     top_option = result['recommendations'][0] if result['recommendations'] else None
                     if top_option and top_option.get('score', 0) > 70:  # 分数阈值
+                        # 包含风格标签信息
+                        profile = top_option.get('risk_return_profile', {})
                         best_strategies.append({
                             'strategy': strategy,
                             'score': top_option.get('score'),
-                            'option': top_option
+                            'option': top_option,
+                            'style_label': profile.get('style_label', ''),
+                            'risk_level': profile.get('risk_level', 'unknown'),
+                            'win_probability': profile.get('win_probability', 0),
+                            'summary': profile.get('summary_cn', '')
                         })
 
             # 按分数排序
             best_strategies.sort(key=lambda x: x['score'], reverse=True)
 
+            # 按风格分组推荐
+            style_grouped = self._group_by_style(strategy_analysis)
+
             return {
                 'total_strategies_analyzed': len(strategy_analysis),
                 'successful_analysis': len([r for r in strategy_analysis.values() if r.get('success')]),
                 'best_strategies': best_strategies[:3],  # 取前3个
+                'style_grouped_recommendations': style_grouped,
                 'vrp_level': vrp_analysis.get('level', 'unknown'),
                 'overall_risk': risk_analysis.get('overall_risk', 'unknown'),
                 'recommendation': self._get_overall_recommendation(best_strategies, vrp_analysis, risk_analysis)
@@ -232,6 +268,44 @@ class OptionsAnalysisEngine:
             'confidence': confidence,
             'reason': f"基于 {best_strategy['strategy']} 策略分析，得分 {best_strategy['score']:.1f}，VRP水平 {vrp_level}，风险等级 {risk_level}"
         }
+
+    def _group_by_style(self, strategy_analysis: Dict) -> Dict[str, List]:
+        """按风格分组推荐"""
+        style_groups = {
+            'steady_income': [],       # 稳健收益
+            'high_risk_high_reward': [], # 高风险高收益
+            'balanced': [],            # 稳中求进
+            'hedge': []                # 保护对冲
+        }
+
+        for strategy, result in strategy_analysis.items():
+            if not result.get('success') or not result.get('recommendations'):
+                continue
+
+            for option in result.get('recommendations', [])[:5]:  # 每个策略取前5
+                profile = option.get('risk_return_profile', {})
+                style = profile.get('style', 'balanced')
+
+                if style in style_groups:
+                    style_groups[style].append({
+                        'strategy': strategy,
+                        'strike': option.get('strike'),
+                        'expiry': option.get('expiry'),
+                        'score': option.get('score'),
+                        'style_label': profile.get('style_label'),
+                        'risk_color': profile.get('risk_color'),
+                        'win_probability': profile.get('win_probability'),
+                        'max_profit_pct': profile.get('max_profit_pct'),
+                        'max_loss_pct': profile.get('max_loss_pct'),
+                        'summary': profile.get('summary_cn')
+                    })
+
+        # 每组按分数排序，取前3
+        for style in style_groups:
+            style_groups[style].sort(key=lambda x: x.get('score', 0), reverse=True)
+            style_groups[style] = style_groups[style][:3]
+
+        return style_groups
 
 
 # 独立测试功能

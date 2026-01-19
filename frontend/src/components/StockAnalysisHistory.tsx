@@ -158,6 +158,16 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
     }
   };
 
+  // Translate risk level to localized text
+  const translateRiskLevel = (level: string | null | undefined): string => {
+    if (!level) return '';
+    const levelLower = level.toLowerCase();
+    if (levelLower === 'low' || level === '低') return t('stock.risk.level.low');
+    if (levelLower === 'medium' || level === '中' || levelLower === 'moderate') return t('stock.risk.level.medium');
+    if (levelLower === 'high' || level === '高') return t('stock.risk.level.high');
+    return level;
+  };
+
 
   const formatCurrency = (value: number | null): string => {
     if (value === null || value === undefined) return 'N/A';
@@ -275,7 +285,7 @@ const StockAnalysisHistory: React.FC<StockAnalysisHistoryProps> = ({
                       <span className="px-2 py-1 bg-[#0D9B97]/20 text-[#0D9B97] rounded text-xs">{item.style}</span>
                       {item.risk_level && (
                         <span className={`px-2 py-1 rounded text-xs ${getRiskClass(item.risk_level)}`}>
-                          {item.risk_level}
+                          {translateRiskLevel(item.risk_level)}
                         </span>
                       )}
                       <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">

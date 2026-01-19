@@ -5,8 +5,63 @@ from ..models import ServiceType
 from werkzeug.exceptions import Unauthorized
 from .auth import supabase
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+
+def db_retry(max_retries=3, retry_delay=0.5):
+    """
+    Database retry decorator for handling transient connection errors.
+    Useful for Supabase/PostgreSQL SSL connection issues.
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            from ..models import db
+            from sqlalchemy.exc import OperationalError, DisconnectionError
+
+            last_error = None
+            for attempt in range(max_retries + 1):
+                try:
+                    return f(*args, **kwargs)
+                except (OperationalError, DisconnectionError) as e:
+                    last_error = e
+                    error_str = str(e).lower()
+
+                    # Check if it's a recoverable connection error
+                    if any(x in error_str for x in ['ssl', 'eof', 'connection', 'timeout', 'closed']):
+                        if attempt < max_retries:
+                            logger.warning(
+                                f"Database connection error on attempt {attempt + 1}/{max_retries + 1}, "
+                                f"retrying in {retry_delay * (attempt + 1)}s: {e}"
+                            )
+                            # Try to dispose stale connections
+                            try:
+                                db.session.rollback()
+                                db.engine.dispose()
+                            except Exception:
+                                pass
+                            time.sleep(retry_delay * (attempt + 1))
+                            continue
+                        else:
+                            logger.error(f"Database connection failed after {max_retries + 1} attempts: {e}")
+                    else:
+                        # Non-recoverable error, don't retry
+                        raise
+                except Exception as e:
+                    # Non-database error, don't retry
+                    raise
+
+            # All retries exhausted
+            return jsonify({
+                'success': False,
+                'error': 'Database temporarily unavailable. Please try again.',
+                'details': str(last_error) if last_error else 'Unknown error'
+            }), 503
+
+        return wrapper
+    return decorator
 
 def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
     """

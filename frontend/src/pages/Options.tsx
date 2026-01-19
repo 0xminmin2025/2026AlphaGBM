@@ -1,13 +1,20 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
+import StockSearchInput from '@/components/ui/StockSearchInput';
 import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
+
+// Declare global types for Chart.js
+declare global {
+    interface Window {
+        Chart: any;
+    }
+}
 
 // CSS matching original options.html
 const styles = `
@@ -157,6 +164,53 @@ const styles = `
     .score-high { background-color: var(--bull); color: white; }
     .score-medium { background-color: var(--warning); color: white; }
     .score-low { background-color: var(--bear); color: white; }
+
+    /* 风险收益风格标签样式 */
+    .style-tag {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.25rem;
+        display: inline-block;
+        margin-top: 0.25rem;
+        font-weight: 500;
+        border: 1px solid transparent;
+    }
+
+    .style-tag-green {
+        background-color: rgba(16, 185, 129, 0.15);
+        color: #10B981;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .style-tag-yellow {
+        background-color: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    .style-tag-orange {
+        background-color: rgba(249, 115, 22, 0.15);
+        color: #F97316;
+        border-color: rgba(249, 115, 22, 0.3);
+    }
+
+    .style-tag-red {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #EF4444;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .style-info {
+        font-size: 0.6rem;
+        color: var(--muted-foreground);
+        margin-top: 0.1rem;
+    }
+
+    .win-prob {
+        font-size: 0.65rem;
+        color: #10B981;
+        font-weight: 600;
+    }
 
     .recommended-row {
         background-color: rgba(13, 155, 151, 0.2) !important;
@@ -348,7 +402,7 @@ const styles = `
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Option Detail Modal */
+    /* Option Detail Modal - Compact */
     .option-modal-overlay {
         position: fixed;
         top: 0;
@@ -360,23 +414,23 @@ const styles = `
         align-items: center;
         justify-content: center;
         z-index: 1000;
-        padding: 1rem;
+        padding: 0.75rem;
     }
 
     .option-modal {
         background: var(--card);
         border: 1px solid var(--border);
-        border-radius: 12px;
-        max-width: 600px;
+        border-radius: 10px;
+        max-width: 480px;
         width: 100%;
-        max-height: 90vh;
+        max-height: 85vh;
         overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
         position: relative;
     }
 
     .option-modal-header {
-        padding: 1.25rem 1.5rem;
+        padding: 0.75rem 1rem;
         border-bottom: 1px solid var(--border);
         display: flex;
         justify-content: space-between;
@@ -388,7 +442,7 @@ const styles = `
     }
 
     .option-modal-title {
-        font-size: 1.1rem;
+        font-size: 0.95rem;
         font-weight: 600;
         color: var(--foreground);
     }
@@ -397,15 +451,15 @@ const styles = `
         background: transparent;
         border: none;
         color: var(--muted-foreground);
-        font-size: 1.5rem;
+        font-size: 1.25rem;
         cursor: pointer;
         padding: 0;
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 6px;
+        border-radius: 5px;
         transition: all 0.2s;
     }
 
@@ -415,31 +469,31 @@ const styles = `
     }
 
     .option-modal-content {
-        padding: 1.5rem;
+        padding: 0.875rem 1rem;
     }
 
     .option-info-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
-        margin-bottom: 1.5rem;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
     }
 
     .option-info-item {
         background: var(--muted);
-        padding: 0.75rem;
-        border-radius: 8px;
-        border-left: 3px solid var(--primary);
+        padding: 0.5rem;
+        border-radius: 6px;
+        border-left: 2px solid var(--primary);
     }
 
     .option-info-label {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
         color: var(--muted-foreground);
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.125rem;
     }
 
     .option-info-value {
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         font-weight: 600;
         color: var(--foreground);
     }
@@ -447,32 +501,52 @@ const styles = `
     .option-max-loss {
         background: var(--bear);
         color: white;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
-        text-align: center;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
 
     .option-max-loss-label {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         opacity: 0.9;
-        margin-bottom: 0.5rem;
     }
 
     .option-max-loss-value {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 700;
     }
 
     .option-chart-container {
-        margin-top: 1.5rem;
-        padding: 0.75rem;
+        margin-top: 0.5rem;
+        padding: 0.5rem;
         background: var(--muted);
-        border-radius: 8px;
+        border-radius: 6px;
         position: relative;
-        height: 220px;
+        height: 160px;
     }
 `;
+
+// 风险收益风格标签类型
+type RiskReturnProfile = {
+    style: string;              // 'steady_income', 'high_risk_high_reward', 'balanced', 'hedge'
+    style_label: string;        // 中英双语标签
+    style_label_cn: string;     // 纯中文标签
+    style_label_en: string;     // 纯英文标签
+    risk_level: string;         // 'low', 'moderate', 'high', 'very_high'
+    risk_color: string;         // 前端显示颜色
+    max_loss_pct: number;
+    max_profit_pct: number;
+    win_probability: number;
+    risk_reward_ratio: number;
+    summary: string;
+    summary_cn: string;
+    strategy_type: string;      // 'buyer' or 'seller'
+    time_decay_impact: string;  // 'positive', 'negative', 'neutral'
+    volatility_impact: string;  // 'positive', 'negative', 'neutral'
+};
 
 type OptionData = {
     identifier: string;
@@ -490,6 +564,7 @@ type OptionData = {
     put_call: string;
     expiry_date: string;
     premium?: number;
+    risk_return_profile?: RiskReturnProfile;  // 兼容旧格式
     scores?: {
         total_score?: number;
         annualized_return?: number;
@@ -500,6 +575,7 @@ type OptionData = {
         bcrv?: number;
         bprv?: number;
         iv_rank?: number;
+        risk_return_profile?: RiskReturnProfile;  // 新增：风险收益风格标签
     };
 };
 
@@ -558,7 +634,8 @@ export default function Options() {
 
     // Option detail modal state
     const [selectedOption, setSelectedOption] = useState<OptionData | null>(null);
-    const [stockHistory, setStockHistory] = useState<OHLCData[] | null>(null);
+    const [stockHistory, setStockHistory] = useState<{ dates: string[], prices: number[] } | null>(null);
+    const [stockHistoryOHLC, setStockHistoryOHLC] = useState<OHLCData[] | null>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
     // Initialize task polling hook
@@ -664,11 +741,12 @@ export default function Options() {
     // Get the appropriate score based on strategy
     const getOptionScore = (opt: OptionData): number => {
         if (!opt.scores) return 0;
+        // 后端已直接返回 0-100 分数，不需要再乘以 100
         switch (strategy) {
-            case 'sell_put': return (opt.scores.sprv || 0) * 100; // Normalize to 0-100 scale
-            case 'buy_put': return (opt.scores.bprv || 0) * 100;
-            case 'sell_call': return (opt.scores.scrv || 0) * 100;
-            case 'buy_call': return (opt.scores.bcrv || 0) * 100;
+            case 'sell_put': return opt.scores.sprv || 0;
+            case 'buy_put': return opt.scores.bprv || 0;
+            case 'sell_call': return opt.scores.scrv || 0;
+            case 'buy_call': return opt.scores.bcrv || 0;
             default: return 0;
         }
     };
@@ -821,7 +899,10 @@ export default function Options() {
 
             if (response.data && response.data.data && Array.isArray(response.data.data)) {
                 // API returns: {symbol: string, data: [{time, open, high, low, close}]}
-                const ohlcData: OHLCData[] = response.data.data
+                const data = response.data.data;
+
+                // Build OHLC data for KlineChart
+                const ohlcData: OHLCData[] = data
                     .filter((item: any) => item.time && item.open && item.high && item.low && item.close)
                     .map((item: any) => ({
                         time: item.time,
@@ -831,18 +912,36 @@ export default function Options() {
                         close: typeof item.close === 'number' ? item.close : parseFloat(item.close),
                     }));
 
-                if (ohlcData.length > 0) {
-                    console.log('Setting stock history OHLC:', { count: ohlcData.length });
-                    setStockHistory(ohlcData);
+                // Build dates/prices for Chart.js line chart
+                const dates = data.map((item: any) => {
+                    if (item.time) {
+                        const date = new Date(item.time * 1000);
+                        return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                    }
+                    return '';
+                }).filter((d: string) => d);
+
+                const prices = data.map((item: any) => {
+                    const price = item.close || item.price || 0;
+                    return typeof price === 'number' ? price : parseFloat(price);
+                }).filter((p: number) => !isNaN(p) && p > 0);
+
+                if (ohlcData.length > 0 && dates.length > 0 && prices.length > 0) {
+                    console.log('Setting stock history:', { ohlcCount: ohlcData.length, lineCount: prices.length });
+                    setStockHistoryOHLC(ohlcData);
+                    setStockHistory({ dates, prices });
                 } else {
-                    console.error('No valid OHLC data found');
+                    console.error('No valid data found');
+                    setStockHistoryOHLC(null);
                     setStockHistory(null);
                 }
             } else {
+                setStockHistoryOHLC(null);
                 setStockHistory(null);
             }
         } catch (error) {
             console.error('Error fetching stock history:', error);
+            setStockHistoryOHLC(null);
             setStockHistory(null);
         } finally {
             setLoadingHistory(false);
@@ -853,6 +952,7 @@ export default function Options() {
     const closeModal = () => {
         setSelectedOption(null);
         setStockHistory(null);
+        setStockHistoryOHLC(null);
     };
 
     // Calculate max loss for option
@@ -981,7 +1081,23 @@ export default function Options() {
     }
 
     const filteredOptions = getFilteredOptions();
-    const topRecommendations = filteredOptions.filter(o => getOptionScore(o) >= 60).slice(0, 5);
+
+    // 推荐期权：按评分排序，取前3-4个
+    const getTopRecommendations = () => {
+        if (filteredOptions.length === 0) return [];
+
+        // 按评分降序排序
+        const sorted = [...filteredOptions].sort((a, b) => getOptionScore(b) - getOptionScore(a));
+
+        // 取评分最高的期权（最多4个，且评分 > 0）
+        const recommendations = sorted
+            .filter(opt => getOptionScore(opt) > 0)
+            .slice(0, 4);
+
+        return recommendations;
+    };
+
+    const topRecommendations = getTopRecommendations();
 
     // Handle column header click for sorting
     const handleSort = (column: string) => {
@@ -1072,13 +1188,13 @@ export default function Options() {
                     <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
                         <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>步骤1：</span> 录入股票代码（Symbol)
                     </label>
-                    <Input
-                        type="text"
-                        value={ticker}
-                        onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                        placeholder="如 AAPL, NVDA, TSLA, MSFT, GOOGL, AMZN"
-                        className="form-control flex-1"
-                    />
+                    <div className="flex-1">
+                        <StockSearchInput
+                            value={ticker}
+                            onChange={setTicker}
+                            placeholder="如 AAPL, NVDA, 苹果, pg"
+                        />
+                    </div>
                 </div>
 
                 {/* Step 2: 选择策略 - 占一行 */}
@@ -1257,43 +1373,113 @@ export default function Options() {
                         </div>
                     </div>
 
-                    {/* Top Recommendations */}
+                    {/* Top Recommendations - 按风格分类 */}
                     {topRecommendations.length > 0 && (
                         <div className="card p-4">
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--primary)' }}>
                                 <i className="bi bi-star-fill mr-2"></i>
-                                高评分推荐 (Score ≥ 60)
+                                推荐期权
                             </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-                                {topRecommendations.map(opt => (
-                                    <div
-                                        key={opt.identifier}
-                                        className="p-4 rounded cursor-pointer transition-all hover:scale-105"
-                                        style={{
-                                            backgroundColor: 'rgba(13, 155, 151, 0.15)',
-                                            border: '1px solid var(--primary)'
-                                        }}
-                                    >
-                                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
-                                            ${opt.strike}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                                {topRecommendations.map(opt => {
+                                    // 支持两种数据格式：scores.risk_return_profile 或 risk_return_profile
+                                    const profile = opt.scores?.risk_return_profile || opt.risk_return_profile;
+                                    const styleColorClass = profile?.risk_color
+                                        ? `style-tag-${profile.risk_color}`
+                                        : 'style-tag-yellow';
+
+                                    // 计算特性标签（多标签，独立判断）
+                                    const featureTags: { label: string; color: string }[] = [];
+                                    const assignmentProb = opt.scores?.assignment_probability ?? 100;
+                                    const annualReturn = opt.scores?.annualized_return ?? 0;
+                                    const premium = opt.bid_price ?? opt.latest_price ?? 0;
+                                    const stockPrice = displayChain?.stock_price ?? 100;
+                                    const premiumPct = stockPrice > 0 ? (premium / stockPrice) * 100 : 0;
+
+                                    // 低行权概率：< 30%
+                                    if (assignmentProb < 30) {
+                                        featureTags.push({ label: '低行权概率', color: '#22c55e' });
+                                    }
+                                    // 高年化：> 30%
+                                    if (annualReturn > 30) {
+                                        featureTags.push({ label: '高年化', color: '#f59e0b' });
+                                    }
+                                    // 高权利金：权利金占股价 > 3%
+                                    if (premiumPct > 3) {
+                                        featureTags.push({ label: '高权利金', color: '#3b82f6' });
+                                    }
+
+                                    return (
+                                        <div
+                                            key={opt.identifier}
+                                            className="p-4 rounded cursor-pointer transition-all hover:scale-105"
+                                            style={{
+                                                backgroundColor: 'rgba(13, 155, 151, 0.15)',
+                                                border: '1px solid var(--primary)'
+                                            }}
+                                            onClick={() => handleOptionClick(opt)}
+                                        >
+                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                                ${opt.strike}
+                                            </div>
+                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                                {opt.put_call}
+                                            </div>
+
+                                            {/* 风格标签 */}
+                                            {profile && (
+                                                <div className={`style-tag ${styleColorClass}`} style={{ marginTop: '0.5rem' }}>
+                                                    {profile.style_label_cn || profile.style_label}
+                                                </div>
+                                            )}
+
+                                            {/* 特性标签（多标签） */}
+                                            {featureTags.length > 0 && (
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.5rem' }}>
+                                                    {featureTags.map((tag, idx) => (
+                                                        <span
+                                                            key={idx}
+                                                            style={{
+                                                                fontSize: '0.7rem',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                backgroundColor: `${tag.color}20`,
+                                                                color: tag.color,
+                                                                border: `1px solid ${tag.color}40`,
+                                                                fontWeight: 500
+                                                            }}
+                                                        >
+                                                            {tag.label}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-between mt-2">
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>Score</span>
+                                                <span className={`score-badge ${getScoreClass(getOptionScore(opt))}`}>
+                                                    {getOptionScore(opt).toFixed(1)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between mt-1">
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
+                                                <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                    {opt.scores?.annualized_return?.toFixed(1)}%
+                                                </span>
+                                            </div>
+
+                                            {/* 胜率显示 */}
+                                            {profile?.win_probability && (
+                                                <div className="flex justify-between mt-1">
+                                                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>胜率</span>
+                                                    <span className="win-prob">
+                                                        {(profile.win_probability * 100).toFixed(0)}%
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                                            {opt.put_call}
-                                        </div>
-                                        <div className="flex justify-between mt-2">
-                                            <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>Score</span>
-                                            <span className={`score-badge ${getScoreClass(getOptionScore(opt))}`}>
-                                                {getOptionScore(opt).toFixed(1)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between mt-1">
-                                            <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
-                                            <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
-                                                {opt.scores?.annualized_return?.toFixed(1)}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -1555,9 +1741,9 @@ export default function Options() {
                                             const totalScore = getOptionScore(opt);
                                             const isRecommended = totalScore >= 60;
                                             
-                                            // 计算行权概率：优先使用assignment_probability，否则用delta的绝对值
-                                            const exerciseProb = opt.scores?.assignment_probability 
-                                                ? (opt.scores.assignment_probability * 100) 
+                                            // 计算行权概率：优先使用assignment_probability（已是0-100%格式），否则用delta的绝对值
+                                            const exerciseProb = opt.scores?.assignment_probability
+                                                ? opt.scores.assignment_probability  // 已经是百分比格式，不需要再乘100
                                                 : (opt.delta ? Math.abs(opt.delta) * 100 : 0);
                                             
                                             // 计算价格差百分比：CALL是(strike - stockPrice)/stockPrice，PUT是(stockPrice - strike)/stockPrice
@@ -1569,9 +1755,9 @@ export default function Options() {
                                                 : 0;
                                             
                                             // 计算权利金：优先使用premium，否则用中间价
-                                            const premium = opt.premium || 
-                                                ((opt.bid_price && opt.ask_price) 
-                                                    ? (opt.bid_price + opt.ask_price) / 2 
+                                            const premium = opt.premium ||
+                                                ((opt.bid_price && opt.ask_price)
+                                                    ? (opt.bid_price + opt.ask_price) / 2
                                                     : opt.latest_price || 0);
 
                                             return (
@@ -1581,7 +1767,9 @@ export default function Options() {
                                                     onClick={() => handleOptionClick(opt)}
                                                     style={{ cursor: 'pointer' }}
                                                 >
-                                                    <td style={{ fontWeight: 600 }}>${opt.strike}</td>
+                                                    <td style={{ fontWeight: 600 }}>
+                                                        ${opt.strike}
+                                                    </td>
                                                     <td>${formatNumber(opt.latest_price)}</td>
                                                     <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
                                                     <td><small>{opt.volume} / {opt.open_interest}</small></td>
@@ -1712,6 +1900,7 @@ export default function Options() {
                     stockPrice={displayStockPrice || 0}
                     strategy={strategy}
                     stockHistory={stockHistory}
+                    stockHistoryOHLC={stockHistoryOHLC}
                     loadingHistory={loadingHistory}
                     onClose={closeModal}
                 />
@@ -1726,16 +1915,23 @@ function OptionDetailModal({
     stockPrice,
     strategy,
     stockHistory,
+    stockHistoryOHLC,
     loadingHistory,
     onClose,
 }: {
     option: OptionData;
     stockPrice: number;
     strategy: Strategy;
-    stockHistory: OHLCData[] | null;
+    stockHistory: { dates: string[], prices: number[] } | null;
+    stockHistoryOHLC: OHLCData[] | null;
     loadingHistory: boolean;
     onClose: () => void;
 }) {
+    // Chart type state for tab switching
+    const [chartType, setChartType] = useState<'kline' | 'line'>('kline');
+    // Create refs inside the modal component
+    const chartRef = useRef<HTMLCanvasElement>(null);
+    const chartInstance = useRef<any>(null);
     const strategyLabels: Record<Strategy, string> = {
         'sell_put': '卖出看跌 (Sell Put)',
         'sell_call': '卖出看涨 (Sell Call)',
@@ -1762,17 +1958,17 @@ function OptionDetailModal({
         strategy
     });
     
-    // Calculate max loss
+    // Calculate max loss (per contract = 100 shares)
     const calculateMaxLoss = (): number => {
         if (strategy === 'sell_put') {
-            // Sell Put: Max loss = Strike - Premium (if stock goes to 0)
-            return Math.max(0, option.strike - premium);
+            // Sell Put: Max loss = (Strike - Premium) * 100 (if stock goes to 0)
+            return Math.max(0, (option.strike - premium) * 100);
         } else if (strategy === 'sell_call') {
-            // Sell Call: Max loss is unlimited, but we calculate theoretical max at 2x current price
-            return Math.max(0, (stockPrice * 2) - option.strike - premium);
+            // Sell Call: Max loss is unlimited, show theoretical max at 2x current price
+            return Math.max(0, ((stockPrice * 2) - option.strike - premium) * 100);
         } else if (strategy === 'buy_call' || strategy === 'buy_put') {
-            // Buy Call/Put: Max loss = Premium paid
-            return premium;
+            // Buy Call/Put: Max loss = Premium paid * 100
+            return premium * 100;
         }
         return 0;
     };
@@ -1796,6 +1992,187 @@ function OptionDetailModal({
     };
 
     const stopLossPrice = calculateStopLoss();
+
+    // Render Chart.js line chart (only when chartType is 'line')
+    useEffect(() => {
+        if (chartType !== 'line' || !stockHistory || !chartRef.current) {
+            return;
+        }
+
+        // Wait for Chart.js to be available
+        if (!window.Chart) {
+            console.log('Chart.js not loaded yet');
+            const checkChart = setInterval(() => {
+                if (window.Chart) {
+                    clearInterval(checkChart);
+                    setTimeout(() => {
+                        if (stockHistory && chartRef.current) {
+                            renderChart();
+                        }
+                    }, 100);
+                }
+            }, 100);
+            return () => clearInterval(checkChart);
+        }
+
+        renderChart();
+
+        function renderChart() {
+            if (!stockHistory || !chartRef.current || !window.Chart) return;
+
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+
+            const ctx = chartRef.current.getContext('2d');
+            if (!ctx) {
+                console.error('Could not get canvas context');
+                return;
+            }
+
+            // Ensure prices are numbers
+            const prices = stockHistory.prices
+                .map((p: number | string) => typeof p === 'number' ? p : parseFloat(p))
+                .filter((p: number) => !isNaN(p) && p > 0);
+
+            if (prices.length === 0) {
+                console.error('No valid prices in stockHistory:', stockHistory);
+                return;
+            }
+
+            const dates = stockHistory.dates.slice(0, prices.length);
+
+            const allPrices = [...prices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
+            if (allPrices.length === 0) return;
+
+            const minPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+            const priceRange = maxPrice - minPrice;
+            const padding = priceRange > 0 ? priceRange * 0.1 : maxPrice * 0.05;
+
+            try {
+                chartInstance.current = new window.Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [
+                            {
+                                label: '股价',
+                                data: prices,
+                                borderColor: 'hsl(178, 78%, 32%)',
+                                backgroundColor: 'rgba(13, 155, 151, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 0,
+                                borderWidth: 1.5,
+                                spanGaps: false
+                            },
+                            {
+                                label: '执行价',
+                                data: Array(dates.length).fill(option.strike),
+                                borderColor: 'hsl(38, 92%, 50%)',
+                                borderDash: [5, 5],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false
+                            },
+                            {
+                                label: '现价',
+                                data: Array(dates.length).fill(stockPrice),
+                                borderColor: 'hsl(142, 76%, 36%)',
+                                borderDash: [5, 5],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false
+                            },
+                            {
+                                label: '止损价',
+                                data: Array(dates.length).fill(stopLossPrice),
+                                borderColor: 'hsl(0, 72%, 51%)',
+                                borderDash: [5, 5],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    color: 'hsl(240, 5%, 64.9%)',
+                                    font: { size: 9 },
+                                    usePointStyle: true,
+                                    padding: 8,
+                                    boxWidth: 10,
+                                    boxHeight: 10
+                                }
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#fff',
+                                bodyColor: '#fff',
+                                borderColor: 'hsl(178, 78%, 32%)',
+                                borderWidth: 1,
+                                titleFont: { size: 10 },
+                                bodyFont: { size: 9 },
+                                padding: 8
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: 'hsl(240, 5%, 64.9%)',
+                                    font: { size: 8 },
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    padding: 4
+                                },
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.05)',
+                                    drawBorder: false
+                                }
+                            },
+                            y: {
+                                min: Math.max(0, minPrice - padding),
+                                max: maxPrice + padding,
+                                ticks: {
+                                    color: 'hsl(240, 5%, 64.9%)',
+                                    font: { size: 8 },
+                                    padding: 4,
+                                    callback: function(value: number) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                },
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.05)',
+                                    drawBorder: false
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error creating chart:', error);
+            }
+        }
+
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+                chartInstance.current = null;
+            }
+        };
+    }, [chartType, stockHistory, stockPrice, option.strike, stopLossPrice]);
 
     return (
         <div className="option-modal-overlay" onClick={onClose}>
@@ -1839,30 +2216,84 @@ function OptionDetailModal({
 
                     {/* Max Loss */}
                     <div className="option-max-loss">
-                        <div className="option-max-loss-label">最大亏损</div>
-                        <div className="option-max-loss-value">${maxLoss.toFixed(2)}</div>
+                        <span className="option-max-loss-label">最大亏损 (每手)</span>
+                        <span className="option-max-loss-value">${maxLoss.toFixed(0)}</span>
                     </div>
 
                     {/* Chart */}
-                    <div style={{ marginTop: '1.5rem' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-                            过去一个月股价走势
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted-foreground)' }}>
+                                近一月走势
+                            </div>
+                            {/* Chart Type Toggle */}
+                            <div style={{ display: 'flex', gap: '4px', background: 'var(--muted)', borderRadius: '6px', padding: '2px' }}>
+                                <button
+                                    onClick={() => setChartType('kline')}
+                                    style={{
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        background: chartType === 'kline' ? 'var(--primary)' : 'transparent',
+                                        color: chartType === 'kline' ? 'white' : 'var(--muted-foreground)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    K线图
+                                </button>
+                                <button
+                                    onClick={() => setChartType('line')}
+                                    style={{
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        background: chartType === 'line' ? 'var(--primary)' : 'transparent',
+                                        color: chartType === 'line' ? 'white' : 'var(--muted-foreground)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    折线图
+                                </button>
+                            </div>
                         </div>
                         {loadingHistory ? (
-                            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <div className="spinner"></div>
+                            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div className="spinner" style={{ width: '24px', height: '24px' }}></div>
                             </div>
-                        ) : stockHistory && stockHistory.length > 0 ? (
+                        ) : chartType === 'kline' && stockHistoryOHLC && stockHistoryOHLC.length > 0 ? (
                             <KlineChart
-                                data={stockHistory}
+                                data={stockHistoryOHLC}
                                 currentPrice={stockPrice}
                                 strikePrice={option.strike}
                                 stopLossPrice={stopLossPrice}
-                                height={250}
+                                height={200}
                             />
+                        ) : chartType === 'line' && stockHistory ? (
+                            <div className="option-chart-container">
+                                <canvas ref={chartRef}></canvas>
+                            </div>
+                        ) : (stockHistory || stockHistoryOHLC) ? (
+                            // Fallback: show whichever chart has data
+                            stockHistoryOHLC && stockHistoryOHLC.length > 0 ? (
+                                <KlineChart
+                                    data={stockHistoryOHLC}
+                                    currentPrice={stockPrice}
+                                    strikePrice={option.strike}
+                                    stopLossPrice={stopLossPrice}
+                                    height={200}
+                                />
+                            ) : stockHistory ? (
+                                <div className="option-chart-container">
+                                    <canvas ref={chartRef}></canvas>
+                                </div>
+                            ) : null
                         ) : (
-                            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)' }}>
-                                无法加载历史价格数据
+                            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>
+                                无法加载历史数据
                             </div>
                         )}
                     </div>
