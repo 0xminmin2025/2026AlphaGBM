@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
+import StockSearchInput from '@/components/ui/StockSearchInput';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
@@ -781,12 +781,10 @@ export default function Home() {
                         </div>
                         <div>
                             <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.ticker')}</label>
-                            <Input
+                            <StockSearchInput
                                 placeholder={t('stock.form.tickerPlaceholder')}
                                 value={ticker}
-                                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                                required
-                                className="form-control w-full"
+                                onChange={setTicker}
                             />
                         </div>
                         <div className="flex items-end">

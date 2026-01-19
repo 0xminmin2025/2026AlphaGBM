@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
+import StockSearchInput from '@/components/ui/StockSearchInput';
 
 // Declare global types for Chart.js
 declare global {
@@ -1178,13 +1178,13 @@ export default function Options() {
                     <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
                         <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>步骤1：</span> 录入股票代码（Symbol)
                     </label>
-                    <Input
-                        type="text"
-                        value={ticker}
-                        onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                        placeholder="如 AAPL, NVDA, TSLA, MSFT, GOOGL, AMZN"
-                        className="form-control flex-1"
-                    />
+                    <div className="flex-1">
+                        <StockSearchInput
+                            value={ticker}
+                            onChange={setTicker}
+                            placeholder="如 AAPL, NVDA, 苹果, pg"
+                        />
+                    </div>
                 </div>
 
                 {/* Step 2: 选择策略 - 占一行 */}
