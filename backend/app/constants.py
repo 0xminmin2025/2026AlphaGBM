@@ -122,3 +122,177 @@ PUT_CALL_MEDIUM = 1.2      # Put/Call比率高于1.2视为中等风险
 # 美债收益率阈值
 TREASURY_YIELD_VERY_HIGH = 5.0   # 美债收益率高于5.0%视为高风险
 TREASURY_YIELD_HIGH = 4.5        # 美债收益率高于4.5%视为中等风险
+
+# ==================== 市场差异化参数 ====================
+
+# 市场配置 - 美股、港股、A股使用不同参数
+MARKET_CONFIG = {
+    'US': {  # 美股 - 基准参数
+        'name': '美股',
+        'name_en': 'US Market',
+        'min_daily_volume_usd': 5_000_000,    # 最小日成交额（美元）
+        'risk_premium': 1.0,                   # 风险溢价系数（基准）
+        'growth_discount': 0.6,                # 增长率折现系数
+        'pe_high_threshold': 40,               # PE高风险阈值
+        'pe_very_high_threshold': 60,          # PE极高风险阈值
+        'liquidity_coefficient': 1.0,          # 流动性系数
+        'volatility_adjustment': 1.0,          # 波动率调整
+        'currency': 'USD',
+        'trading_hours': 'US_MARKET',
+    },
+    'CN': {  # A股 - 中国大陆市场
+        'name': 'A股',
+        'name_en': 'China A-Share',
+        'min_daily_volume_usd': 1_000_000,    # 放宽流动性要求（A股单位换算）
+        'risk_premium': 1.3,                   # 政策风险加成
+        'growth_discount': 0.7,                # 更激进的增长折现（A股偏好成长）
+        'pe_high_threshold': 50,               # A股PE普遍更高
+        'pe_very_high_threshold': 80,
+        'liquidity_coefficient': 0.5,          # 流动性要求降低
+        'volatility_adjustment': 1.2,          # 波动率更高
+        'policy_risk_factor': 1.2,             # 政策敏感度
+        'currency': 'CNY',
+        'trading_hours': 'CN_MARKET',
+    },
+    'HK': {  # 港股 - 香港市场
+        'name': '港股',
+        'name_en': 'Hong Kong',
+        'min_daily_volume_usd': 2_000_000,    # 港股流动性中等
+        'risk_premium': 1.15,                  # 风险溢价略高
+        'growth_discount': 0.65,               # 增长折现中等
+        'pe_high_threshold': 35,               # 港股PE相对较低
+        'pe_very_high_threshold': 50,
+        'liquidity_coefficient': 0.6,          # 流动性要求中等
+        'volatility_adjustment': 1.1,          # 波动率略高
+        'discount_factor': 0.95,               # 港股折让（H股 vs A股）
+        'fx_risk_coefficient': 0.1,            # 汇率风险（港币挂钩美元）
+        'currency': 'HKD',
+        'trading_hours': 'HK_MARKET',
+    }
+}
+
+# 市场风格偏好权重
+MARKET_STYLE_WEIGHTS = {
+    'US': {  # 美股 - 均衡
+        'quality': 1.0,
+        'value': 1.0,
+        'growth': 1.0,
+        'momentum': 1.0,
+        'balanced': 1.0
+    },
+    'CN': {  # A股 - 偏好成长和动量
+        'quality': 0.8,
+        'value': 0.7,
+        'growth': 1.3,
+        'momentum': 1.2,
+        'balanced': 1.0
+    },
+    'HK': {  # 港股 - 偏好价值和质量
+        'quality': 1.2,
+        'value': 1.3,
+        'growth': 0.9,
+        'momentum': 0.8,
+        'balanced': 1.0
+    }
+}
+
+# ==================== 市场识别规则 ====================
+
+# 股票代码后缀到市场的映射
+TICKER_SUFFIX_TO_MARKET = {
+    '.SS': 'CN',   # 上海证券交易所
+    '.SZ': 'CN',   # 深圳证券交易所
+    '.HK': 'HK',   # 香港交易所
+    '.T': 'JP',    # 东京证券交易所（暂不支持）
+    '.L': 'UK',    # 伦敦证券交易所（暂不支持）
+}
+
+# A股代码前缀规则
+CN_STOCK_PREFIX_RULES = {
+    '60': 'SS',    # 上海主板
+    '68': 'SS',    # 上海科创板
+    '00': 'SZ',    # 深圳主板
+    '30': 'SZ',    # 深圳创业板
+}
+
+# ==================== 辅助函数 ====================
+
+def detect_market_from_ticker(ticker: str) -> str:
+    """
+    根据股票代码识别市场
+
+    Args:
+        ticker: 股票代码
+
+    Returns:
+        市场代码 ('US', 'CN', 'HK')
+    """
+    ticker = ticker.upper().strip()
+
+    # 检查后缀
+    for suffix, market in TICKER_SUFFIX_TO_MARKET.items():
+        if ticker.endswith(suffix.upper()):
+            return market
+
+    # 检查是否是纯数字（可能是A股）
+    base_ticker = ticker.split('.')[0]
+    if base_ticker.isdigit() and len(base_ticker) == 6:
+        prefix = base_ticker[:2]
+        if prefix in CN_STOCK_PREFIX_RULES:
+            return 'CN'
+
+    # 默认为美股
+    return 'US'
+
+
+def get_market_config(market: str) -> dict:
+    """
+    获取市场配置
+
+    Args:
+        market: 市场代码
+
+    Returns:
+        市场配置字典
+    """
+    return MARKET_CONFIG.get(market, MARKET_CONFIG['US'])
+
+
+def get_market_style_weights(market: str) -> dict:
+    """
+    获取市场风格权重
+
+    Args:
+        market: 市场代码
+
+    Returns:
+        风格权重字典
+    """
+    return MARKET_STYLE_WEIGHTS.get(market, MARKET_STYLE_WEIGHTS['US'])
+
+
+def adjust_parameter_for_market(base_value: float, market: str, param_type: str) -> float:
+    """
+    根据市场调整参数
+
+    Args:
+        base_value: 基础参数值
+        market: 市场代码
+        param_type: 参数类型 ('risk', 'growth', 'pe', 'liquidity')
+
+    Returns:
+        调整后的参数值
+    """
+    config = get_market_config(market)
+
+    if param_type == 'risk':
+        return base_value * config.get('risk_premium', 1.0)
+    elif param_type == 'growth':
+        return base_value * config.get('growth_discount', 0.6) / 0.6  # 相对于基准调整
+    elif param_type == 'pe':
+        # PE阈值直接使用市场配置
+        return config.get('pe_high_threshold', base_value)
+    elif param_type == 'liquidity':
+        return base_value * config.get('liquidity_coefficient', 1.0)
+    else:
+        return base_value

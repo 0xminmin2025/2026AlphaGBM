@@ -164,6 +164,53 @@ const styles = `
     .score-medium { background-color: var(--warning); color: white; }
     .score-low { background-color: var(--bear); color: white; }
 
+    /* 风险收益风格标签样式 */
+    .style-tag {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.25rem;
+        display: inline-block;
+        margin-top: 0.25rem;
+        font-weight: 500;
+        border: 1px solid transparent;
+    }
+
+    .style-tag-green {
+        background-color: rgba(16, 185, 129, 0.15);
+        color: #10B981;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .style-tag-yellow {
+        background-color: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    .style-tag-orange {
+        background-color: rgba(249, 115, 22, 0.15);
+        color: #F97316;
+        border-color: rgba(249, 115, 22, 0.3);
+    }
+
+    .style-tag-red {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #EF4444;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .style-info {
+        font-size: 0.6rem;
+        color: var(--muted-foreground);
+        margin-top: 0.1rem;
+    }
+
+    .win-prob {
+        font-size: 0.65rem;
+        color: #10B981;
+        font-weight: 600;
+    }
+
     .recommended-row {
         background-color: rgba(13, 155, 151, 0.2) !important;
         border-left: 3px solid var(--primary);
@@ -480,6 +527,25 @@ const styles = `
     }
 `;
 
+// 风险收益风格标签类型
+type RiskReturnProfile = {
+    style: string;              // 'steady_income', 'high_risk_high_reward', 'balanced', 'hedge'
+    style_label: string;        // 中英双语标签
+    style_label_cn: string;     // 纯中文标签
+    style_label_en: string;     // 纯英文标签
+    risk_level: string;         // 'low', 'moderate', 'high', 'very_high'
+    risk_color: string;         // 前端显示颜色
+    max_loss_pct: number;
+    max_profit_pct: number;
+    win_probability: number;
+    risk_reward_ratio: number;
+    summary: string;
+    summary_cn: string;
+    strategy_type: string;      // 'buyer' or 'seller'
+    time_decay_impact: string;  // 'positive', 'negative', 'neutral'
+    volatility_impact: string;  // 'positive', 'negative', 'neutral'
+};
+
 type OptionData = {
     identifier: string;
     strike: number;
@@ -496,6 +562,7 @@ type OptionData = {
     put_call: string;
     expiry_date: string;
     premium?: number;
+    risk_return_profile?: RiskReturnProfile;  // 兼容旧格式
     scores?: {
         total_score?: number;
         annualized_return?: number;
@@ -506,6 +573,7 @@ type OptionData = {
         bcrv?: number;
         bprv?: number;
         iv_rank?: number;
+        risk_return_profile?: RiskReturnProfile;  // 新增：风险收益风格标签
     };
 };
 
@@ -672,11 +740,12 @@ export default function Options() {
     // Get the appropriate score based on strategy
     const getOptionScore = (opt: OptionData): number => {
         if (!opt.scores) return 0;
+        // 后端已直接返回 0-100 分数，不需要再乘以 100
         switch (strategy) {
-            case 'sell_put': return (opt.scores.sprv || 0) * 100; // Normalize to 0-100 scale
-            case 'buy_put': return (opt.scores.bprv || 0) * 100;
-            case 'sell_call': return (opt.scores.scrv || 0) * 100;
-            case 'buy_call': return (opt.scores.bcrv || 0) * 100;
+            case 'sell_put': return opt.scores.sprv || 0;
+            case 'buy_put': return opt.scores.bprv || 0;
+            case 'sell_call': return opt.scores.scrv || 0;
+            case 'buy_call': return opt.scores.bcrv || 0;
             default: return 0;
         }
     };
@@ -1007,7 +1076,23 @@ export default function Options() {
     }
 
     const filteredOptions = getFilteredOptions();
-    const topRecommendations = filteredOptions.filter(o => getOptionScore(o) >= 60).slice(0, 5);
+
+    // 推荐期权：按评分排序，取前3-4个
+    const getTopRecommendations = () => {
+        if (filteredOptions.length === 0) return [];
+
+        // 按评分降序排序
+        const sorted = [...filteredOptions].sort((a, b) => getOptionScore(b) - getOptionScore(a));
+
+        // 取评分最高的期权（最多4个，且评分 > 0）
+        const recommendations = sorted
+            .filter(opt => getOptionScore(opt) > 0)
+            .slice(0, 4);
+
+        return recommendations;
+    };
+
+    const topRecommendations = getTopRecommendations();
 
     // Handle column header click for sorting
     const handleSort = (column: string) => {
@@ -1283,43 +1368,112 @@ export default function Options() {
                         </div>
                     </div>
 
-                    {/* Top Recommendations */}
+                    {/* Top Recommendations - 按风格分类 */}
                     {topRecommendations.length > 0 && (
                         <div className="card p-4">
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--primary)' }}>
                                 <i className="bi bi-star-fill mr-2"></i>
-                                高评分推荐 (Score ≥ 60)
+                                推荐期权
                             </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-                                {topRecommendations.map(opt => (
-                                    <div
-                                        key={opt.identifier}
-                                        className="p-4 rounded cursor-pointer transition-all hover:scale-105"
-                                        style={{
-                                            backgroundColor: 'rgba(13, 155, 151, 0.15)',
-                                            border: '1px solid var(--primary)'
-                                        }}
-                                    >
-                                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
-                                            ${opt.strike}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                                {topRecommendations.map(opt => {
+                                    // 支持两种数据格式：scores.risk_return_profile 或 risk_return_profile
+                                    const profile = opt.scores?.risk_return_profile || opt.risk_return_profile;
+                                    const styleColorClass = profile?.risk_color
+                                        ? `style-tag-${profile.risk_color}`
+                                        : 'style-tag-yellow';
+
+                                    // 计算特性标签（多标签，独立判断）
+                                    const featureTags: { label: string; color: string }[] = [];
+                                    const assignmentProb = opt.scores?.assignment_probability ?? 100;
+                                    const annualReturn = opt.scores?.annualized_return ?? 0;
+                                    const premium = opt.bid_price ?? opt.latest_price ?? 0;
+                                    const stockPrice = displayChain?.stock_price ?? 100;
+                                    const premiumPct = stockPrice > 0 ? (premium / stockPrice) * 100 : 0;
+
+                                    // 低行权概率：< 30%
+                                    if (assignmentProb < 30) {
+                                        featureTags.push({ label: '低行权概率', color: '#22c55e' });
+                                    }
+                                    // 高年化：> 30%
+                                    if (annualReturn > 30) {
+                                        featureTags.push({ label: '高年化', color: '#f59e0b' });
+                                    }
+                                    // 高权利金：权利金占股价 > 3%
+                                    if (premiumPct > 3) {
+                                        featureTags.push({ label: '高权利金', color: '#3b82f6' });
+                                    }
+
+                                    return (
+                                        <div
+                                            key={opt.identifier}
+                                            className="p-4 rounded cursor-pointer transition-all hover:scale-105"
+                                            style={{
+                                                backgroundColor: 'rgba(13, 155, 151, 0.15)',
+                                                border: '1px solid var(--primary)'
+                                            }}
+                                        >
+                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                                ${opt.strike}
+                                            </div>
+                                            <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                                {opt.put_call}
+                                            </div>
+
+                                            {/* 风格标签 */}
+                                            {profile && (
+                                                <div className={`style-tag ${styleColorClass}`} style={{ marginTop: '0.5rem' }}>
+                                                    {profile.style_label_cn || profile.style_label}
+                                                </div>
+                                            )}
+
+                                            {/* 特性标签（多标签） */}
+                                            {featureTags.length > 0 && (
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.5rem' }}>
+                                                    {featureTags.map((tag, idx) => (
+                                                        <span
+                                                            key={idx}
+                                                            style={{
+                                                                fontSize: '0.7rem',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                backgroundColor: `${tag.color}20`,
+                                                                color: tag.color,
+                                                                border: `1px solid ${tag.color}40`,
+                                                                fontWeight: 500
+                                                            }}
+                                                        >
+                                                            {tag.label}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-between mt-2">
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>Score</span>
+                                                <span className={`score-badge ${getScoreClass(getOptionScore(opt))}`}>
+                                                    {getOptionScore(opt).toFixed(1)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between mt-1">
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
+                                                <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                    {opt.scores?.annualized_return?.toFixed(1)}%
+                                                </span>
+                                            </div>
+
+                                            {/* 胜率显示 */}
+                                            {profile?.win_probability && (
+                                                <div className="flex justify-between mt-1">
+                                                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>胜率</span>
+                                                    <span className="win-prob">
+                                                        {(profile.win_probability * 100).toFixed(0)}%
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                                            {opt.put_call}
-                                        </div>
-                                        <div className="flex justify-between mt-2">
-                                            <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>Score</span>
-                                            <span className={`score-badge ${getScoreClass(getOptionScore(opt))}`}>
-                                                {getOptionScore(opt).toFixed(1)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between mt-1">
-                                            <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
-                                            <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
-                                                {opt.scores?.annualized_return?.toFixed(1)}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -1581,9 +1735,9 @@ export default function Options() {
                                             const totalScore = getOptionScore(opt);
                                             const isRecommended = totalScore >= 60;
                                             
-                                            // 计算行权概率：优先使用assignment_probability，否则用delta的绝对值
-                                            const exerciseProb = opt.scores?.assignment_probability 
-                                                ? (opt.scores.assignment_probability * 100) 
+                                            // 计算行权概率：优先使用assignment_probability（已是0-100%格式），否则用delta的绝对值
+                                            const exerciseProb = opt.scores?.assignment_probability
+                                                ? opt.scores.assignment_probability  // 已经是百分比格式，不需要再乘100
                                                 : (opt.delta ? Math.abs(opt.delta) * 100 : 0);
                                             
                                             // 计算价格差百分比：CALL是(strike - stockPrice)/stockPrice，PUT是(stockPrice - strike)/stockPrice
@@ -1595,9 +1749,9 @@ export default function Options() {
                                                 : 0;
                                             
                                             // 计算权利金：优先使用premium，否则用中间价
-                                            const premium = opt.premium || 
-                                                ((opt.bid_price && opt.ask_price) 
-                                                    ? (opt.bid_price + opt.ask_price) / 2 
+                                            const premium = opt.premium ||
+                                                ((opt.bid_price && opt.ask_price)
+                                                    ? (opt.bid_price + opt.ask_price) / 2
                                                     : opt.latest_price || 0);
 
                                             return (
@@ -1607,7 +1761,9 @@ export default function Options() {
                                                     onClick={() => handleOptionClick(opt)}
                                                     style={{ cursor: 'pointer' }}
                                                 >
-                                                    <td style={{ fontWeight: 600 }}>${opt.strike}</td>
+                                                    <td style={{ fontWeight: 600 }}>
+                                                        ${opt.strike}
+                                                    </td>
                                                     <td>${formatNumber(opt.latest_price)}</td>
                                                     <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
                                                     <td><small>{opt.volume} / {opt.open_interest}</small></td>

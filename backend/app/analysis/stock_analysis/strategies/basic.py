@@ -10,7 +10,12 @@ import logging
 
 # 导入配置参数
 try:
-    from ....constants import *
+    from ....constants import (
+        GROWTH_DISCOUNT_FACTOR, ATR_MULTIPLIER_BASE, MIN_DAILY_VOLUME_USD,
+        FIXED_STOP_LOSS_PCT, PEG_THRESHOLD_BASE,
+        MARKET_CONFIG, MARKET_STYLE_WEIGHTS,
+        detect_market_from_ticker, get_market_config, get_market_style_weights
+    )
 except ImportError:
     # 如果constants不存在，使用默认值
     GROWTH_DISCOUNT_FACTOR = 0.6
@@ -18,6 +23,12 @@ except ImportError:
     MIN_DAILY_VOLUME_USD = 5_000_000
     FIXED_STOP_LOSS_PCT = 0.15
     PEG_THRESHOLD_BASE = 1.5
+    MARKET_CONFIG = {'US': {}, 'CN': {}, 'HK': {}}
+    MARKET_STYLE_WEIGHTS = {'US': {}, 'CN': {}, 'HK': {}}
+
+    def detect_market_from_ticker(ticker): return 'US'
+    def get_market_config(market): return {}
+    def get_market_style_weights(market): return {}
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +50,7 @@ class BasicAnalysisStrategy:
 
         参数:
             data: 市场数据
-            style: 投资风格 ('growth', 'value', 'balanced')
+            style: 投资风格 ('growth', 'value', 'balanced', 'quality', 'momentum')
             liquidity_info: 流动性信息
 
         返回:
@@ -58,24 +69,46 @@ class BasicAnalysisStrategy:
             info = data['info']
             ticker = data.get('ticker', '')
 
-            # 2. 公司分类
+            # 2. 识别市场并获取市场配置
+            market = detect_market_from_ticker(ticker)
+            market_config = get_market_config(market)
+            style_weights = get_market_style_weights(market)
+
+            # 3. 公司分类
             company_classification = self.classify_company(data)
 
-            # 3. 风险分析
-            risk_result = self.analyze_risk_and_position(style, data)
+            # 4. 风险分析（考虑市场差异）
+            risk_result = self.analyze_risk_and_position(style, data, market_config)
 
-            # 4. 根据风格调整分析
+            # 5. 根据风格调整分析
             if style == 'growth':
                 analysis_result = self._analyze_growth_style(data, risk_result)
             elif style == 'value':
                 analysis_result = self._analyze_value_style(data, risk_result)
+            elif style == 'quality':
+                analysis_result = self._analyze_quality_style(data, risk_result)
+            elif style == 'momentum':
+                analysis_result = self._analyze_momentum_style(data, risk_result)
             else:  # balanced
                 analysis_result = self._analyze_balanced_style(data, risk_result)
 
-            # 5. 整合结果
+            # 6. 应用市场风格权重调整
+            if style in style_weights:
+                style_multiplier = style_weights.get(style, 1.0)
+                if 'score' in analysis_result:
+                    analysis_result['score'] = analysis_result['score'] * style_multiplier
+                # 更新风格特定的评分
+                score_key = f'{style}_score'
+                if score_key in analysis_result:
+                    analysis_result[score_key] = analysis_result[score_key] * style_multiplier
+                analysis_result['market_style_multiplier'] = style_multiplier
+
+            # 7. 整合结果
             result = {
                 'success': True,
                 'analysis_style': style,
+                'market': market,
+                'market_name': market_config.get('name', market),
                 'company_classification': company_classification,
                 'risk_analysis': risk_result,
                 'style_specific_analysis': analysis_result,
@@ -169,7 +202,7 @@ class BasicAnalysisStrategy:
                 'is_etf': False
             }
 
-    def analyze_risk_and_position(self, style: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_risk_and_position(self, style: str, data: Dict[str, Any], market_config: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         风险分析和仓位建议
 
@@ -187,6 +220,13 @@ class BasicAnalysisStrategy:
             risk_factors = []
             risk_score = 0  # 0-100，越高风险越大
 
+            # 获取市场配置参数
+            if market_config is None:
+                market_config = {}
+            risk_premium = market_config.get('risk_premium', 1.0)
+            pe_high_threshold = market_config.get('pe_high_threshold', 40)
+            volatility_adjustment = market_config.get('volatility_adjustment', 1.0)
+
             # 1. 波动率风险
             if len(history_prices) >= 30:
                 price_changes = [history_prices[i] / history_prices[i-1] - 1 for i in range(1, len(history_prices))]
@@ -203,13 +243,13 @@ class BasicAnalysisStrategy:
             else:
                 volatility = 0
 
-            # 2. 估值风险
+            # 2. 估值风险 (使用市场特定的PE阈值)
             pe_ratio = info.get('trailingPE', 0)
             if pe_ratio:
-                if pe_ratio > 40:
+                if pe_ratio > pe_high_threshold * 1.5:  # 极高估值
                     risk_score += 20
                     risk_factors.append(f'极高估值 (PE={pe_ratio:.1f})')
-                elif pe_ratio > 25:
+                elif pe_ratio > pe_high_threshold:  # 高估值
                     risk_score += 10
                     risk_factors.append(f'高估值 (PE={pe_ratio:.1f})')
                 elif pe_ratio < 8:
@@ -239,9 +279,18 @@ class BasicAnalysisStrategy:
                 risk_score += 5
                 risk_factors.append(f'高风险行业 ({sector})')
 
-            # 6. 宏观风险评估
-            # 这里可以添加利率、通胀等宏观因素的影响
-            # 暂时使用简化版本
+            # 6. 宏观风险评估 + 市场风险溢价调整
+            # 应用市场风险溢价系数
+            if risk_premium > 1.0:
+                market_risk_adjustment = (risk_premium - 1.0) * 20  # 额外风险加成
+                risk_score += market_risk_adjustment
+                if market_risk_adjustment > 5:
+                    risk_factors.append(f'市场风险溢价 (+{market_risk_adjustment:.0f})')
+
+            # 政策风险（A股特有）
+            policy_risk_factor = market_config.get('policy_risk_factor', 1.0)
+            if policy_risk_factor > 1.0:
+                risk_factors.append('政策敏感性较高')
 
             # 风险等级分类
             if risk_score >= 60:
@@ -529,6 +578,342 @@ class BasicAnalysisStrategy:
                 'style': 'balanced',
                 'error': str(e)
             }
+
+    def _analyze_quality_style(self, data: Dict[str, Any], risk_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        质量型投资风格分析
+        关注企业盈利质量、财务稳健性和管理效率
+        """
+        try:
+            info = data.get('info', {})
+
+            quality_score = 0
+            quality_factors = []
+
+            # 1. ROE (净资产收益率) - 权重30%
+            roe = info.get('returnOnEquity', 0)
+            if roe:
+                if roe > 0.25:
+                    quality_score += 30
+                    quality_factors.append(f'优秀ROE ({roe:.1%})')
+                elif roe > 0.20:
+                    quality_score += 25
+                    quality_factors.append(f'很好ROE ({roe:.1%})')
+                elif roe > 0.15:
+                    quality_score += 20
+                    quality_factors.append(f'良好ROE ({roe:.1%})')
+                elif roe > 0.10:
+                    quality_score += 12
+                    quality_factors.append(f'一般ROE ({roe:.1%})')
+                elif roe > 0:
+                    quality_score += 5
+                    quality_factors.append(f'偏低ROE ({roe:.1%})')
+                else:
+                    quality_factors.append(f'负ROE ({roe:.1%})')
+
+            # 2. 毛利率稳定性 - 权重25%
+            gross_margin = info.get('grossMargins', 0)
+            operating_margin = info.get('operatingMargins', 0)
+
+            if gross_margin:
+                if gross_margin > 0.50:
+                    quality_score += 20
+                    quality_factors.append(f'高毛利率 ({gross_margin:.1%})')
+                elif gross_margin > 0.40:
+                    quality_score += 16
+                    quality_factors.append(f'良好毛利率 ({gross_margin:.1%})')
+                elif gross_margin > 0.30:
+                    quality_score += 12
+                    quality_factors.append(f'中等毛利率 ({gross_margin:.1%})')
+                elif gross_margin > 0.20:
+                    quality_score += 6
+                    quality_factors.append(f'偏低毛利率 ({gross_margin:.1%})')
+                else:
+                    quality_factors.append(f'低毛利率 ({gross_margin:.1%})')
+
+            # 营业利润率加分
+            if operating_margin and operating_margin > 0.20:
+                quality_score += 5
+                quality_factors.append(f'高营业利润率 ({operating_margin:.1%})')
+
+            # 3. 自由现金流质量 - 权重25%
+            fcf = info.get('freeCashflow', 0)
+            net_income = info.get('netIncomeToCommon', 0)
+            operating_cashflow = info.get('operatingCashflow', 0)
+
+            if fcf and net_income and net_income > 0:
+                fcf_ratio = fcf / net_income
+                if fcf_ratio > 1.0:
+                    quality_score += 20
+                    quality_factors.append(f'优秀现金流质量 (FCF/NI={fcf_ratio:.1f})')
+                elif fcf_ratio > 0.8:
+                    quality_score += 15
+                    quality_factors.append(f'良好现金流质量 (FCF/NI={fcf_ratio:.1f})')
+                elif fcf_ratio > 0.5:
+                    quality_score += 10
+                    quality_factors.append(f'一般现金流质量 (FCF/NI={fcf_ratio:.1f})')
+                elif fcf_ratio > 0:
+                    quality_score += 5
+                    quality_factors.append(f'偏弱现金流 (FCF/NI={fcf_ratio:.1f})')
+                else:
+                    quality_factors.append('现金流为负')
+            elif operating_cashflow and operating_cashflow > 0:
+                quality_score += 8
+                quality_factors.append('有正向经营现金流')
+
+            # 4. 负债可控性 - 权重20%
+            debt_to_equity = info.get('debtToEquity', 0)
+            current_ratio = info.get('currentRatio', 0)
+
+            if debt_to_equity is not None:
+                if debt_to_equity < 30:
+                    quality_score += 15
+                    quality_factors.append(f'极低负债 (D/E={debt_to_equity:.0f}%)')
+                elif debt_to_equity < 50:
+                    quality_score += 12
+                    quality_factors.append(f'低负债 (D/E={debt_to_equity:.0f}%)')
+                elif debt_to_equity < 100:
+                    quality_score += 8
+                    quality_factors.append(f'适度负债 (D/E={debt_to_equity:.0f}%)')
+                elif debt_to_equity < 150:
+                    quality_score += 4
+                    quality_factors.append(f'中等负债 (D/E={debt_to_equity:.0f}%)')
+                else:
+                    quality_factors.append(f'高负债 (D/E={debt_to_equity:.0f}%)')
+
+            # 流动比率加分
+            if current_ratio and current_ratio > 2.0:
+                quality_score += 5
+                quality_factors.append(f'充足流动性 (流动比率={current_ratio:.1f})')
+            elif current_ratio and current_ratio > 1.5:
+                quality_score += 3
+
+            # 质量评级
+            if quality_score >= 60:
+                quality_rating = 'excellent'
+                quality_description = '优秀质量股'
+            elif quality_score >= 45:
+                quality_rating = 'good'
+                quality_description = '良好质量股'
+            elif quality_score >= 30:
+                quality_rating = 'fair'
+                quality_description = '一般质量股'
+            else:
+                quality_rating = 'poor'
+                quality_description = '质量较差'
+
+            return {
+                'style': 'quality',
+                'quality_score': quality_score,
+                'quality_rating': quality_rating,
+                'quality_description': quality_description,
+                'quality_factors': quality_factors,
+                'roe': roe,
+                'gross_margin': gross_margin,
+                'operating_margin': operating_margin,
+                'debt_to_equity': debt_to_equity
+            }
+
+        except Exception as e:
+            logger.error(f"质量型分析失败: {e}")
+            return {
+                'style': 'quality',
+                'quality_score': 0,
+                'error': str(e)
+            }
+
+    def _analyze_momentum_style(self, data: Dict[str, Any], risk_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        动量型投资风格分析
+        关注价格趋势、技术指标和市场动能
+        """
+        try:
+            info = data.get('info', {})
+            history = data.get('history', pd.DataFrame())
+            history_prices = data.get('history_prices', [])
+
+            momentum_score = 0
+            momentum_factors = []
+
+            # 如果没有足够的历史数据，尝试从history_prices构建
+            if len(history_prices) >= 50:
+                prices = np.array(history_prices)
+            elif not history.empty and 'Close' in history.columns:
+                prices = history['Close'].values
+            else:
+                return {
+                    'style': 'momentum',
+                    'momentum_score': 0,
+                    'momentum_rating': 'unknown',
+                    'momentum_description': '历史数据不足',
+                    'momentum_factors': ['需要至少50天历史数据']
+                }
+
+            current_price = prices[-1] if len(prices) > 0 else 0
+
+            # 1. 短期动量 - 5日涨幅 (权重30%)
+            if len(prices) >= 5:
+                change_5d = (prices[-1] / prices[-5] - 1) * 100
+                if change_5d > 8:
+                    momentum_score += 25
+                    momentum_factors.append(f'强劲短期动量 (+{change_5d:.1f}% 5日)')
+                elif change_5d > 5:
+                    momentum_score += 20
+                    momentum_factors.append(f'良好短期动量 (+{change_5d:.1f}% 5日)')
+                elif change_5d > 2:
+                    momentum_score += 15
+                    momentum_factors.append(f'温和上涨 (+{change_5d:.1f}% 5日)')
+                elif change_5d > -2:
+                    momentum_score += 8
+                    momentum_factors.append(f'震荡整理 ({change_5d:+.1f}% 5日)')
+                elif change_5d > -5:
+                    momentum_score += 3
+                    momentum_factors.append(f'轻微回调 ({change_5d:.1f}% 5日)')
+                else:
+                    momentum_factors.append(f'短期下跌 ({change_5d:.1f}% 5日)')
+
+            # 2. 中期趋势 - MA20 vs MA50 (权重30%)
+            if len(prices) >= 50:
+                ma20 = np.mean(prices[-20:])
+                ma50 = np.mean(prices[-50:])
+
+                ma_ratio = ma20 / ma50 if ma50 > 0 else 1
+
+                if ma_ratio > 1.08:
+                    momentum_score += 25
+                    momentum_factors.append(f'强势趋势 (MA20 > MA50 +{(ma_ratio-1)*100:.1f}%)')
+                elif ma_ratio > 1.03:
+                    momentum_score += 20
+                    momentum_factors.append(f'上升趋势 (MA20 > MA50)')
+                elif ma_ratio > 0.98:
+                    momentum_score += 12
+                    momentum_factors.append('均线纠缠')
+                elif ma_ratio > 0.93:
+                    momentum_score += 5
+                    momentum_factors.append('轻度走弱')
+                else:
+                    momentum_factors.append(f'下跌趋势 (MA20 < MA50 {(ma_ratio-1)*100:.1f}%)')
+
+                # 价格在均线上方加分
+                if current_price > ma20 > ma50:
+                    momentum_score += 5
+                    momentum_factors.append('价格在双均线上方')
+
+            # 3. RSI指标 (权重25%)
+            if len(prices) >= 14:
+                rsi = self._calculate_rsi(prices, 14)
+                if 60 <= rsi <= 70:
+                    momentum_score += 20
+                    momentum_factors.append(f'健康上涨 (RSI={rsi:.0f})')
+                elif 50 <= rsi < 60:
+                    momentum_score += 15
+                    momentum_factors.append(f'温和看涨 (RSI={rsi:.0f})')
+                elif 40 <= rsi < 50:
+                    momentum_score += 10
+                    momentum_factors.append(f'中性 (RSI={rsi:.0f})')
+                elif rsi > 70:
+                    momentum_score += 8
+                    momentum_factors.append(f'超买区域 (RSI={rsi:.0f})，注意回调')
+                elif rsi < 30:
+                    momentum_score += 5
+                    momentum_factors.append(f'超卖区域 (RSI={rsi:.0f})，可能反弹')
+                else:
+                    momentum_score += 3
+                    momentum_factors.append(f'弱势 (RSI={rsi:.0f})')
+
+            # 4. 成交量确认 (权重15%)
+            if not history.empty and 'Volume' in history.columns:
+                volumes = history['Volume'].values
+                if len(volumes) >= 20:
+                    vol_5d = np.mean(volumes[-5:])
+                    vol_20d = np.mean(volumes[-20:])
+                    vol_ratio = vol_5d / vol_20d if vol_20d > 0 else 1
+
+                    if vol_ratio > 2.0:
+                        momentum_score += 12
+                        momentum_factors.append(f'放量 (量比={vol_ratio:.1f})')
+                    elif vol_ratio > 1.5:
+                        momentum_score += 10
+                        momentum_factors.append(f'温和放量 (量比={vol_ratio:.1f})')
+                    elif vol_ratio > 1.0:
+                        momentum_score += 6
+                        momentum_factors.append('成交量正常')
+                    elif vol_ratio > 0.5:
+                        momentum_score += 3
+                        momentum_factors.append('缩量')
+                    else:
+                        momentum_factors.append('严重缩量')
+
+            # 5. 52周位置 (额外加分)
+            week_52_high = info.get('fiftyTwoWeekHigh', 0)
+            week_52_low = info.get('fiftyTwoWeekLow', 0)
+
+            if week_52_high and week_52_low and current_price:
+                position = (current_price - week_52_low) / (week_52_high - week_52_low) if week_52_high > week_52_low else 0.5
+                if position > 0.9:
+                    momentum_score += 8
+                    momentum_factors.append('接近52周新高')
+                elif position > 0.7:
+                    momentum_score += 5
+                    momentum_factors.append('52周高位区域')
+
+            # 动量评级
+            if momentum_score >= 60:
+                momentum_rating = 'excellent'
+                momentum_description = '强劲动量'
+            elif momentum_score >= 45:
+                momentum_rating = 'good'
+                momentum_description = '良好动量'
+            elif momentum_score >= 30:
+                momentum_rating = 'fair'
+                momentum_description = '一般动量'
+            else:
+                momentum_rating = 'poor'
+                momentum_description = '动量较弱'
+
+            return {
+                'style': 'momentum',
+                'momentum_score': momentum_score,
+                'momentum_rating': momentum_rating,
+                'momentum_description': momentum_description,
+                'momentum_factors': momentum_factors
+            }
+
+        except Exception as e:
+            logger.error(f"动量型分析失败: {e}")
+            return {
+                'style': 'momentum',
+                'momentum_score': 0,
+                'error': str(e)
+            }
+
+    def _calculate_rsi(self, prices: np.ndarray, period: int = 14) -> float:
+        """计算RSI指标"""
+        try:
+            if len(prices) < period + 1:
+                return 50  # 默认中性
+
+            # 计算价格变化
+            deltas = np.diff(prices)
+
+            # 分离上涨和下跌
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+
+            # 计算平均收益和损失
+            avg_gain = np.mean(gains[-period:])
+            avg_loss = np.mean(losses[-period:])
+
+            if avg_loss == 0:
+                return 100
+
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+
+            return rsi
+
+        except:
+            return 50
 
     def _generate_recommendation(self, analysis_result: Dict[str, Any],
                                risk_result: Dict[str, Any], style: str) -> Dict[str, Any]:
