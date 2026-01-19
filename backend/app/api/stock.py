@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from ..services import analysis_engine, ev_model, ai_service
 from ..services.task_queue import create_analysis_task, get_task_status
 from ..utils.auth import require_auth, get_user_id
-from ..utils.decorators import check_quota
+from ..utils.decorators import check_quota, db_retry
 from ..utils.serialization import convert_numpy_types
 from ..models import db, ServiceType, StockAnalysisHistory, TaskType
 import yfinance as yf
@@ -371,6 +371,7 @@ def analyze_stock():
 
 @stock_bp.route('/history', methods=['GET'])
 @require_auth
+@db_retry(max_retries=3, retry_delay=0.5)
 def get_analysis_history():
     """
     Get user's stock analysis history
@@ -472,6 +473,7 @@ def get_analysis_history():
 
 @stock_bp.route('/history/<int:history_id>', methods=['GET'])
 @require_auth
+@db_retry(max_retries=3, retry_delay=0.5)
 def get_analysis_history_detail(history_id):
     """
     Get detailed analysis history by ID including full analysis data

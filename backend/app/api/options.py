@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request, g
 from ..services.options_service import OptionsService
 from ..services.task_queue import create_analysis_task, get_task_status
 from ..models import db, ServiceType, TaskType, OptionsAnalysisHistory
-from ..utils.decorators import check_quota
+from ..utils.decorators import check_quota, db_retry
 from ..utils.auth import require_auth, get_user_id
 import logging
 
@@ -300,6 +300,7 @@ def get_enhanced_analysis(symbol, option_identifier):
 
 @options_bp.route('/history', methods=['GET'])
 @require_auth
+@db_retry(max_retries=3, retry_delay=0.5)
 def get_analysis_history():
     """
     Get user's options analysis history
@@ -402,6 +403,7 @@ def get_analysis_history():
 
 @options_bp.route('/history/<int:history_id>', methods=['GET'])
 @require_auth
+@db_retry(max_retries=3, retry_delay=0.5)
 def get_analysis_history_detail(history_id):
     """
     Get detailed options analysis history by ID including full analysis data

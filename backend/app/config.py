@@ -22,17 +22,21 @@ class Config:
     # Optimized for PostgreSQL/Supabase performance
     SQLALCHEMY_ENGINE_OPTIONS = {
         # Connection Pool Settings
-        'pool_size': 20,                    # Number of connections to maintain in pool
-        'max_overflow': 30,                 # Additional connections beyond pool_size
+        'pool_size': 10,                    # Number of connections to maintain in pool
+        'max_overflow': 20,                 # Additional connections beyond pool_size
         'pool_timeout': 30,                 # Seconds to wait for connection from pool
-        'pool_recycle': 3600,               # Recycle connections after 1 hour
-        'pool_pre_ping': True,              # Verify connections before use
+        'pool_recycle': 300,                # Recycle connections after 5 minutes (important for Supabase)
+        'pool_pre_ping': True,              # Verify connections before use (critical for stale connections)
 
         # Connection Settings for PostgreSQL/Supabase
         'connect_args': {
             'connect_timeout': 10,          # Connection timeout in seconds
             'application_name': 'AlphaG-Backend',  # App name for monitoring
-            'options': '-c statement_timeout=30000'  # Statement timeout (30 seconds)
+            'options': '-c statement_timeout=30000',  # Statement timeout (30 seconds)
+            'keepalives': 1,                # Enable TCP keepalives
+            'keepalives_idle': 60,          # Seconds before sending keepalive
+            'keepalives_interval': 10,      # Seconds between keepalives
+            'keepalives_count': 5,          # Failed keepalives before connection is dead
         },
 
         # Echo SQL queries in debug mode
