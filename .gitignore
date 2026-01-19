@@ -83,4 +83,4 @@ data/
 
 
 # Frontend Exceptions
-!refactor/frontend/src/lib/
+!frontend/src/lib/

@@ -259,57 +259,50 @@ class OptionsService:
 
     @staticmethod
     def get_stock_history(symbol: str, days: int = 60):
+        """Get stock OHLC history data using yfinance"""
         try:
+            import yfinance as yf
+
             symbol = symbol.upper()
-            if not USE_MOCK_DATA:
-                try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
-                    
-                    market = Market.US if not symbol.endswith('.HK') else Market.HK
-                    price_history = client.get_stock_history(symbol, days=days, market=market)
-                    
-                    if price_history and len(price_history) >= 30:
-                        candlestick_data = []
-                        base_date = datetime.now() - timedelta(days=len(price_history))
-                        for i, close_price in enumerate(price_history):
-                            date = base_date + timedelta(days=i)
-                            open_price = close_price * (1 + (i % 3 - 1) * 0.005)
-                            high_price = max(open_price, close_price) * 1.01
-                            low_price = min(open_price, close_price) * 0.99
-                            candlestick_data.append({
-                                "time": int(date.timestamp()),
-                                "open": round(open_price, 2),
-                                "high": round(high_price, 2),
-                                "low": round(low_price, 2),
-                                "close": round(close_price, 2)
-                            })
-                        return {"symbol": symbol, "data": candlestick_data}
-                except Exception as e:
-                    print(f"Tiger API failed: {e}")
-            
-            base_price = 150.0
+            print(f"Fetching {days} days of history for {symbol} using yfinance...")
+
+            # Use yfinance to get real OHLC data
+            stock = yf.Ticker(symbol)
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days + 10)  # Extra days to ensure enough data
+
+            hist = stock.history(start=start_date, end=end_date)
+
+            if hist.empty:
+                print(f"No history data returned for {symbol}")
+                return {"symbol": symbol, "data": [], "error": "No data available"}
+
+            # Convert to candlestick format for lightweight-charts
             candlestick_data = []
-            base_date = datetime.now() - timedelta(days=days)
-            for i in range(days):
-                date = base_date + timedelta(days=i)
-                change = random.uniform(-0.02, 0.02) * base_price
-                base_price = max(base_price + change, 50.0)
-                open_price = base_price
-                close_price = base_price * random.uniform(0.98, 1.02)
-                high_price = max(open_price, close_price) * 1.01
-                low_price = min(open_price, close_price) * 0.99
+            for date, row in hist.iterrows():
+                # Convert pandas timestamp to unix timestamp (seconds)
+                timestamp = int(date.timestamp())
                 candlestick_data.append({
-                    "time": int(date.timestamp()),
-                    "open": round(open_price, 2),
-                    "high": round(high_price, 2),
-                    "low": round(low_price, 2),
-                    "close": round(close_price, 2)
+                    "time": timestamp,
+                    "open": round(float(row['Open']), 2),
+                    "high": round(float(row['High']), 2),
+                    "low": round(float(row['Low']), 2),
+                    "close": round(float(row['Close']), 2)
                 })
+
+            # Sort by time ascending
+            candlestick_data.sort(key=lambda x: x['time'])
+
+            # Limit to requested days
+            if len(candlestick_data) > days:
+                candlestick_data = candlestick_data[-days:]
+
+            print(f"Successfully fetched {len(candlestick_data)} days of OHLC data for {symbol}")
             return {"symbol": symbol, "data": candlestick_data}
+
         except Exception as e:
-             raise e
+            print(f"Error fetching stock history for {symbol}: {e}")
+            return {"symbol": symbol, "data": [], "error": str(e)}
 
     @staticmethod
     def get_stock_quote(symbol):
