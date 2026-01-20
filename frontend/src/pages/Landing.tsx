@@ -5,7 +5,6 @@ import { Menu, X } from 'lucide-react';
 import axios from 'axios';
 import FeedbackButton from '@/components/FeedbackButton';
 import PrivacyPolicy from '@/components/PrivacyPolicy';
-import i18n from '@/lib/i18n';
 import { translateStockName } from '@/lib/i18n';
 
 // Original CSS from home/index.html
@@ -142,7 +141,7 @@ export default function Landing() {
     
     // Rebalance history state
     const [rebalanceHistory, setRebalanceHistory] = useState<any[]>([]);
-    const [rebalanceLoading, setRebalanceLoading] = useState(false);
+    const [_rebalanceLoading, setRebalanceLoading] = useState(false);
     const [expandedRebalance, setExpandedRebalance] = useState<number | null>(null);
 
     const toggleLang = () => {
@@ -917,7 +916,7 @@ export default function Landing() {
                             </div>
                             
                             <div className="space-y-3 sm:space-y-4 max-w-5xl mx-auto">
-                                {rebalanceHistory.map((rebalance, idx) => {
+                                {rebalanceHistory.map((rebalance) => {
                                     const isExpanded = expandedRebalance === rebalance.id;
                                     const changes = rebalance.changes_detail || {};
                                     const added = changes.added || [];

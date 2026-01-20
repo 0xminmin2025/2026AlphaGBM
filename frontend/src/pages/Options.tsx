@@ -980,44 +980,6 @@ export default function Options() {
         setStockHistoryOHLC(null);
     };
 
-    // Calculate max loss for option
-    const calculateMaxLoss = (option: OptionData, currentStockPrice: number): number => {
-        const premium = option.premium || ((option.bid_price + option.ask_price) / 2) || option.latest_price || 0;
-        
-        if (strategy === 'sell_put') {
-            // Sell Put: Max loss = Strike - Premium (if stock goes to 0)
-            return option.strike - premium;
-        } else if (strategy === 'sell_call') {
-            // Sell Call: Max loss is unlimited, but we calculate theoretical max at 2x current price
-            return (currentStockPrice * 2) - option.strike - premium;
-        } else if (strategy === 'buy_call') {
-            // Buy Call: Max loss = Premium paid
-            return premium;
-        } else { // buy_put
-            // Buy Put: Max loss = Premium paid
-            return premium;
-        }
-    };
-
-    // Calculate stop loss price
-    const calculateStopLoss = (option: OptionData, currentStockPrice: number): number => {
-        const premium = option.premium || ((option.bid_price + option.ask_price) / 2) || option.latest_price || 0;
-        
-        if (strategy === 'sell_put') {
-            // Sell Put: Stop loss when stock price drops below strike - premium * 2
-            return Math.max(0, option.strike - (premium * 2));
-        } else if (strategy === 'sell_call') {
-            // Sell Call: Stop loss when stock price rises above strike + premium * 2
-            return option.strike + (premium * 2);
-        } else if (strategy === 'buy_call') {
-            // Buy Call: Stop loss at 50% of premium
-            return currentStockPrice; // Stop loss is based on option price, not stock price
-        } else { // buy_put
-            // Buy Put: Stop loss at 50% of premium
-            return currentStockPrice; // Stop loss is based on option price, not stock price
-        }
-    };
-
     // Get all options using useMemo to avoid recalculating on every render
     // IMPORTANT: All hooks must be called before any early returns
     const allOptions = useMemo((): OptionData[] => {

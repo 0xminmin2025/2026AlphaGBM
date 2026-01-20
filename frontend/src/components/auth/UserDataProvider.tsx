@@ -49,7 +49,7 @@ type PricingData = {
         enterprise?: { name: string; features: string[]; price?: number | null; credits?: string };
     };
     topups: {
-        '100': { name: string; price: number; validity: string };
+        '100': { name: string; price: number; validity: string; currency?: string };
     };
 };
 

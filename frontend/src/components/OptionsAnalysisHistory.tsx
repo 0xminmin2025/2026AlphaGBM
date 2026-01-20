@@ -164,15 +164,6 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
     return new Date(dateString).toLocaleString();
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _getAnalysisTypeLabel = (analysisType: string): string => {
-    switch (analysisType) {
-      case 'basic_chain': return t('options.history.analysisType.chain');
-      case 'enhanced_analysis': return t('options.history.analysisType.enhanced');
-      default: return analysisType;
-    }
-  };
-
   // Only load data when first opening the component
   useEffect(() => {
     if (!isDataLoaded) {

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
 import StockSearchInput from '@/components/ui/StockSearchInput';
@@ -353,7 +353,7 @@ function renderMarkdown(text: string): string {
 function generateEntryStrategy(
     currentPrice: number,
     targetPrice: number,
-    style: string,
+    _style: string, // prefixed with _ to indicate intentionally unused
     riskScore: number,
     suggestedPosition: number,
     t: (key: string, params?: any) => string
@@ -562,15 +562,18 @@ export default function Home() {
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('analysis');
+    // URL 参数支持
+    const [searchParams] = useSearchParams();
+    const initialMode = searchParams.get('mode') === 'narrative' ? 'narrative' : 'manual';
     // 选股模式：'manual' = 自选股票, 'narrative' = 叙事雷达
-    const [stockMode, setStockMode] = useState<'manual' | 'narrative'>('manual');
+    const [stockMode, setStockMode] = useState<'manual' | 'narrative'>(initialMode);
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
     const [taskStep, setTaskStep] = useState('');
 
     // Initialize task polling hook
-    const { taskStatus, startPolling } = useTaskPolling({
+    const { startPolling } = useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Task completed:', taskResult);
             setResult(taskResult);
