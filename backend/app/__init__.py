@@ -70,6 +70,7 @@ def create_app(config_class=Config):
     from .api.portfolio import portfolio_bp
     from .api.tasks import tasks_bp
     from .api.feedback import feedback_bp
+    from .api.narrative_routes import narrative_bp
     from .docs import docs_bp
 
     app.register_blueprint(auth_bp)
@@ -80,6 +81,7 @@ def create_app(config_class=Config):
     app.register_blueprint(portfolio_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(feedback_bp)
+    app.register_blueprint(narrative_bp)
     app.register_blueprint(docs_bp)
 
     @app.route('/health')

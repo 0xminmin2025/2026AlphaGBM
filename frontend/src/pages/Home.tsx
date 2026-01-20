@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
 import StockSearchInput from '@/components/ui/StockSearchInput';
+import { NarrativeRadar } from '@/components/NarrativeRadar';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
@@ -561,6 +562,8 @@ export default function Home() {
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('analysis');
+    // 选股模式：'manual' = 自选股票, 'narrative' = 叙事雷达
+    const [stockMode, setStockMode] = useState<'manual' | 'narrative'>('manual');
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
@@ -588,8 +591,8 @@ export default function Home() {
         }
     });
 
-    const handleAnalyze = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleAnalyze = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!user) {
             navigate('/login');
             return;
@@ -624,6 +627,16 @@ export default function Home() {
             setError(err.response?.data?.error || err.message || 'Failed to start analysis');
             setLoading(false);
         }
+    };
+
+    // 从叙事雷达选择股票后，切换到手动模式并触发分析
+    const handleSelectStockFromNarrative = (symbol: string) => {
+        setTicker(symbol);
+        setStockMode('manual');
+        // 延迟触发分析，等待状态更新
+        setTimeout(() => {
+            handleAnalyze();
+        }, 100);
     };
 
     const getRiskClass = (score: number) => {
@@ -744,60 +757,99 @@ export default function Home() {
 
             {/* Stock Analysis Tab */}
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
-                {/* 股票查询表单 */}
+                {/* 选股模式切换 */}
                 <div className="card shadow-lg mb-4 p-4 sm:p-6">
                     <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                         <i className="bi bi-search"></i>
                         {t('stock.form.title')}
                     </h5>
 
-                    <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
-                        <div>
-                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
-                            <CustomSelect
-                                options={[
-                                    {
-                                        value: 'quality',
-                                        label: 'Quality (质量)'
-                                    },
-                                    {
-                                        value: 'value',
-                                        label: 'Value (价值)'
-                                    },
-                                    {
-                                        value: 'growth',
-                                        label: 'Growth (成长)'
-                                    },
-                                    {
-                                        value: 'momentum',
-                                        label: 'Momentum (趋势)'
-                                    }
-                                ]}
-                                value={style}
-                                onChange={setStyle}
-                                placeholder={t('stock.form.stylePlaceholder')}
-                                className="w-full"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.ticker')}</label>
-                            <StockSearchInput
-                                placeholder={t('stock.form.tickerPlaceholder')}
-                                value={ticker}
-                                onChange={setTicker}
-                            />
-                        </div>
-                        <div className="flex items-end">
-                            <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
-                                <i className="bi bi-graph-up mr-2"></i>
-                                {loading ? t('stock.form.analyzing') : t('stock.form.analyze')}
-                            </Button>
-                        </div>
-                    </form>
-
-                    <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
-                        {t(`stock.style.${style}.desc`)}
+                    {/* 模式切换按钮 */}
+                    <div className="flex gap-3 mb-5">
+                        <button
+                            onClick={() => setStockMode('manual')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border transition-all ${
+                                stockMode === 'manual'
+                                    ? 'bg-[#0D9B97]/20 border-[#0D9B97] text-[#0D9B97]'
+                                    : 'bg-[#1c1c1e] border-[#3f3f46] text-slate-400 hover:border-[#0D9B97]/50'
+                            }`}
+                        >
+                            <i className="bi bi-pencil-square"></i>
+                            <span className="font-medium">{i18n.language === 'zh' ? '自选股票' : 'Manual Selection'}</span>
+                        </button>
+                        <button
+                            onClick={() => setStockMode('narrative')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border transition-all ${
+                                stockMode === 'narrative'
+                                    ? 'bg-[#0D9B97]/20 border-[#0D9B97] text-[#0D9B97]'
+                                    : 'bg-[#1c1c1e] border-[#3f3f46] text-slate-400 hover:border-[#0D9B97]/50'
+                            }`}
+                        >
+                            <i className="bi bi-broadcast"></i>
+                            <span className="font-medium">{i18n.language === 'zh' ? '叙事雷达' : 'Narrative Radar'}</span>
+                        </button>
                     </div>
+
+                    {/* 自选股票模式 */}
+                    {stockMode === 'manual' && (
+                        <>
+                            <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
+                                <div>
+                                    <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
+                                    <CustomSelect
+                                        options={[
+                                            {
+                                                value: 'quality',
+                                                label: i18n.language === 'zh' ? 'Quality (质量)' : 'Quality'
+                                            },
+                                            {
+                                                value: 'value',
+                                                label: i18n.language === 'zh' ? 'Value (价值)' : 'Value'
+                                            },
+                                            {
+                                                value: 'growth',
+                                                label: i18n.language === 'zh' ? 'Growth (成长)' : 'Growth'
+                                            },
+                                            {
+                                                value: 'momentum',
+                                                label: i18n.language === 'zh' ? 'Momentum (趋势)' : 'Momentum'
+                                            }
+                                        ]}
+                                        value={style}
+                                        onChange={setStyle}
+                                        placeholder={t('stock.form.stylePlaceholder')}
+                                        className="w-full"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.ticker')}</label>
+                                    <StockSearchInput
+                                        placeholder={t('stock.form.tickerPlaceholder')}
+                                        value={ticker}
+                                        onChange={setTicker}
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
+                                        <i className="bi bi-graph-up mr-2"></i>
+                                        {loading ? t('stock.form.analyzing') : t('stock.form.analyze')}
+                                    </Button>
+                                </div>
+                            </form>
+
+                            <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
+                                {t(`stock.style.${style}.desc`)}
+                            </div>
+                        </>
+                    )}
+
+                    {/* 叙事雷达模式 */}
+                    {stockMode === 'narrative' && (
+                        <NarrativeRadar
+                            onSelectStock={handleSelectStockFromNarrative}
+                            hideTitle={true}
+                        />
+                    )}
 
                     {error && (
                         <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -828,8 +880,8 @@ export default function Home() {
                     <MarketWarnings warnings={result.data.market_warnings} />
                 )}
 
-                {/* Investment Philosophy */}
-                <InvestmentPhilosophy />
+                {/* Investment Philosophy - 仅在手动模式显示 */}
+                {stockMode === 'manual' && <InvestmentPhilosophy />}
 
                 {/* Loading with Progress */}
                 {loading && (
