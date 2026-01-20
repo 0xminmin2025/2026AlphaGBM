@@ -577,6 +577,8 @@ type OptionData = {
         bcrv?: number;
         bprv?: number;
         iv_rank?: number;
+        days_to_expiry?: number;
+        margin_requirement?: number;
         risk_return_profile?: RiskReturnProfile;  // 新增：风险收益风格标签
     };
 };
@@ -1122,6 +1124,36 @@ export default function Options() {
 
     const topRecommendations = getTopRecommendations();
 
+    // 计算推荐组合的收入汇总
+    const portfolioSummary = (() => {
+        if (topRecommendations.length === 0) return null;
+
+        let totalPremium = 0;
+        let totalMargin = 0;
+        const daysToExpiry = topRecommendations[0]?.scores?.days_to_expiry || 30;
+
+        topRecommendations.forEach(opt => {
+            const premium = opt.bid_price || opt.latest_price || 0;
+            const margin = opt.scores?.margin_requirement || opt.strike * 100;
+
+            totalPremium += premium * 100;  // 每手100股
+            totalMargin += margin;
+        });
+
+        const portfolioReturn = totalMargin > 0 ? (totalPremium / totalMargin) * 100 : 0;
+        // 年化收益率 = 收益率 * (365 / 到期天数)
+        const annualizedReturn = daysToExpiry > 0 ? portfolioReturn * (365 / daysToExpiry) : 0;
+
+        return {
+            totalPremium,
+            totalMargin,
+            portfolioReturn,
+            annualizedReturn,
+            optionCount: topRecommendations.length,
+            daysToExpiry
+        };
+    })();
+
     // Handle column header click for sorting
     const handleSort = (column: string) => {
         if (sortColumn === column) {
@@ -1423,95 +1455,174 @@ export default function Options() {
                         </div>
                     </div>
 
-                    {/* Income Calendar View */}
-                    {viewMode === 'income' && (
-                        (() => {
-                            // Get all sell options (seller strategies)
-                            const sellPuts = Array.isArray(displayChain.puts) ? displayChain.puts.filter(opt => opt.scores?.sprv && opt.scores.sprv > 0) : [];
-                            const sellCalls = Array.isArray(displayChain.calls) ? displayChain.calls.filter(opt => opt.scores?.scrv && opt.scores.scrv > 0) : [];
-                            const sellerOptions = [...sellPuts, ...sellCalls];
+                    {/* Portfolio Income Preview */}
+                    {viewMode === 'income' && portfolioSummary && (
+                        <div className="card p-6">
+                            {/* 标题 */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{
+                                    background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.3) 0%, rgba(13, 155, 151, 0.1) 100%)',
+                                    border: '1px solid rgba(13, 155, 151, 0.4)'
+                                }}>
+                                    <i className="bi bi-cash-stack text-[#0D9B97] text-lg"></i>
+                                </div>
+                                <span className="text-white text-lg font-semibold">
+                                    {t('options.income.portfolioTitle')}
+                                </span>
+                            </div>
 
-                            // Group by expiry date
-                            const groupedByExpiry: Record<string, OptionData[]> = {};
-                            sellerOptions.forEach(opt => {
-                                const expiry = opt.expiry_date || displayChain.expiry_date || 'unknown';
-                                if (!groupedByExpiry[expiry]) groupedByExpiry[expiry] = [];
-                                groupedByExpiry[expiry].push(opt);
-                            });
-                            const sortedGroups = Object.entries(groupedByExpiry).sort(([a], [b]) => a.localeCompare(b));
+                            {/* 说明文字 */}
+                            <div className="text-slate-400 text-sm mb-4">
+                                {t('options.income.portfolioDesc', { count: portfolioSummary.optionCount })}
+                            </div>
 
-                            // Calculate monthly income (assuming 1 contract each, options within 45 days)
-                            const totalMonthlyIncome = sellerOptions
-                                .reduce((sum, opt) => {
-                                    const premium = opt.bid_price || opt.latest_price || 0;
-                                    return sum + premium * 100; // Per contract = 100 shares
-                                }, 0);
-
-                            return (
-                                <div className="card p-6">
-                                    {/* Monthly Income Summary Card */}
-                                    <div className="rounded-xl p-6 mb-6" style={{
-                                        background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.2) 0%, rgba(13, 155, 151, 0.05) 100%)',
-                                        border: '1px solid rgba(13, 155, 151, 0.3)'
-                                    }}>
-                                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                                            {t('options.income.monthlyTitle')}
+                            {/* 核心汇总卡片 */}
+                            <div className="rounded-xl p-5 mb-6" style={{
+                                background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.15) 0%, rgba(13, 155, 151, 0.03) 100%)',
+                                border: '1px solid rgba(13, 155, 151, 0.25)'
+                            }}>
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    {/* 预期总收入 */}
+                                    <div>
+                                        <div className="flex items-center justify-center gap-1.5 text-slate-400 text-xs mb-1">
+                                            <i className="bi bi-arrow-up-circle text-green-400"></i>
+                                            {t('options.income.totalPremium')}
                                         </div>
-                                        <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--primary)' }}>
-                                            ${totalMonthlyIncome.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                        </div>
-                                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.8 }}>
-                                            {t('options.income.subtitle')}
+                                        <div className="text-3xl font-bold text-green-400">
+                                            +${portfolioSummary.totalPremium.toLocaleString()}
                                         </div>
                                     </div>
 
-                                    {/* Grouped Options by Expiry */}
-                                    <div className="space-y-4">
-                                        {sortedGroups.length === 0 ? (
-                                            <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
-                                                {t('options.table.noData')}
-                                            </div>
-                                        ) : (
-                                            sortedGroups.map(([expiry, options]) => (
-                                                <div key={expiry} className="rounded-lg p-4" style={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)' }}>
-                                                    <div className="flex justify-between items-center mb-3">
-                                                        <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{expiry}</span>
-                                                        <span style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
-                                                            {options.length} {t('options.income.contracts')}
-                                                        </span>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                        {options.slice(0, 8).map((opt, idx) => {
-                                                            const premium = opt.bid_price || opt.latest_price || 0;
-                                                            const annualReturn = opt.scores?.annualized_return || 0;
-                                                            const isPut = opt.put_call?.toLowerCase() === 'put';
-                                                            return (
-                                                                <div
-                                                                    key={idx}
-                                                                    className="rounded-lg p-3 cursor-pointer transition-all hover:scale-105"
-                                                                    style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}
-                                                                    onClick={() => handleOptionClick(opt)}
-                                                                >
-                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
-                                                                        {isPut ? 'Sell Put' : 'Sell Call'} ${opt.strike}
-                                                                    </div>
-                                                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>
-                                                                        +${(premium * 100).toFixed(0)}
-                                                                    </div>
-                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>
-                                                                        {annualReturn.toFixed(0)}% {t('options.income.annualized')}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
+                                    {/* 总保证金需求 */}
+                                    <div>
+                                        <div className="flex items-center justify-center gap-1.5 text-slate-400 text-xs mb-1">
+                                            <i className="bi bi-safe text-slate-300"></i>
+                                            {t('options.income.totalMargin')}
+                                        </div>
+                                        <div className="text-3xl font-bold text-white">
+                                            ${portfolioSummary.totalMargin.toLocaleString()}
+                                        </div>
+                                    </div>
+
+                                    {/* 组合收益率 */}
+                                    <div>
+                                        <div className="flex items-center justify-center gap-1.5 text-slate-400 text-xs mb-1">
+                                            <i className="bi bi-percent text-[#0D9B97]"></i>
+                                            {t('options.income.portfolioReturn')}
+                                        </div>
+                                        <div className="text-3xl font-bold text-[#0D9B97]">
+                                            {portfolioSummary.portfolioReturn.toFixed(1)}%
+                                        </div>
+                                        <div className="text-sm text-slate-400 mt-1">
+                                            {t('options.income.annualized')}: <span className="text-[#0D9B97] font-semibold">{portfolioSummary.annualizedReturn.toFixed(0)}%</span>
+                                        </div>
                                     </div>
                                 </div>
-                            );
-                        })()
+
+                                <div className="flex items-center justify-center gap-1.5 text-slate-500 text-sm mt-4">
+                                    <i className="bi bi-clock"></i>
+                                    {t('options.income.periodNote', { days: portfolioSummary.daysToExpiry })}
+                                </div>
+                            </div>
+
+                            {/* 推荐明细 */}
+                            <div className="mb-4">
+                                <h4 className="text-slate-400 text-sm mb-3">{t('options.income.detailTitle')}</h4>
+                                <div className="space-y-2">
+                                    {topRecommendations.map((opt, idx) => {
+                                        const premium = opt.bid_price || opt.latest_price || 0;
+                                        const premiumPerContract = premium * 100;
+                                        const margin = opt.scores?.margin_requirement || opt.strike * 100;
+                                        const returnPct = margin > 0 ? (premiumPerContract / margin) * 100 : 0;
+                                        const isPut = opt.put_call?.toLowerCase() === 'put';
+                                        const profile = opt.scores?.risk_return_profile;
+
+                                        return (
+                                            <div
+                                                key={opt.identifier || idx}
+                                                className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-white/5"
+                                                style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}
+                                                onClick={() => handleOptionClick(opt)}
+                                            >
+                                                <span className="text-slate-500 font-mono text-sm w-5">{idx + 1}.</span>
+
+                                                {/* 风格图标 */}
+                                                <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                                                    profile?.risk_color === 'green' ? 'bg-green-500/15 text-green-400' :
+                                                    profile?.risk_color === 'yellow' ? 'bg-yellow-500/15 text-yellow-400' :
+                                                    'bg-red-500/15 text-red-400'
+                                                }`}>
+                                                    <i className={`bi ${
+                                                        profile?.risk_color === 'green' ? 'bi-shield-check' :
+                                                        profile?.risk_color === 'yellow' ? 'bi-sliders' : 'bi-lightning-charge'
+                                                    }`}></i>
+                                                </span>
+
+                                                {/* 期权类型 */}
+                                                <span className="text-white flex-1 font-medium">
+                                                    {isPut ? 'Sell Put' : 'Sell Call'} ${opt.strike}
+                                                </span>
+
+                                                {/* 收入 */}
+                                                <span className="text-green-400 font-semibold">
+                                                    +${premiumPerContract.toFixed(0)}
+                                                </span>
+
+                                                {/* 保证金 */}
+                                                <span className="text-slate-500 text-sm">
+                                                    {t('options.income.margin')} ${(margin/1000).toFixed(1)}k
+                                                </span>
+
+                                                {/* 收益率 */}
+                                                <span className="text-[#0D9B97] font-semibold">
+                                                    ({returnPct.toFixed(1)}%)
+                                                </span>
+
+                                                <i className="bi bi-chevron-right text-slate-600 text-sm"></i>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 风险提示 */}
+                            <div className="rounded-lg p-4" style={{
+                                backgroundColor: 'rgba(251, 146, 60, 0.08)',
+                                border: '1px solid rgba(251, 146, 60, 0.2)'
+                            }}>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded flex items-center justify-center bg-orange-500/20 flex-shrink-0 mt-0.5">
+                                        <i className="bi bi-exclamation-triangle text-orange-400 text-sm"></i>
+                                    </div>
+                                    <div className="text-sm">
+                                        <div className="text-orange-400 font-semibold mb-2">{t('options.income.riskTitle')}</div>
+                                        <ul className="text-slate-400 space-y-1.5">
+                                            <li className="flex items-start gap-2">
+                                                <i className="bi bi-dot text-orange-400/60 mt-0.5"></i>
+                                                {t('options.income.riskSellPut')}
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <i className="bi bi-dot text-orange-400/60 mt-0.5"></i>
+                                                {t('options.income.riskSellCall')}
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <i className="bi bi-dot text-orange-400/60 mt-0.5"></i>
+                                                {t('options.income.riskNote')}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Empty state for income view when no recommendations */}
+                    {viewMode === 'income' && !portfolioSummary && (
+                        <div className="card p-6">
+                            <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
+                                {t('options.table.noData')}
+                            </div>
+                        </div>
                     )}
 
                     {/* Analysis View Content */}
