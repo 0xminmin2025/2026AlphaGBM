@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
+import { useTranslation } from 'react-i18next';
 
 // Each history item contains the complete options analysis data
 interface CompleteOptionsAnalysisData {
@@ -32,6 +33,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
   onViewFullReport,
   symbolFilter
 }) => {
+  const { t } = useTranslation();
   const [allHistory, setAllHistory] = useState<CompleteOptionsAnalysisData[]>([]);  // Cache all loaded data
   const [filteredHistory, setFilteredHistory] = useState<CompleteOptionsAnalysisData[]>([]);  // Filtered data for display
   const [loading, setLoading] = useState(false);  // Start as false, load on demand
@@ -162,19 +164,12 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
     return new Date(dateString).toLocaleString();
   };
 
-  const getAnalysisTypeLabel = (analysisType: string): string => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _getAnalysisTypeLabel = (analysisType: string): string => {
     switch (analysisType) {
-      case 'basic_chain': return '期权链分析';
-      case 'enhanced_analysis': return '增强分析';
+      case 'basic_chain': return t('options.history.analysisType.chain');
+      case 'enhanced_analysis': return t('options.history.analysisType.enhanced');
       default: return analysisType;
-    }
-  };
-
-  const getAnalysisTypeColor = (analysisType: string): string => {
-    switch (analysisType) {
-      case 'basic_chain': return 'bg-blue-500/20 text-blue-400';
-      case 'enhanced_analysis': return 'bg-purple-500/20 text-purple-400';
-      default: return 'bg-gray-500/20 text-gray-400';
     }
   };
 
@@ -206,7 +201,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
       <div className="card shadow-lg" style={{ padding: '2rem' }}>
         <div className="text-center">
           <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-          <p style={{ color: 'var(--muted-foreground)' }}>加载期权分析历史中...</p>
+          <p style={{ color: 'var(--muted-foreground)' }}>{t('options.history.loading')}</p>
         </div>
       </div>
     );
@@ -217,7 +212,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
       <div className="card bg-[#0f0f11] border-white/10 shadow-lg mb-4 p-4 sm:p-6">
         <h5 className="mb-4 flex items-center gap-2 text-lg sm:text-xl font-semibold">
           <i className="bi bi-clock-history"></i>
-          期权分析历史
+          {t('options.history.title')}
         </h5>
 
         {/* Real-time Search & Refresh */}
@@ -225,7 +220,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
           <input
             type="text"
             className="flex-1 px-3 py-2 bg-[#27272a] border border-white/20 rounded-md text-white placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-2 focus:ring-[#0D9B97]/20"
-            placeholder="搜索股票代码或期权标识... (实时搜索)"
+            placeholder={t('options.history.searchPlaceholder')}
             value={searchSymbol}
             onChange={(e) => handleSearchChange(e.target.value.toUpperCase())}
           />
@@ -239,11 +234,11 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
             }`}
           >
             <i className={`bi ${loading ? 'bi-arrow-repeat' : 'bi-arrow-clockwise'} mr-2 ${loading ? 'spinner' : ''}`}></i>
-            {loading ? '加载中...' : '刷新'}
+            {loading ? t('options.history.refreshing') : t('options.history.refresh')}
           </Button>
           <div className="flex items-center gap-2 text-slate-400 text-sm px-2 py-1">
             <i className="bi bi-database"></i>
-            <span>{filteredHistory.length}/{allHistory.length} 项</span>
+            <span>{filteredHistory.length}/{allHistory.length} {t('options.history.items')}</span>
           </div>
         </div>
 
@@ -256,16 +251,16 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
         {!isDataLoaded ? (
           <div className="text-center py-20 text-muted">
             <i className="bi bi-download text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-            <p>点击"刷新"按钮开始加载期权历史分析数据</p>
+            <p>{t('options.history.loadPrompt')}</p>
             <Button onClick={handleRefresh} className="btn-primary mt-3">
               <i className="bi bi-arrow-clockwise mr-2"></i>
-              加载历史数据
+              {t('options.history.loadButton')}
             </Button>
           </div>
         ) : filteredHistory.length === 0 ? (
           <div className="text-center py-20 text-muted">
             <i className="bi bi-inbox text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-            <p>暂无期权分析历史记录</p>
+            <p>{t('options.history.noRecords')}</p>
           </div>
         ) : (
           <div className="max-h-[500px] sm:max-h-[700px] overflow-auto">
@@ -284,12 +279,12 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                       </span>
                       {item.expiry_date && (
                         <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
-                          到期日: {item.expiry_date}
+                          {t('options.history.expiryDate')}: {item.expiry_date}
                         </span>
                       )}
                       <span className="px-2 py-1 bg-white/10 text-slate-300 rounded text-xs">
                         <i className="bi bi-clock-history mr-1"></i>
-                        历史分析
+                        {t('options.history.historicalAnalysis')}
                       </span>
                     </div>
                     <span className="text-slate-400 text-sm">
@@ -302,7 +297,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-3">
                       {item.strike_price && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1">行权价格</div>
+                          <div className="text-xs text-slate-500 mb-1">{t('options.history.strikePrice')}</div>
                           <div className="text-sm font-medium text-slate-300">
                             {formatCurrency(item.strike_price)}
                           </div>
@@ -310,7 +305,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                       )}
                       {item.option_type && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1">期权类型</div>
+                          <div className="text-xs text-slate-500 mb-1">{t('options.history.optionType')}</div>
                           <div className={`text-sm font-medium ${item.option_type === 'call' ? 'text-green-400' : 'text-red-400'}`}>
                             {item.option_type === 'call' ? 'Call' : 'Put'}
                           </div>
@@ -318,7 +313,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                       )}
                       {item.option_score && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1">期权评分</div>
+                          <div className="text-xs text-slate-500 mb-1">{t('options.history.optionScore')}</div>
                           <div className="text-sm font-medium text-[#0D9B97]">
                             {item.option_score}/10
                           </div>
@@ -326,7 +321,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                       )}
                       {item.iv_rank && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1">IV排名</div>
+                          <div className="text-xs text-slate-500 mb-1">{t('options.history.ivRank')}</div>
                           <div className="text-sm font-medium text-purple-400">
                             {item.iv_rank}%
                           </div>
@@ -360,7 +355,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                         className="px-3 py-2 bg-[#0D9B97] border border-[#0D9B97] text-white rounded-md hover:bg-[#0D9B97]/80 transition-colors text-sm"
                       >
                         <i className="bi bi-file-earmark-text mr-1"></i>
-                        查看完整报告
+                        {t('options.history.viewReport')}
                       </Button>
                     )}
                     {onSelectHistory && (
@@ -377,7 +372,7 @@ const OptionsAnalysisHistory: React.FC<OptionsAnalysisHistoryProps> = ({
                         className="px-3 py-2 bg-white/10 border border-white/20 text-slate-300 rounded-md hover:bg-white/20 transition-colors text-sm"
                       >
                         <i className="bi bi-arrow-repeat mr-1"></i>
-                        重新分析
+                        {t('options.history.reanalyze')}
                       </Button>
                     )}
                   </div>
