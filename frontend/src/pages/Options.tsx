@@ -612,7 +612,7 @@ export default function Options() {
         'buy_call': `Buy Call (${t('options.strategy.buyCall')})`
     };
 
-    const [ticker, setTicker] = useState('AAPL');
+    const [ticker, setTicker] = useState('');
     const [expirations, setExpirations] = useState<ExpirationDate[]>([]);
     const [selectedExpiry, setSelectedExpiry] = useState('');
     const [chain, setChain] = useState<OptionChainResponse | null>(null);
