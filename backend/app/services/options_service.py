@@ -137,7 +137,7 @@ class MockDataGenerator:
             calls=calls,
             puts=puts,
             data_source=data_source,
-            real_stock_price=real_price
+            real_stock_price=base_price  # Always return the price used for option calculations
         )
 
 mock_generator = MockDataGenerator()
@@ -196,13 +196,13 @@ class OptionsService:
                         
                         calls = []
                         puts = []
-                        real_stock_price = None
+                        real_stock_price = 150.0  # Default price
                         try:
                             stock_data = client.get_stock_quote([symbol])
                             if len(stock_data) > 0:
                                 real_stock_price = float(stock_data['latest_price'].iloc[0])
                         except:
-                            real_stock_price = 150.0
+                            pass  # Keep default price
 
                         for _, row in option_chain_df.iterrows():
                             option_data = OptionData(

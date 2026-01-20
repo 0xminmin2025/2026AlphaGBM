@@ -564,6 +564,7 @@ type OptionData = {
     vega?: number;
     put_call: string;
     expiry_date: string;
+    days_to_expiry?: number;  // Days until expiration
     premium?: number;
     risk_return_profile?: RiskReturnProfile;  // 兼容旧格式
     scores?: {
@@ -632,6 +633,10 @@ export default function Options() {
     // Filter state
     const [strikeRange, setStrikeRange] = useState<[number, number]>([0, 0]);
     const [returnRange, setReturnRange] = useState<[number, number]>([0, 0]);
+    const [selectedRiskStyle, setSelectedRiskStyle] = useState<string | null>(null);
+
+    // View mode state (analysis vs income)
+    const [viewMode, setViewMode] = useState<'analysis' | 'income'>('analysis');
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
@@ -647,9 +652,14 @@ export default function Options() {
     const { startPolling } = useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Options task completed:', taskResult);
+            console.log('real_stock_price in taskResult:', taskResult?.real_stock_price);
+            console.log('taskResult keys:', taskResult ? Object.keys(taskResult) : 'null');
             setChain(taskResult);
-            if (taskResult.real_stock_price) {
+            if (taskResult?.real_stock_price) {
+                console.log('Setting stockPrice to:', taskResult.real_stock_price);
                 setStockPrice(taskResult.real_stock_price);
+            } else {
+                console.warn('real_stock_price not found in taskResult');
             }
             setLoading(false);
             setTaskProgress(100);
@@ -799,6 +809,14 @@ export default function Options() {
                         return isFinite(annualReturn) && annualReturn >= minReturn && annualReturn <= maxReturn;
                     });
                 }
+            }
+
+            // Apply risk style filter
+            if (selectedRiskStyle) {
+                options = options.filter(opt => {
+                    const profile = opt.scores?.risk_return_profile || opt.risk_return_profile;
+                    return profile?.style === selectedRiskStyle;
+                });
             }
         } catch (error) {
             console.error('Error applying filters:', error);
@@ -1375,9 +1393,130 @@ export default function Options() {
                                     </>
                                 )}
                             </div>
+                            {/* View Mode Toggle */}
+                            <div className="flex justify-center gap-2 mt-4">
+                                <button
+                                    onClick={() => setViewMode('analysis')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2`}
+                                    style={{
+                                        backgroundColor: viewMode === 'analysis' ? 'var(--primary)' : 'transparent',
+                                        color: viewMode === 'analysis' ? 'white' : 'var(--muted-foreground)',
+                                        border: `1px solid ${viewMode === 'analysis' ? 'var(--primary)' : 'var(--border)'}`,
+                                    }}
+                                >
+                                    <i className="bi bi-table"></i>
+                                    {t('options.view.analysis')}
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('income')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2`}
+                                    style={{
+                                        backgroundColor: viewMode === 'income' ? 'var(--primary)' : 'transparent',
+                                        color: viewMode === 'income' ? 'white' : 'var(--muted-foreground)',
+                                        border: `1px solid ${viewMode === 'income' ? 'var(--primary)' : 'var(--border)'}`,
+                                    }}
+                                >
+                                    <i className="bi bi-calendar-check"></i>
+                                    {t('options.view.income')}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
+                    {/* Income Calendar View */}
+                    {viewMode === 'income' && (
+                        (() => {
+                            // Get all sell options (seller strategies)
+                            const sellPuts = Array.isArray(displayChain.puts) ? displayChain.puts.filter(opt => opt.scores?.sprv && opt.scores.sprv > 0) : [];
+                            const sellCalls = Array.isArray(displayChain.calls) ? displayChain.calls.filter(opt => opt.scores?.scrv && opt.scores.scrv > 0) : [];
+                            const sellerOptions = [...sellPuts, ...sellCalls];
+
+                            // Group by expiry date
+                            const groupedByExpiry: Record<string, OptionData[]> = {};
+                            sellerOptions.forEach(opt => {
+                                const expiry = opt.expiry_date || displayChain.expiry_date || 'unknown';
+                                if (!groupedByExpiry[expiry]) groupedByExpiry[expiry] = [];
+                                groupedByExpiry[expiry].push(opt);
+                            });
+                            const sortedGroups = Object.entries(groupedByExpiry).sort(([a], [b]) => a.localeCompare(b));
+
+                            // Calculate monthly income (assuming 1 contract each, options within 45 days)
+                            const totalMonthlyIncome = sellerOptions
+                                .reduce((sum, opt) => {
+                                    const premium = opt.bid_price || opt.latest_price || 0;
+                                    return sum + premium * 100; // Per contract = 100 shares
+                                }, 0);
+
+                            return (
+                                <div className="card p-6">
+                                    {/* Monthly Income Summary Card */}
+                                    <div className="rounded-xl p-6 mb-6" style={{
+                                        background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.2) 0%, rgba(13, 155, 151, 0.05) 100%)',
+                                        border: '1px solid rgba(13, 155, 151, 0.3)'
+                                    }}>
+                                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                                            {t('options.income.monthlyTitle')}
+                                        </div>
+                                        <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                            ${totalMonthlyIncome.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                        </div>
+                                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.8 }}>
+                                            {t('options.income.subtitle')}
+                                        </div>
+                                    </div>
+
+                                    {/* Grouped Options by Expiry */}
+                                    <div className="space-y-4">
+                                        {sortedGroups.length === 0 ? (
+                                            <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t('options.table.noData')}
+                                            </div>
+                                        ) : (
+                                            sortedGroups.map(([expiry, options]) => (
+                                                <div key={expiry} className="rounded-lg p-4" style={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)' }}>
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{expiry}</span>
+                                                        <span style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
+                                                            {options.length} {t('options.income.contracts')}
+                                                        </span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                                        {options.slice(0, 8).map((opt, idx) => {
+                                                            const premium = opt.bid_price || opt.latest_price || 0;
+                                                            const annualReturn = opt.scores?.annualized_return || 0;
+                                                            const isPut = opt.put_call?.toLowerCase() === 'put';
+                                                            return (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="rounded-lg p-3 cursor-pointer transition-all hover:scale-105"
+                                                                    style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}
+                                                                    onClick={() => handleOptionClick(opt)}
+                                                                >
+                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                                                                        {isPut ? 'Sell Put' : 'Sell Call'} ${opt.strike}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>
+                                                                        +${(premium * 100).toFixed(0)}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>
+                                                                        {annualReturn.toFixed(0)}% {t('options.income.annualized')}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()
+                    )}
+
+                    {/* Analysis View Content */}
+                    {viewMode === 'analysis' && (
+                    <>
                     {/* Top Recommendations */}
                     {topRecommendations.length > 0 && (
                         <div className="card p-4">
@@ -1398,8 +1537,8 @@ export default function Options() {
                                     const assignmentProb = opt.scores?.assignment_probability ?? 100;
                                     const annualReturn = opt.scores?.annualized_return ?? 0;
                                     const premium = opt.bid_price ?? opt.latest_price ?? 0;
-                                    const stockPrice = displayChain?.stock_price ?? 100;
-                                    const premiumPct = stockPrice > 0 ? (premium / stockPrice) * 100 : 0;
+                                    const currentStockPrice = displayChain?.real_stock_price ?? displayStockPrice ?? 100;
+                                    const premiumPct = currentStockPrice > 0 ? (premium / currentStockPrice) * 100 : 0;
 
                                     // Low exercise probability: < 30%
                                     if (assignmentProb < 30) {
@@ -1578,8 +1717,52 @@ export default function Options() {
                                 const currentReturnMin = Math.min(returnRange[0], returnRange[1]);
                                 const currentReturnMax = Math.max(returnRange[0], returnRange[1]);
                                 
+                                // Risk style options
+                                const riskStyles = [
+                                    { id: 'steady_income', label: '稳健收益', labelEn: 'Steady Income', color: '#22c55e' },
+                                    { id: 'balanced', label: '稳中求进', labelEn: 'Balanced', color: '#f59e0b' },
+                                    { id: 'high_risk_high_reward', label: '高风险高收益', labelEn: 'High Risk', color: '#ef4444' },
+                                    { id: 'hedge', label: '保护对冲', labelEn: 'Hedge', color: '#3b82f6' },
+                                ];
+
                                 return (
                                     <div className="p-4" style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
+                                        {/* Risk Style Filter */}
+                                        <div className="mb-4">
+                                            <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                {t('options.filter.riskStyle')}
+                                            </label>
+                                            <div className="flex flex-wrap gap-2">
+                                                <button
+                                                    onClick={() => setSelectedRiskStyle(null)}
+                                                    className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                    style={{
+                                                        backgroundColor: !selectedRiskStyle ? 'var(--primary)' : 'transparent',
+                                                        color: !selectedRiskStyle ? 'white' : 'var(--muted-foreground)',
+                                                        borderColor: !selectedRiskStyle ? 'var(--primary)' : 'var(--border)',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    {t('options.filter.allStyles')}
+                                                </button>
+                                                {riskStyles.map(s => (
+                                                    <button
+                                                        key={s.id}
+                                                        onClick={() => setSelectedRiskStyle(selectedRiskStyle === s.id ? null : s.id)}
+                                                        className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                        style={{
+                                                            backgroundColor: selectedRiskStyle === s.id ? `${s.color}20` : 'transparent',
+                                                            color: selectedRiskStyle === s.id ? s.color : 'var(--muted-foreground)',
+                                                            borderColor: selectedRiskStyle === s.id ? s.color : 'var(--border)',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        {t(`options.style.${s.id}`)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {/* Strike Price Filter */}
                                             <div>
@@ -1812,6 +1995,8 @@ export default function Options() {
                             </div>
                         </div>
                     </div>
+                    </>
+                    )}
                 </div>
             )}
 
@@ -1854,8 +2039,9 @@ export default function Options() {
                         
                         // If no 'data' field, the optionData itself might be the chain data
                         // Check if it has chain-like properties (symbol, calls, puts, etc.)
-                        if (!chainData && (optionData.symbol || optionData.calls || optionData.puts)) {
-                            chainData = optionData;
+                        const optionDataAny = optionData as any;
+                        if (!chainData && (optionDataAny.symbol || optionDataAny.calls || optionDataAny.puts)) {
+                            chainData = optionDataAny;
                         }
                         
                         if (!chainData) {
