@@ -113,15 +113,31 @@ class SellCallScorer:
             if not all([strike, bid > 0, days_to_expiry > 0]):
                 return None
 
-            # 只考虑虚值或轻度实值看涨期权（适合卖出）
-            if strike < current_price * 0.95:  # 太深度实值，跳过
+            # 只考虑虚值或平值看涨期权（适合卖出）
+            # CALL期权：行权价 > 当前股价 才是虚值(OTM)，才适合卖出
+            if strike < current_price * 0.98:  # 实值超过2%，跳过
                 return None
 
             # 基础计分指标
             mid_price = (bid + ask) / 2
-            premium_yield = (mid_price / current_price) * 100  # 基于当前价格的期权费收益率%
+
+            # 对于 Sell Call，只计算时间价值部分的收益（不含内在价值）
+            # 内在价值 = max(0, current_price - strike)（对于ITM call）
+            # 时间价值 = mid_price - 内在价值
+            intrinsic_value = max(0, current_price - strike)
+            time_value = max(0, mid_price - intrinsic_value)
+
+            # 收益率应该基于时间价值，而非总权利金
+            # 因为卖出 ITM call 的内在价值部分不是"收益"
+            if time_value <= 0:
+                return None  # 没有时间价值的期权不适合卖出
+
+            # 单次收益率 = 时间价值 / 当前股价 (对于covered call)
+            premium_yield = (time_value / current_price) * 100
             upside_buffer = ((strike - current_price) / current_price) * 100  # 上涨缓冲%
-            annualized_return = (premium_yield / days_to_expiry) * 365  # 年化收益率
+
+            # 年化收益率计算
+            annualized_return = (premium_yield / days_to_expiry) * 365
 
             # 计算各项得分
             scores = {}
@@ -160,8 +176,11 @@ class SellCallScorer:
                 'bid': bid,
                 'ask': ask,
                 'mid_price': round(mid_price, 2),
-                'premium_yield': round(premium_yield, 2),
-                'annualized_return': round(annualized_return, 2),
+                'time_value': round(time_value, 2),  # 时间价值
+                'intrinsic_value': round(intrinsic_value, 2),  # 内在价值
+                'premium_yield': round(premium_yield, 2),  # 单次收益率% (基于时间价值)
+                'annualized_return': round(annualized_return, 2),  # 年化收益率
+                'is_short_term': days_to_expiry <= 7,  # 是否短期期权
                 'upside_buffer': round(upside_buffer, 2),
                 'implied_volatility': round(implied_volatility * 100, 1),
                 'volume': volume,
@@ -169,7 +188,7 @@ class SellCallScorer:
                 'score': round(total_score, 1),
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'assignment_risk': self._calculate_assignment_risk(current_price, strike),
-                'max_profit': round(mid_price * 100, 0),  # 假设1份合约
+                'max_profit': round(time_value * 100, 0),  # 最大收益是时间价值部分
                 'breakeven': round(current_price + mid_price, 2),
                 'profit_range': f"${current_price:.2f} - ${strike:.2f}",
                 'strategy_notes': self._generate_call_notes(current_price, strike, premium_yield, days_to_expiry)

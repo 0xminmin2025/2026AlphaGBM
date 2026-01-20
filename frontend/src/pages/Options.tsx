@@ -1462,9 +1462,15 @@ export default function Options() {
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>权利金/手</span>
+                                                <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                    ${(premium * 100).toFixed(0)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between mt-1">
                                                 <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
                                                 <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
-                                                    {opt.scores?.annualized_return?.toFixed(1)}%
+                                                    {opt.scores?.annualized_return?.toFixed(1) || (premiumPct * 365 / (opt.days_to_expiry || 30)).toFixed(1)}%
                                                 </span>
                                             </div>
 
@@ -1707,18 +1713,18 @@ export default function Options() {
                                             <div>价格差</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
                                         </th>
-                                        <th 
+                                        <th
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>权利金</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Premium</div>
+                                            <div>权利金/手</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Premium×100</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('annualized_return')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
                                             <div>年化收益</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized Return{getSortIndicator('annualized_return')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized{getSortIndicator('annualized_return')}</div>
                                         </th>
                                         <th 
                                             onClick={() => handleSort('score')}
@@ -1781,11 +1787,11 @@ export default function Options() {
                                                     <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
                                                         {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
                                                     </td>
-                                                    <td style={{ fontWeight: 500 }}>
-                                                        ${formatNumber(premium, 2)}
+                                                    <td style={{ fontWeight: 500, color: 'var(--primary)' }}>
+                                                        ${formatNumber(premium * 100, 0)}
                                                     </td>
                                                     <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
-                                                        {opt.scores?.annualized_return?.toFixed(1)}%
+                                                        {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
                                                     </td>
                                                     <td>
                                                         <span className={`score-badge ${getScoreClass(totalScore)}`}>
@@ -2197,8 +2203,12 @@ function OptionDetailModal({
                             <div className="option-info-value">${stockPrice.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">期权价格</div>
+                            <div className="option-info-label">期权单价</div>
                             <div className="option-info-value">${premium.toFixed(2)}</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">权利金 (每手)</div>
+                            <div className="option-info-value" style={{ color: 'var(--primary)', fontWeight: 600 }}>${(premium * 100).toFixed(0)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">隐含波动率</div>
