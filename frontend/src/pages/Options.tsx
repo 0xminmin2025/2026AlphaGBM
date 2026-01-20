@@ -8,6 +8,7 @@ import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 import StockSearchInput from '@/components/ui/StockSearchInput';
 import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
+import { useTranslation } from 'react-i18next';
 
 // Declare global types for Chart.js
 declare global {
@@ -596,16 +597,20 @@ type OptionChainResponse = {
 // Strategy types
 type Strategy = 'sell_put' | 'buy_put' | 'sell_call' | 'buy_call';
 
-const strategyLabels: Record<Strategy, string> = {
-    'sell_put': 'Sell Put (卖出看跌)',
-    'buy_put': 'Buy Put (买入看跌)',
-    'sell_call': 'Sell Call (卖出看涨)',
-    'buy_call': 'Buy Call (买入看涨)'
-};
+// Strategy labels will be set inside the component using translations
 
 export default function Options() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const { t } = useTranslation();
+
+    // Strategy labels with translations
+    const strategyLabels: Record<Strategy, string> = {
+        'sell_put': `Sell Put (${t('options.strategy.sellPut')})`,
+        'buy_put': `Buy Put (${t('options.strategy.buyPut')})`,
+        'sell_call': `Sell Call (${t('options.strategy.sellCall')})`,
+        'buy_call': `Buy Call (${t('options.strategy.buyCall')})`
+    };
 
     const [ticker, setTicker] = useState('AAPL');
     const [expirations, setExpirations] = useState<ExpirationDate[]>([]);
@@ -648,7 +653,7 @@ export default function Options() {
             }
             setLoading(false);
             setTaskProgress(100);
-            setTaskStep('期权分析完成！');
+            setTaskStep(t('options.taskComplete'));
 
             // Save to browser history
             HistoryStorage.saveOptionAnalysis({
@@ -674,7 +679,7 @@ export default function Options() {
     // Fetch Expirations
     const fetchExpirations = async () => {
         if (!ticker) {
-            setError('请输入股票代码');
+            setError(t('options.form.enterTicker'));
             return;
         }
         setExpirationsLoading(true);
@@ -714,7 +719,7 @@ export default function Options() {
 
             if (response.data.success && response.data.task_id) {
                 console.log('Options task created:', response.data.task_id);
-                setTaskStep('任务已创建，开始期权分析...');
+                setTaskStep(t('options.taskCreated'));
 
                 // Start polling for task status
                 startPolling(response.data.task_id);
@@ -1063,7 +1068,7 @@ export default function Options() {
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="text-center">
                     <div className="spinner mx-auto mb-4"></div>
-                    <p className="text-white">正在加载...</p>
+                    <p className="text-white">{t('common.loading')}</p>
                 </div>
             </div>
         );
@@ -1072,9 +1077,9 @@ export default function Options() {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 text-white">
-                <h2 className="text-2xl font-bold">请登录以访问期权分析</h2>
+                <h2 className="text-2xl font-bold">{t('options.loginRequired')}</h2>
                 <Button onClick={() => navigate('/login')} className="btn-primary">
-                    登录
+                    {t('auth.login')}
                 </Button>
             </div>
         );
@@ -1142,7 +1147,7 @@ export default function Options() {
                         }}
                     >
                         <i className="bi bi-graph-up mr-2"></i>
-                        期权分析
+                        {t('options.tab.analysis')}
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
@@ -1162,7 +1167,7 @@ export default function Options() {
                         }}
                     >
                         <i className="bi bi-clock-history mr-2"></i>
-                        分析历史
+                        {t('options.tab.history')}
                     </button>
                 </div>
             </div>
@@ -1180,28 +1185,28 @@ export default function Options() {
             <div className="controls-section">
                 <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                     <i className="bi bi-graph-up"></i>
-                    期权智能分析
+                    {t('options.form.title')}
                 </h5>
 
-                {/* Step 1: 选择股票代码 - 占一行 */}
+                {/* Step 1: Enter Stock Symbol */}
                 <div className="mb-4 flex items-center gap-3">
                     <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                        <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>步骤1：</span> 录入股票代码（Symbol)
+                        <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>{t('options.form.step1')}</span> {t('options.form.step1Label')}
                     </label>
                     <div className="flex-1">
                         <StockSearchInput
                             value={ticker}
                             onChange={setTicker}
-                            placeholder="如 AAPL, NVDA, 苹果, pg"
+                            placeholder={t('options.form.tickerPlaceholder')}
                         />
                     </div>
                 </div>
 
-                {/* Step 2: 选择策略 - 占一行 */}
+                {/* Step 2: Select Strategy */}
                 <div className="mb-4">
                     <div className="flex items-center gap-3 flex-wrap">
                         <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <span style={{ color: strategy ? 'var(--primary)' : (ticker ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤2：</span> 选择策略（Strategy)
+                            <span style={{ color: strategy ? 'var(--primary)' : (ticker ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step2')}</span> {t('options.form.step2Label')}
                         </label>
                         <div className="flex gap-2 flex-1 flex-wrap" style={{ minWidth: 0 }}>
                         {(Object.keys(strategyLabels) as Strategy[]).map(s => (
@@ -1224,15 +1229,15 @@ export default function Options() {
                     </div>
                 </div>
 
-                {/* Step 3 & 4: 加载日期 + 选择到期日 - 占一行 */}
+                {/* Step 3 & 4: Load Dates + Select Expiry */}
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                     <div className="flex-1 min-w-[200px] flex items-center gap-3">
                         <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (ticker && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤3：</span> 点击加载到期日（Load)
+                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (ticker && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step3')}</span> {t('options.form.step3Label')}
                         </label>
-                        <Button 
-                            onClick={fetchExpirations} 
-                            disabled={expirationsLoading || !ticker || !strategy} 
+                        <Button
+                            onClick={fetchExpirations}
+                            disabled={expirationsLoading || !ticker || !strategy}
                             className="btn-primary flex-1"
                         >
                             {expirationsLoading ? (
@@ -1242,13 +1247,13 @@ export default function Options() {
                             ) : (
                                 <i className="bi bi-arrow-clockwise mr-2"></i>
                             )}
-                            {expirationsLoading ? '加载中...' : '加载日期'}
+                            {expirationsLoading ? t('options.form.loading') : t('options.form.loadDates')}
                         </Button>
                     </div>
 
                     <div className="flex-1 min-w-[200px] flex items-center gap-3">
                         <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: selectedExpiry ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤4：</span> 选择到期日(Expiration)
+                            <span style={{ color: selectedExpiry ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step4')}</span> {t('options.form.step4Label')}
                         </label>
                         <select
                             value={selectedExpiry}
@@ -1256,10 +1261,10 @@ export default function Options() {
                             className="form-select flex-1"
                             disabled={expirations.length === 0}
                         >
-                            <option value="">{expirations.length > 0 ? '请选择到期日' : '请先完成步骤 3'}</option>
+                            <option value="">{expirations.length > 0 ? t('options.form.selectExpiry') : t('options.form.completeStep3')}</option>
                             {expirations.map(exp => (
                                 <option key={exp.date} value={exp.date}>
-                                    {exp.date} {exp.period_tag === 'm' ? '(月权)' : '(周权)'}
+                                    {exp.date} {exp.period_tag === 'm' ? t('options.form.monthly') : t('options.form.weekly')}
                                 </option>
                             ))}
                         </select>
@@ -1269,14 +1274,14 @@ export default function Options() {
 
             {/* Header */}
             <div className="header-section" style={{ marginTop: '1.5rem', marginBottom: '1rem', padding: '1rem' }}>
-                {/* 期权分析五大支柱 */}
+                {/* Five Pillars of Options Analysis */}
                 <div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-2">
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>流动性优先</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>优先选择高成交量、高持仓量的期权</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>IV分析</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>评估隐含波动率的历史分位数，寻找IV异常</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>风险调整</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>计算年化收益与风险比，设置止损点</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>策略匹配</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>根据市场环境选择合适的多空策略</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>实时监控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>开市期间实时查看数据，避免依赖过时信息</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.liquidity')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.liquidityDesc')}</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.iv')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.ivDesc')}</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.risk')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.riskDesc')}</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.strategy')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.strategyDesc')}</div></div>
+                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.realtime')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.realtimeDesc')}</div></div>
                     </div>
                 </div>
             </div>
@@ -1289,7 +1294,7 @@ export default function Options() {
                     {taskProgress > 0 && (
                         <div className="max-w-md mx-auto mb-4">
                             <div className="flex justify-between text-sm mb-1">
-                                <span style={{ color: 'var(--muted-foreground)' }}>分析进度</span>
+                                <span style={{ color: 'var(--muted-foreground)' }}>{t('options.progress')}</span>
                                 <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{taskProgress}%</span>
                             </div>
                             <div style={{
@@ -1316,7 +1321,7 @@ export default function Options() {
                         </p>
                     )}
                     {!taskStep && (
-                        <p style={{ color: 'var(--muted-foreground)' }}>正在获取期权数据并进行量化评分...</p>
+                        <p style={{ color: 'var(--muted-foreground)' }}>{t('options.analyzing')}</p>
                     )}
                 </div>
             )}
@@ -1332,16 +1337,16 @@ export default function Options() {
                         <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
                         <div>
                             <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
-                                历史期权分析报告
+                                {t('options.historical.title')}
                             </span>
                             <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
-                                查看历史数据
+                                {t('options.historical.viewData')}
                             </span>
                         </div>
                         <div className="ml-auto">
                             <span className="badge-primary">
                                 <i className="bi bi-archive mr-1"></i>
-                                历史数据
+                                {t('options.historical.badge')}
                             </span>
                         </div>
                     </div>
@@ -1355,30 +1360,30 @@ export default function Options() {
                     <div className="card p-4">
                         <div className="text-center">
                             <h2 style={{ fontSize: '1.3rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                                分析结果: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
+                                {t('options.results.title')}: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
                             </h2>
                             <div style={{ color: 'var(--muted-foreground)' }}>
-                                当前价格: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
+                                {t('options.results.currentPrice')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
                                 <span className="mx-3">|</span>
-                                到期日: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
+                                {t('options.results.expiry')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
                                 <span className="mx-3">|</span>
-                                策略: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{strategyLabels[strategy]}</span>
+                                {t('options.results.strategy')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{strategyLabels[strategy]}</span>
                                 {isHistoricalView && (
                                     <>
                                         <span className="mx-3">|</span>
-                                        <span style={{ color: 'var(--muted-foreground)', fontWeight: 600 }}>历史数据</span>
+                                        <span style={{ color: 'var(--muted-foreground)', fontWeight: 600 }}>{t('options.results.historicalData')}</span>
                                     </>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Top Recommendations - 按风格分类 */}
+                    {/* Top Recommendations */}
                     {topRecommendations.length > 0 && (
                         <div className="card p-4">
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--primary)' }}>
                                 <i className="bi bi-star-fill mr-2"></i>
-                                推荐期权
+                                {t('options.recommended')}
                             </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                                 {topRecommendations.map(opt => {
@@ -1388,7 +1393,7 @@ export default function Options() {
                                         ? `style-tag-${profile.risk_color}`
                                         : 'style-tag-yellow';
 
-                                    // 计算特性标签（多标签，独立判断）
+                                    // Calculate feature tags (multi-tag, independent evaluation)
                                     const featureTags: { label: string; color: string }[] = [];
                                     const assignmentProb = opt.scores?.assignment_probability ?? 100;
                                     const annualReturn = opt.scores?.annualized_return ?? 0;
@@ -1396,17 +1401,17 @@ export default function Options() {
                                     const stockPrice = displayChain?.stock_price ?? 100;
                                     const premiumPct = stockPrice > 0 ? (premium / stockPrice) * 100 : 0;
 
-                                    // 低行权概率：< 30%
+                                    // Low exercise probability: < 30%
                                     if (assignmentProb < 30) {
-                                        featureTags.push({ label: '低行权概率', color: '#22c55e' });
+                                        featureTags.push({ label: t('options.tag.lowExercise'), color: '#22c55e' });
                                     }
-                                    // 高年化：> 30%
+                                    // High annualized: > 30%
                                     if (annualReturn > 30) {
-                                        featureTags.push({ label: '高年化', color: '#f59e0b' });
+                                        featureTags.push({ label: t('options.tag.highAnnualized'), color: '#f59e0b' });
                                     }
-                                    // 高权利金：权利金占股价 > 3%
+                                    // High premium: premium/stock price > 3%
                                     if (premiumPct > 3) {
-                                        featureTags.push({ label: '高权利金', color: '#3b82f6' });
+                                        featureTags.push({ label: t('options.tag.highPremium'), color: '#3b82f6' });
                                     }
 
                                     return (
@@ -1462,22 +1467,22 @@ export default function Options() {
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
-                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>权利金/手</span>
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.premiumPerContract')}</span>
                                                 <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.9rem' }}>
                                                     ${(premium * 100).toFixed(0)}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
-                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.annualizedReturn')}</span>
                                                 <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
                                                     {opt.scores?.annualized_return?.toFixed(1) || (premiumPct * 365 / (opt.days_to_expiry || 30)).toFixed(1)}%
                                                 </span>
                                             </div>
 
-                                            {/* 胜率显示 */}
+                                            {/* Win Rate Display */}
                                             {profile?.win_probability && (
                                                 <div className="flex justify-between mt-1">
-                                                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>胜率</span>
+                                                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.winRate')}</span>
                                                     <span className="win-prob">
                                                         {(profile.win_probability * 100).toFixed(0)}%
                                                     </span>
@@ -1511,20 +1516,20 @@ export default function Options() {
                                     color: 'var(--warning)',
                                     marginBottom: '0.75rem'
                                 }}>
-                                    期权交易风险提示
+                                    {t('options.risk.title')}
                                 </h3>
                                 <div style={{ color: 'var(--foreground)', lineHeight: 1.8 }}>
                                     <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>高风险警告：</strong>期权交易具有极高的风险，可能导致全部本金损失。期权价格波动剧烈，杠杆效应显著，不适合风险承受能力较低的投资者。请充分了解期权交易的风险特性，谨慎决策。
+                                        <strong>{t('options.risk.highRisk')}</strong>{t('options.risk.highRiskDesc')}
                                     </p>
                                     <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>财报前后高风险期：</strong>财报发布前后（通常为财报日前3-5天至财报日后1-2天）是期权交易的极高风险期。在此期间，股价可能出现剧烈波动，隐含波动率（IV）通常会显著上升，期权价格波动幅度可能远超预期。建议在财报期间避免或大幅减少期权交易，或使用更保守的策略。
+                                        <strong>{t('options.risk.earnings')}</strong>{t('options.risk.earningsDesc')}
                                     </p>
                                     <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>数据说明：</strong>当前分析结果基于历史数据和实时市场数据计算得出，仅供参考。期权市场瞬息万变，数据具有时效性。
+                                        <strong>{t('options.risk.dataNote')}</strong>{t('options.risk.dataDesc')}
                                     </p>
                                     <p style={{ marginBottom: 0, fontWeight: 600, color: 'var(--warning)' }}>
-                                        <strong>实盘操作建议：</strong>实盘交易时，请务必在开市期间直接查看实时行情，结合最新市场动态进行决策。建议一边查看实时数据，一边进行操作，避免依赖过时数据。
+                                        <strong>{t('options.risk.liveAdvice')}</strong>{t('options.risk.liveAdviceDesc')}
                                     </p>
                                 </div>
                             </div>
@@ -1534,7 +1539,7 @@ export default function Options() {
                     {/* Options Table */}
                     <div className="option-col-section">
                         <div className={strategy.includes('call') ? 'header-calls' : 'header-puts'}>
-                            {strategy.includes('call') ? 'CALLS (看涨)' : 'PUTS (看跌)'} - {strategyLabels[strategy]}
+                            {strategy.includes('call') ? t('options.table.calls') : t('options.table.puts')} - {strategyLabels[strategy]}
                         </div>
                         
                         {/* Filter Controls */}
@@ -1579,7 +1584,7 @@ export default function Options() {
                                             {/* Strike Price Filter */}
                                             <div>
                                                 <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    行权价范围: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
+                                                    {t('options.filter.strikeRange')}: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
                                                 </label>
                                                 <div className="flex items-center gap-1">
                                                     <input
@@ -1614,7 +1619,7 @@ export default function Options() {
                                             {/* Annualized Return Filter */}
                                             <div>
                                                 <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    年化收益范围: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
+                                                    {t('options.filter.annualizedRange')}: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
                                                 </label>
                                                 <div className="flex items-center gap-1">
                                                     <input
@@ -1659,78 +1664,78 @@ export default function Options() {
                                 <table className="option-table">
                                 <thead>
                                     <tr>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('strike')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>行权价</div>
+                                            <div>{t('options.table.strike')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Strike{getSortIndicator('strike')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('latest')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>最新价</div>
+                                            <div>{t('options.table.latest')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('bid')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>买/卖价</div>
+                                            <div>{t('options.table.bidAsk')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('volume')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>成交量/持仓量</div>
+                                            <div>{t('options.table.volOI')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('iv')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>隐含波动率</div>
+                                            <div>{t('options.table.iv')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('delta')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>Delta值</div>
+                                            <div>{t('options.table.delta')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>行权概率</div>
+                                            <div>{t('options.table.exerciseProb')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
                                         </th>
-                                        <th 
+                                        <th
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>价格差</div>
+                                            <div>{t('options.table.priceDiff')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
                                         </th>
                                         <th
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>权利金/手</div>
+                                            <div>{t('options.table.premium')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Premium×100</div>
                                         </th>
                                         <th
                                             onClick={() => handleSort('annualized_return')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>年化收益</div>
+                                            <div>{t('options.table.annualized')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized{getSortIndicator('annualized_return')}</div>
                                         </th>
-                                        <th 
+                                        <th
                                             onClick={() => handleSort('score')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>评分</div>
+                                            <div>{t('options.table.score')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Score{getSortIndicator('score')}</div>
                                         </th>
                                     </tr>
@@ -1739,7 +1744,7 @@ export default function Options() {
                                     {filteredOptions.length === 0 ? (
                                         <tr>
                                             <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
-                                                没有符合条件的期权数据
+                                                {t('options.table.noData')}
                                             </td>
                                         </tr>
                                     ) : (
@@ -1814,7 +1819,7 @@ export default function Options() {
             {!displayChain && !loading && (
                 <div className="text-center py-20" style={{ color: 'var(--muted-foreground)' }}>
                     <i className="bi bi-graph-down text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-                    <p>输入股票代码，加载日期，选择到期日开始分析</p>
+                    <p>{t('options.empty')}</p>
                 </div>
             )}
             </div>
@@ -1838,7 +1843,7 @@ export default function Options() {
                         // Check if data exists
                         if (!optionData) {
                             console.error('No option data provided');
-                            setError('无法加载历史分析数据：数据为空');
+                            setError(t('options.error.emptyData'));
                             return;
                         }
                         
@@ -1856,7 +1861,7 @@ export default function Options() {
                         if (!chainData) {
                             console.error('No chain data found in optionData:', optionData);
                             console.error('Available keys:', Object.keys(optionData));
-                            setError('无法加载历史分析数据：缺少期权链数据');
+                            setError(t('options.error.noChainData'));
                             return;
                         }
                         
@@ -1864,7 +1869,7 @@ export default function Options() {
                         if (!chainData.symbol && !chainData.calls && !chainData.puts) {
                             console.error('Invalid chain data structure:', chainData);
                             console.error('Available keys:', Object.keys(chainData));
-                            setError('无法加载历史分析数据：数据格式不正确');
+                            setError(t('options.error.invalidFormat'));
                             return;
                         }
                         
@@ -1933,16 +1938,17 @@ function OptionDetailModal({
     loadingHistory: boolean;
     onClose: () => void;
 }) {
+    const { t } = useTranslation();
     // Chart type state for tab switching
     const [chartType, setChartType] = useState<'kline' | 'line'>('kline');
     // Create refs inside the modal component
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
     const strategyLabels: Record<Strategy, string> = {
-        'sell_put': '卖出看跌 (Sell Put)',
-        'sell_call': '卖出看涨 (Sell Call)',
-        'buy_call': '买入看涨 (Buy Call)',
-        'buy_put': '买入看跌 (Buy Put)'
+        'sell_put': `${t('options.strategy.sellPut')} (Sell Put)`,
+        'sell_call': `${t('options.strategy.sellCall')} (Sell Call)`,
+        'buy_call': `${t('options.strategy.buyCall')} (Buy Call)`,
+        'buy_put': `${t('options.strategy.buyPut')} (Buy Put)`
     };
 
     // Calculate premium correctly
@@ -2063,7 +2069,7 @@ function OptionDetailModal({
                         labels: dates,
                         datasets: [
                             {
-                                label: '股价',
+                                label: t('options.modal.chartStockPrice'),
                                 data: prices,
                                 borderColor: 'hsl(178, 78%, 32%)',
                                 backgroundColor: 'rgba(13, 155, 151, 0.1)',
@@ -2074,7 +2080,7 @@ function OptionDetailModal({
                                 spanGaps: false
                             },
                             {
-                                label: '执行价',
+                                label: t('options.modal.chartStrikePrice'),
                                 data: Array(dates.length).fill(option.strike),
                                 borderColor: 'hsl(38, 92%, 50%)',
                                 borderDash: [5, 5],
@@ -2084,7 +2090,7 @@ function OptionDetailModal({
                                 spanGaps: false
                             },
                             {
-                                label: '现价',
+                                label: t('options.modal.chartCurrentPrice'),
                                 data: Array(dates.length).fill(stockPrice),
                                 borderColor: 'hsl(142, 76%, 36%)',
                                 borderDash: [5, 5],
@@ -2094,7 +2100,7 @@ function OptionDetailModal({
                                 spanGaps: false
                             },
                             {
-                                label: '止损价',
+                                label: t('options.modal.chartStopLoss'),
                                 data: Array(dates.length).fill(stopLossPrice),
                                 borderColor: 'hsl(0, 72%, 51%)',
                                 borderDash: [5, 5],
@@ -2195,38 +2201,38 @@ function OptionDetailModal({
                     {/* Important Info Grid */}
                     <div className="option-info-grid">
                         <div className="option-info-item">
-                            <div className="option-info-label">行权价</div>
+                            <div className="option-info-label">{t('options.modal.strike')}</div>
                             <div className="option-info-value">${option.strike.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">当前股价</div>
+                            <div className="option-info-label">{t('options.modal.stockPrice')}</div>
                             <div className="option-info-value">${stockPrice.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">期权单价</div>
+                            <div className="option-info-label">{t('options.modal.optionPrice')}</div>
                             <div className="option-info-value">${premium.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">权利金 (每手)</div>
+                            <div className="option-info-label">{t('options.modal.premium')}</div>
                             <div className="option-info-value" style={{ color: 'var(--primary)', fontWeight: 600 }}>${(premium * 100).toFixed(0)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">隐含波动率</div>
+                            <div className="option-info-label">{t('options.modal.iv')}</div>
                             <div className="option-info-value">{(option.implied_vol * 100).toFixed(1)}%</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">Delta</div>
+                            <div className="option-info-label">{t('options.modal.delta')}</div>
                             <div className="option-info-value">{option.delta.toFixed(3)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">到期日</div>
+                            <div className="option-info-label">{t('options.modal.expiry')}</div>
                             <div className="option-info-value">{option.expiry_date}</div>
                         </div>
                     </div>
 
                     {/* Max Loss */}
                     <div className="option-max-loss">
-                        <span className="option-max-loss-label">最大亏损 (每手)</span>
+                        <span className="option-max-loss-label">{t('options.modal.maxLoss')}</span>
                         <span className="option-max-loss-value">${maxLoss.toFixed(0)}</span>
                     </div>
 
@@ -2234,7 +2240,7 @@ function OptionDetailModal({
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                             <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted-foreground)' }}>
-                                近一月走势
+                                {t('options.modal.chartTitle')}
                             </div>
                             {/* Chart Type Toggle */}
                             <div style={{ display: 'flex', gap: '4px', background: 'var(--muted)', borderRadius: '6px', padding: '2px' }}>
@@ -2251,7 +2257,7 @@ function OptionDetailModal({
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    K线图
+                                    {t('options.modal.klineChart')}
                                 </button>
                                 <button
                                     onClick={() => setChartType('line')}
@@ -2266,7 +2272,7 @@ function OptionDetailModal({
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    折线图
+                                    {t('options.modal.lineChart')}
                                 </button>
                             </div>
                         </div>
@@ -2303,7 +2309,7 @@ function OptionDetailModal({
                             ) : null
                         ) : (
                             <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>
-                                无法加载历史数据
+                                {t('options.modal.noHistory')}
                             </div>
                         )}
                     </div>
