@@ -332,3 +332,39 @@ class AnalysisTask(db.Model):
             'related_history_id': self.related_history_id,
             'related_history_type': self.related_history_type
         }
+
+
+class DailyRecommendation(db.Model):
+    """每日期权推荐缓存"""
+    __tablename__ = 'daily_recommendations'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # 推荐日期（用于缓存key）
+    recommendation_date = db.Column(db.Date, nullable=False, index=True)
+
+    # 推荐数据（JSON格式存储完整推荐列表）
+    recommendations = db.Column(db.JSON, nullable=False)
+
+    # 市场摘要
+    market_summary = db.Column(db.JSON, nullable=True)
+
+    # 元数据
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 唯一约束：每天只有一条推荐记录
+    __table_args__ = (
+        db.UniqueConstraint('recommendation_date', name='uq_daily_recommendation_date'),
+    )
+
+    def to_dict(self):
+        """Convert to dictionary for API responses"""
+        return {
+            'id': self.id,
+            'recommendation_date': self.recommendation_date.isoformat() if self.recommendation_date else None,
+            'recommendations': self.recommendations,
+            'market_summary': self.market_summary,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }

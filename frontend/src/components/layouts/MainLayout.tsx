@@ -58,8 +58,9 @@ export default function MainLayout() {
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center space-x-8">
                         <nav className="flex items-center space-x-6 text-sm font-medium">
-                            <Link to="/stock" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.stock')}</Link>
                             <Link to="/options" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.options')}</Link>
+                            <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
+                            <Link to="/stock" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.stock')}</Link>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>
                         </nav>
 
@@ -98,18 +99,25 @@ export default function MainLayout() {
                     <div className="md:hidden bg-[#09090B]/95 backdrop-blur-md border-t border-white/10">
                         <nav className="flex flex-col px-4 py-4 space-y-4">
                             <Link
-                                to="/stock"
-                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
-                                onClick={closeMobileMenu}
-                            >
-                                {t('nav.stock')}
-                            </Link>
-                            <Link
                                 to="/options"
                                 className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
                                 onClick={closeMobileMenu}
                             >
                                 {t('nav.options')}
+                            </Link>
+                            <Link
+                                to="/options/reverse"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.reverseScore')}
+                            </Link>
+                            <Link
+                                to="/stock"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.stock')}
                             </Link>
                             <Link
                                 to="/pricing"

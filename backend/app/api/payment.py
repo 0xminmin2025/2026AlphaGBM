@@ -211,14 +211,14 @@ def get_usage_history():
 
 @payment_bp.route('/pricing', methods=['GET'])
 def get_pricing():
-    """获取定价信息"""
+    """获取定价信息 - 期权优先版本"""
     return jsonify({
         'plans': {
             'free': {
                 'name': '免费版',
                 'price': 0,
                 'credits': '每天2次查询',
-                'features': ['每日2次', '股票分析', '行业报告']
+                'features': ['每日2次', '期权分析', '股票分析']
             },
             'plus': {
                 'name': 'Plus会员',
@@ -235,7 +235,7 @@ def get_pricing():
                     'period': 'year',
                     'savings': '节省17%'
                 },
-                'features': ['1000次查询/月', '股票分析', '期权分析', '行业报告']
+                'features': ['1000次查询/月', '期权分析', '反向查分', '股票分析']
             },
             'pro': {
                 'name': 'Pro会员',
@@ -252,13 +252,13 @@ def get_pricing():
                     'period': 'year',
                     'savings': '节省17%'
                 },
-                'features': ['5000次查询/月', '股票分析', '期权分析', '智能体服务', '行业报告', '投资回顾']
+                'features': ['5000次查询/月', '期权分析', '反向查分', '股票分析', '投资回顾']
             },
             'enterprise': {
                 'name': '企业客户',
                 'price': None,
                 'credits': '定制化',
-                'features': ['API接入', '定制化服务', '联系客服咨询']
+                'features': ['API接入', '批量期权分析', '定制化策略', '专属客服']
             }
         },
         'topups': {

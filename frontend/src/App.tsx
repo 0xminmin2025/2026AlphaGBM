@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from '@/components/layouts/MainLayout';
 import Home from '@/pages/Home';
 import Options from '@/pages/Options';
+import ReverseScore from '@/pages/ReverseScore';
 import Pricing from '@/pages/Pricing';
 import Profile from '@/pages/Profile';
 import Login from '@/pages/Login';
@@ -20,6 +21,7 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/stock" element={<Home />} />
           <Route path="/options" element={<Options />} />
+          <Route path="/options/reverse" element={<ReverseScore />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/profile" element={<Profile />} />
         </Route>

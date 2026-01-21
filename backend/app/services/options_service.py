@@ -393,3 +393,272 @@ class OptionsService:
         except Exception as e:
              print(f"Error in enhanced analysis: {e}")
              return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
+
+    @staticmethod
+    def reverse_score_option(symbol: str, option_type: str, strike: float,
+                            expiry_date: str, option_price: float,
+                            implied_volatility: float = None) -> dict:
+        """
+        反向查分：根据用户输入的期权参数计算评分
+
+        Args:
+            symbol: 股票代码
+            option_type: 期权类型 ('CALL' 或 'PUT')
+            strike: 执行价
+            expiry_date: 到期日 (YYYY-MM-DD)
+            option_price: 期权价格 (bid/ask中间价)
+            implied_volatility: 隐含波动率 (可选，留空自动估算)
+
+        Returns:
+            包含评分结果的字典
+        """
+        try:
+            import yfinance as yf
+            from datetime import datetime
+
+            symbol = symbol.upper()
+            option_type = option_type.upper()
+
+            # 1. 获取股票当前价格和数据
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            current_price = info.get('regularMarketPrice') or info.get('currentPrice')
+
+            if not current_price:
+                # 尝试从历史数据获取
+                hist = ticker.history(period="1d")
+                if not hist.empty:
+                    current_price = float(hist['Close'].iloc[-1])
+                else:
+                    return {
+                        'success': False,
+                        'error': f'无法获取 {symbol} 的当前股价'
+                    }
+
+            # 2. 获取股票历史数据用于趋势分析
+            hist_3mo = ticker.history(period="3mo")
+            price_history = hist_3mo['Close'].tolist() if not hist_3mo.empty else []
+
+            # 计算ATR
+            atr_14 = 0
+            if not hist_3mo.empty and len(hist_3mo) >= 15:
+                high = hist_3mo['High'].values
+                low = hist_3mo['Low'].values
+                close = hist_3mo['Close'].values
+                tr1 = high[1:] - low[1:]
+                tr2 = np.abs(high[1:] - close[:-1])
+                tr3 = np.abs(low[1:] - close[:-1])
+                tr = np.maximum(np.maximum(tr1, tr2), tr3)
+                atr_14 = float(np.mean(tr[-14:]))
+
+            # 3. 如果没有提供隐含波动率，自动估算
+            if implied_volatility is None or implied_volatility <= 0:
+                # 使用历史波动率估算
+                if len(price_history) >= 30:
+                    returns = np.diff(np.log(price_history[-30:]))
+                    implied_volatility = float(np.std(returns) * np.sqrt(252))
+                else:
+                    implied_volatility = 0.25  # 默认25%
+
+            # 4. 计算到期天数
+            try:
+                expiry = datetime.strptime(expiry_date, "%Y-%m-%d")
+                today = datetime.now()
+                days_to_expiry = max(1, (expiry - today).days)
+            except:
+                days_to_expiry = 30
+
+            # 5. 估算Greeks（简化计算）
+            # Delta估算（基于货币性和到期时间）
+            moneyness = strike / current_price
+            time_factor = min(1, days_to_expiry / 365)
+
+            if option_type == "CALL":
+                # Call Delta: 虚值越深delta越小
+                if moneyness > 1.1:  # 深度虚值
+                    delta = max(0.05, 0.5 - (moneyness - 1) * 2)
+                elif moneyness < 0.9:  # 深度实值
+                    delta = min(0.95, 0.5 + (1 - moneyness) * 2)
+                else:
+                    delta = 0.5 + (1 - moneyness) * 0.5
+            else:  # PUT
+                if moneyness < 0.9:  # 深度虚值
+                    delta = max(-0.95, -0.5 - (1 - moneyness) * 2)
+                elif moneyness > 1.1:  # 深度实值
+                    delta = min(-0.05, -0.5 + (moneyness - 1) * 2)
+                else:
+                    delta = -0.5 + (1 - moneyness) * 0.5
+
+            # Gamma 估算 (ATM附近最大)
+            gamma = 0.05 * np.exp(-((moneyness - 1) ** 2) / 0.02) * (1 / np.sqrt(time_factor + 0.01))
+
+            # Theta 估算 (负数，ATM附近最大)
+            theta = -option_price * 0.02 * (1 / np.sqrt(days_to_expiry + 1))
+
+            # 6. 构建 OptionData 对象
+            option_data = OptionData(
+                identifier=f"{symbol}{expiry_date.replace('-', '')}{option_type[0]}{int(strike*1000):08d}",
+                symbol=symbol,
+                strike=strike,
+                put_call=option_type,
+                expiry_date=expiry_date,
+                latest_price=option_price,
+                bid_price=option_price * 0.98,  # 估算
+                ask_price=option_price * 1.02,
+                volume=100,  # 默认值
+                open_interest=500,  # 默认值
+                implied_vol=implied_volatility,
+                delta=delta,
+                gamma=gamma,
+                theta=theta,
+                vega=option_price * 0.1  # 估算
+            )
+
+            # 7. 使用 OptionScorer 计算评分
+            scores = option_scorer.score_option(option_data, current_price)
+
+            # 8. 使用高级评分器计算趋势相关评分
+            # 导入趋势分析器
+            try:
+                from ..analysis.options_analysis.scoring.trend_analyzer import TrendAnalyzer
+                trend_analyzer = TrendAnalyzer()
+
+                import pandas as pd
+                if len(price_history) >= 6:
+                    price_series = pd.Series(price_history)
+                    strategy = 'sell_call' if option_type == 'CALL' else 'sell_put'
+                    trend_info = trend_analyzer.analyze_trend_for_strategy(
+                        price_series, current_price, strategy
+                    )
+                else:
+                    trend_info = {
+                        'trend': 'sideways',
+                        'trend_strength': 0.5,
+                        'trend_alignment_score': 60,
+                        'display_info': {
+                            'trend_name_cn': '横盘整理',
+                            'is_ideal_trend': False,
+                            'warning': '数据不足，无法判断趋势'
+                        }
+                    }
+            except Exception as e:
+                print(f"趋势分析失败: {e}")
+                trend_info = {
+                    'trend': 'unknown',
+                    'trend_strength': 0.5,
+                    'trend_alignment_score': 50,
+                    'display_info': {
+                        'trend_name_cn': '未知',
+                        'is_ideal_trend': False,
+                        'warning': '趋势分析不可用'
+                    }
+                }
+
+            # 9. 计算支撑阻力位
+            support_resistance = {}
+            if not hist_3mo.empty:
+                high_52w = float(hist_3mo['High'].max())
+                low_52w = float(hist_3mo['Low'].min())
+                ma_20 = float(hist_3mo['Close'].rolling(20).mean().iloc[-1]) if len(hist_3mo) >= 20 else current_price
+                ma_50 = float(hist_3mo['Close'].rolling(50).mean().iloc[-1]) if len(hist_3mo) >= 50 else current_price
+
+                support_resistance = {
+                    'high_52w': high_52w,
+                    'low_52w': low_52w,
+                    'ma_20': ma_20,
+                    'ma_50': ma_50,
+                    'support_1': current_price * 0.95,
+                    'resistance_1': current_price * 1.05,
+                }
+
+            # 10. 构建返回结果
+            result = {
+                'success': True,
+                'symbol': symbol,
+                'option_type': option_type,
+                'strike': strike,
+                'expiry_date': expiry_date,
+                'days_to_expiry': days_to_expiry,
+                'option_price': option_price,
+                'implied_volatility': round(implied_volatility * 100, 2),  # 转为百分比
+                'stock_data': {
+                    'current_price': round(current_price, 2),
+                    'atr_14': round(atr_14, 4),
+                    'trend': trend_info.get('trend', 'unknown'),
+                    'trend_strength': round(trend_info.get('trend_strength', 0.5), 2),
+                    'support_resistance': support_resistance,
+                },
+                'estimated_greeks': {
+                    'delta': round(delta, 4),
+                    'gamma': round(gamma, 4),
+                    'theta': round(theta, 4),
+                },
+                'scores': {},
+                'trend_info': trend_info,
+            }
+
+            # 根据期权类型返回相关评分
+            if option_type == 'CALL':
+                sell_score = scores.scrv or 0
+                buy_score = scores.bcrv or 0
+
+                result['scores'] = {
+                    'sell_call': {
+                        'score': sell_score,
+                        'style_label': '稳健收益' if sell_score >= 60 else '风险较高',
+                        'trend_warning': trend_info.get('display_info', {}).get('warning') if not trend_info.get('display_info', {}).get('is_ideal_trend') else None,
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                            'assignment_probability': scores.assignment_probability,
+                            'annualized_return': scores.annualized_return,
+                        }
+                    },
+                    'buy_call': {
+                        'score': buy_score,
+                        'style_label': '激进策略' if buy_score >= 60 else '投机性强',
+                        'trend_warning': None if trend_info.get('trend') == 'uptrend' else '当前非上涨趋势，买入风险较高',
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                        }
+                    }
+                }
+            else:  # PUT
+                sell_score = scores.sprv or 0
+                buy_score = scores.bprv or 0
+
+                result['scores'] = {
+                    'sell_put': {
+                        'score': sell_score,
+                        'style_label': '稳健收益' if sell_score >= 60 else '风险较高',
+                        'trend_warning': trend_info.get('display_info', {}).get('warning') if not trend_info.get('display_info', {}).get('is_ideal_trend') else None,
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                            'assignment_probability': scores.assignment_probability,
+                            'annualized_return': scores.annualized_return,
+                            'premium_income': scores.premium_income,
+                        }
+                    },
+                    'buy_put': {
+                        'score': buy_score,
+                        'style_label': '对冲策略' if buy_score >= 60 else '保险性质',
+                        'trend_warning': None if trend_info.get('trend') == 'downtrend' else '当前非下跌趋势，对冲需求可能不高',
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                        }
+                    }
+                }
+
+            return result
+
+        except Exception as e:
+            import traceback
+            print(f"反向查分失败: {e}")
+            print(traceback.format_exc())
+            return {
+                'success': False,
+                'error': f'反向查分计算失败: {str(e)}'
+            }

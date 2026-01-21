@@ -474,3 +474,220 @@ def get_analysis_history_detail(history_id):
     except Exception as e:
         logger.error(f"Error fetching options analysis history detail {history_id} for user {g.user_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@options_bp.route('/recommendations', methods=['GET'])
+def get_recommendations():
+    """
+    获取每日热门期权推荐
+
+    Query Parameters:
+    - count: 返回推荐数量 (默认5，最大10)
+    - refresh: 是否强制刷新 (默认false)
+
+    Returns:
+    {
+        "success": true,
+        "recommendations": [...],
+        "market_summary": {...},
+        "updated_at": "2024-01-21T09:30:00Z"
+    }
+    """
+    try:
+        from ..services.recommendation_service import recommendation_service
+
+        count = request.args.get('count', 5, type=int)
+        count = min(max(1, count), 10)  # 限制1-10
+
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+
+        result = recommendation_service.get_daily_recommendations(
+            count=count,
+            force_refresh=force_refresh
+        )
+
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+
+    except Exception as e:
+        logger.error(f"获取推荐失败: {e}")
+        return jsonify({'success': False, 'error': f'获取推荐失败: {str(e)}'}), 500
+
+
+@options_bp.route('/reverse-score', methods=['POST'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def reverse_score_option():
+    """
+    反向查分：根据用户输入的期权参数计算评分
+
+    Request Body:
+    {
+        "symbol": "AAPL",
+        "option_type": "CALL",  // or "PUT"
+        "strike": 190,
+        "expiry_date": "2024-02-16",
+        "option_price": 2.50,
+        "implied_volatility": 0.28  // 可选，留空自动估算
+    }
+
+    Returns:
+    {
+        "success": true,
+        "symbol": "AAPL",
+        "option_type": "CALL",
+        "strike": 190,
+        "expiry_date": "2024-02-16",
+        "days_to_expiry": 25,
+        "option_price": 2.50,
+        "implied_volatility": 28.0,
+        "stock_data": {...},
+        "scores": {
+            "sell_call": {"score": 72, "style_label": "稳健收益", ...},
+            "buy_call": {"score": 65, "style_label": "激进策略", ...}
+        },
+        "trend_info": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'Request body is required'}), 400
+
+        # 验证必需参数
+        required_fields = ['symbol', 'option_type', 'strike', 'expiry_date', 'option_price']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'{field} is required'}), 400
+
+        symbol = data.get('symbol', '').upper()
+        option_type = data.get('option_type', '').upper()
+        strike = float(data.get('strike', 0))
+        expiry_date = data.get('expiry_date', '')
+        option_price = float(data.get('option_price', 0))
+        implied_volatility = data.get('implied_volatility')
+
+        # 验证期权类型
+        if option_type not in ['CALL', 'PUT']:
+            return jsonify({'success': False, 'error': 'option_type must be CALL or PUT'}), 400
+
+        # 验证数值
+        if strike <= 0:
+            return jsonify({'success': False, 'error': 'strike must be positive'}), 400
+        if option_price <= 0:
+            return jsonify({'success': False, 'error': 'option_price must be positive'}), 400
+
+        # 验证日期格式
+        try:
+            from datetime import datetime
+            datetime.strptime(expiry_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({'success': False, 'error': 'expiry_date must be in YYYY-MM-DD format'}), 400
+
+        # 转换隐含波动率（如果提供的话）
+        if implied_volatility is not None:
+            implied_volatility = float(implied_volatility)
+            # 如果用户输入的是百分比（如28），转换为小数（0.28）
+            if implied_volatility > 1:
+                implied_volatility = implied_volatility / 100
+
+        # 调用服务层计算评分
+        result = OptionsService.reverse_score_option(
+            symbol=symbol,
+            option_type=option_type,
+            strike=strike,
+            expiry_date=expiry_date,
+            option_price=option_price,
+            implied_volatility=implied_volatility
+        )
+
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"反向查分失败: {e}")
+        return jsonify({'success': False, 'error': f'反向查分失败: {str(e)}'}), 500
+
+
+@options_bp.route('/recognize-image', methods=['POST'])
+@require_auth
+def recognize_option_image():
+    """
+    识别期权截图，提取期权参数
+
+    Request:
+    - Content-Type: multipart/form-data
+    - image: 图片文件 (PNG, JPG, JPEG, WebP)
+
+    Returns:
+    {
+        "success": true,
+        "data": {
+            "symbol": "AAPL",
+            "option_type": "CALL",
+            "strike": 230,
+            "expiry_date": "2025-02-21",
+            "option_price": 5.50,
+            "implied_volatility": 0.28,
+            "confidence": "high",
+            "notes": "识别备注"
+        }
+    }
+    """
+    try:
+        from ..services.image_recognition_service import image_recognition_service
+
+        # 检查是否有上传的文件
+        if 'image' not in request.files:
+            return jsonify({'success': False, 'error': '请上传图片文件'}), 400
+
+        file = request.files['image']
+
+        if file.filename == '':
+            return jsonify({'success': False, 'error': '未选择文件'}), 400
+
+        # 检查文件类型
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+        file_ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'success': False,
+                'error': f'不支持的文件格式。支持: {", ".join(allowed_extensions)}'
+            }), 400
+
+        # 检查文件大小 (限制 10MB)
+        file.seek(0, 2)  # 移动到文件末尾
+        file_size = file.tell()
+        file.seek(0)  # 重置到文件开头
+
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            return jsonify({'success': False, 'error': '文件大小不能超过 10MB'}), 400
+
+        # 读取文件内容
+        image_data = file.read()
+
+        # 确定 MIME 类型
+        mime_types = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'webp': 'image/webp'
+        }
+        mime_type = mime_types.get(file_ext, 'image/png')
+
+        # 调用识别服务
+        result = image_recognition_service.recognize_option_from_image(image_data, mime_type)
+
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"图片识别失败: {e}")
+        return jsonify({'success': False, 'error': f'图片识别失败: {str(e)}'}), 500

@@ -589,3 +589,164 @@ def test_history():
         logger.error(f"Full traceback: {traceback.format_exc()}")
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/summary/<ticker>', methods=['GET'])
+@require_auth
+def get_stock_summary(ticker):
+    """
+    获取股票分析摘要（用于期权页面联动）
+
+    首次免费逻辑：
+    - 如果用户从未分析过该股票，免费返回摘要
+    - 如果用户已分析过该股票，返回历史数据（不消耗额度）
+    - 如果需要重新分析，消耗额度
+
+    Query Parameters:
+    - force_refresh: 强制重新分析（消耗额度）
+
+    Returns:
+    {
+        "success": true,
+        "summary": {
+            "ticker": "AAPL",
+            "current_price": 185.50,
+            "target_price": 195.00,
+            "target_price_pct": "+5.1%",
+            "stop_loss_price": 175.00,
+            "market_sentiment": 7.5,
+            "risk_score": 3.2,
+            "risk_level": "medium",
+            "position_size": 15.0,
+            "ai_summary": "AAPL近期..."
+        },
+        "is_first_time": true,
+        "from_history": false
+    }
+    """
+    try:
+        ticker = ticker.upper()
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+
+        # 1. 检查历史记录（是否已分析过）
+        existing_history = StockAnalysisHistory.query.filter_by(
+            user_id=g.user_id,
+            ticker=ticker
+        ).order_by(StockAnalysisHistory.created_at.desc()).first()
+
+        is_first_time = existing_history is None
+
+        # 2. 如果有历史记录且不强制刷新，直接返回历史数据
+        if existing_history and not force_refresh:
+            logger.info(f"返回历史分析摘要: {ticker} (用户: {g.user_id})")
+
+            summary = {
+                'ticker': ticker,
+                'current_price': existing_history.current_price,
+                'target_price': existing_history.target_price,
+                'target_price_pct': f"+{((existing_history.target_price - existing_history.current_price) / existing_history.current_price * 100):.1f}%" if existing_history.current_price and existing_history.target_price else None,
+                'stop_loss_price': existing_history.stop_loss_price,
+                'market_sentiment': existing_history.market_sentiment,
+                'risk_score': existing_history.risk_score,
+                'risk_level': existing_history.risk_level,
+                'position_size': existing_history.position_size,
+                'ev_score': existing_history.ev_score,
+                'recommendation_action': existing_history.recommendation_action,
+                'ai_summary': existing_history.ai_summary,
+                'analyzed_at': existing_history.created_at.isoformat() if existing_history.created_at else None
+            }
+
+            return jsonify({
+                'success': True,
+                'summary': summary,
+                'is_first_time': False,
+                'from_history': True,
+                'history_id': existing_history.id
+            })
+
+        # 3. 首次分析或强制刷新 - 执行分析
+        # 首次免费，强制刷新需要额度
+        if force_refresh and not is_first_time:
+            # 检查额度
+            from ..utils.decorators import check_and_deduct_quota
+            quota_result = check_and_deduct_quota(g.user_id, ServiceType.STOCK_ANALYSIS.value, 1)
+            if not quota_result.get('success'):
+                return jsonify({
+                    'success': False,
+                    'error': '额度不足，无法重新分析',
+                    'quota_error': True
+                }), 403
+
+        logger.info(f"执行股票分析摘要: {ticker} (用户: {g.user_id}, 首次: {is_first_time})")
+
+        # 执行简化分析（只获取关键数据）
+        result = get_stock_analysis_data(ticker, 'quality', only_history=False)
+
+        if 'error' in result:
+            return jsonify({'success': False, 'error': result['error']}), 400
+
+        # 提取摘要数据
+        market_data = result.get('data', {})
+        risk_result = result.get('risk', {})
+        ev_result = market_data.get('ev_model', {})
+
+        current_price = market_data.get('price', 0)
+        target_price = market_data.get('target_price', 0)
+
+        summary = {
+            'ticker': ticker,
+            'current_price': current_price,
+            'target_price': target_price,
+            'target_price_pct': f"+{((target_price - current_price) / current_price * 100):.1f}%" if current_price and target_price and target_price > current_price else f"{((target_price - current_price) / current_price * 100):.1f}%" if current_price and target_price else None,
+            'stop_loss_price': market_data.get('stop_loss_price'),
+            'market_sentiment': market_data.get('market_sentiment'),
+            'risk_score': risk_result.get('score'),
+            'risk_level': risk_result.get('level'),
+            'position_size': risk_result.get('suggested_position'),
+            'ev_score': ev_result.get('ev_score'),
+            'recommendation_action': ev_result.get('recommendation', {}).get('action'),
+            'ai_summary': result.get('report', '')[:500] if isinstance(result.get('report'), str) else None,
+            'analyzed_at': datetime.now().isoformat()
+        }
+
+        # 4. 如果是首次分析，保存到历史记录
+        if is_first_time:
+            try:
+                from ..utils.serialization import convert_numpy_types
+                analysis_history = StockAnalysisHistory(
+                    user_id=g.user_id,
+                    ticker=ticker,
+                    style='quality',
+                    current_price=convert_numpy_types(current_price),
+                    target_price=convert_numpy_types(target_price),
+                    stop_loss_price=convert_numpy_types(market_data.get('stop_loss_price')),
+                    market_sentiment=convert_numpy_types(market_data.get('market_sentiment')),
+                    risk_score=convert_numpy_types(risk_result.get('score')),
+                    risk_level=risk_result.get('level'),
+                    position_size=convert_numpy_types(risk_result.get('suggested_position')),
+                    ev_score=convert_numpy_types(ev_result.get('ev_score')),
+                    ev_weighted_pct=convert_numpy_types(ev_result.get('ev_weighted_pct')),
+                    recommendation_action=ev_result.get('recommendation', {}).get('action'),
+                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),
+                    ai_summary=summary.get('ai_summary'),
+                    full_analysis_data=convert_numpy_types(result)
+                )
+                db.session.add(analysis_history)
+                db.session.commit()
+                logger.info(f"首次分析已保存: {ticker} (用户: {g.user_id})")
+            except Exception as e:
+                logger.error(f"保存首次分析失败: {e}")
+                db.session.rollback()
+
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'is_first_time': is_first_time,
+            'from_history': False
+        })
+
+    except Exception as e:
+        logger.error(f"获取股票摘要失败 {ticker}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': f'获取摘要失败: {str(e)}'}), 500

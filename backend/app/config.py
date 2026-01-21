@@ -113,3 +113,6 @@ class Config:
         'pro_yearly': os.getenv('STRIPE_PRICE_PRO_YEARLY', ''),
         'topup_100': os.getenv('STRIPE_PRICE_TOPUP_100', '')
     }
+
+    # Google Gemini API (for image recognition)
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
