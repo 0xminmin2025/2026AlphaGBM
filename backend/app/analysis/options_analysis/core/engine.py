@@ -93,6 +93,13 @@ class OptionsAnalysisEngine:
             # 5. 计算风险指标
             risk_analysis = self.risk_adjuster.analyze_portfolio_risk(analysis_results, stock_data)
 
+            # 提取趋势信息（从任意策略分析中获取，它们使用相同的趋势数据）
+            trend_info = None
+            for strategy_name, result in analysis_results.items():
+                if result.get('success') and result.get('trend_info'):
+                    trend_info = result['trend_info']
+                    break
+
             return {
                 'success': True,
                 'symbol': symbol,
@@ -102,7 +109,9 @@ class OptionsAnalysisEngine:
                 'strategy_analysis': analysis_results,
                 'vrp_analysis': vrp_analysis,
                 'risk_analysis': risk_analysis,
-                'summary': self._generate_analysis_summary(analysis_results, vrp_analysis, risk_analysis)
+                'summary': self._generate_analysis_summary(analysis_results, vrp_analysis, risk_analysis),
+                # 新增：趋势信息（便于前端显示）
+                'trend_info': trend_info,
             }
 
         except Exception as e:

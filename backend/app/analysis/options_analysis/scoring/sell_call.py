@@ -1,6 +1,11 @@
 """
 Sell Call 期权策略计分器
 实现卖出看涨期权的专门计分算法
+
+优化版本（基于真实交易者反馈）：
+- 趋势过滤：Sell Call 只在上涨时做（显示但降分）
+- ATR动态安全边际：不同股票波动不同
+- 阻力位强度评估：执行价是否为真实阻力位
 """
 
 import logging
@@ -8,6 +13,8 @@ from typing import Dict, Any, List, Optional
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+
+from .trend_analyzer import TrendAnalyzer, ATRCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -18,22 +25,32 @@ class SellCallScorer:
     def __init__(self):
         """初始化Sell Call计分器"""
         self.strategy_name = "sell_call"
+
+        # 优化后的权重配置（基于真实交易者反馈）
         self.weight_config = {
-            'premium_yield': 0.25,       # 期权费收益率权重
-            'overvaluation': 0.20,       # 超买程度权重
-            'resistance_level': 0.20,    # 阻力位分析权重
-            'liquidity': 0.15,           # 流动性权重
-            'time_decay': 0.10,          # 时间衰减权重
-            'volatility_timing': 0.10    # 波动率择时权重
+            'premium_yield': 0.20,         # 期权费收益率
+            'resistance_strength': 0.20,   # 新增：阻力位强度
+            'trend_alignment': 0.15,       # 新增：趋势匹配度
+            'upside_buffer': 0.15,         # 上涨缓冲（改用ATR）
+            'liquidity': 0.10,             # 流动性
+            'is_covered': 0.10,            # 新增：是否有现股（Covered Call加分）
+            'time_decay': 0.05,            # 时间衰减
+            'overvaluation': 0.05,         # 超买程度（简化）
         }
 
-    def score_options(self, options_data: Dict, stock_data: Dict) -> Dict[str, Any]:
+        # 初始化趋势分析器和ATR计算器
+        self.trend_analyzer = TrendAnalyzer()
+        self.atr_calculator = ATRCalculator()
+
+    def score_options(self, options_data: Dict, stock_data: Dict,
+                      user_holdings: List[str] = None) -> Dict[str, Any]:
         """
         为Sell Call策略计分期权
 
         Args:
             options_data: 期权链数据
             stock_data: 标的股票数据
+            user_holdings: 用户持有的股票列表（用于Covered Call识别）
 
         Returns:
             计分结果
@@ -64,10 +81,23 @@ class SellCallScorer:
                     'error': '无法获取当前股价'
                 }
 
+            # 新增：趋势分析（基于当天趋势）
+            trend_info = self._analyze_trend(stock_data, current_price)
+
+            # 新增：计算ATR用于动态上涨缓冲
+            atr_14 = self._get_atr(stock_data)
+
+            # 检查是否为Covered Call
+            symbol = options_data.get('symbol', '')
+            is_covered = user_holdings and symbol in user_holdings
+
             # 筛选和计分期权
             scored_options = []
             for call_option in calls:
-                score_result = self._score_individual_call(call_option, current_price, stock_data)
+                score_result = self._score_individual_call(
+                    call_option, current_price, stock_data,
+                    trend_info, atr_14, is_covered
+                )
                 if score_result and score_result.get('score', 0) > 0:
                     scored_options.append(score_result)
 
@@ -75,7 +105,9 @@ class SellCallScorer:
             scored_options.sort(key=lambda x: x.get('score', 0), reverse=True)
 
             # 生成策略分析
-            strategy_analysis = self._generate_strategy_analysis(scored_options, current_price, stock_data)
+            strategy_analysis = self._generate_strategy_analysis(
+                scored_options, current_price, stock_data, trend_info, is_covered
+            )
 
             return {
                 'success': True,
@@ -85,9 +117,13 @@ class SellCallScorer:
                 'analysis_time': datetime.now().isoformat(),
                 'total_options_analyzed': len(calls),
                 'qualified_options': len(scored_options),
-                'recommendations': scored_options[:10],  # 返回前10个
+                'recommendations': scored_options[:10],
                 'strategy_analysis': strategy_analysis,
-                'scoring_weights': self.weight_config
+                'scoring_weights': self.weight_config,
+                # 新增：趋势信息
+                'trend_info': trend_info,
+                'atr_14': atr_14,
+                'is_covered': is_covered,
             }
 
         except Exception as e:
@@ -98,9 +134,57 @@ class SellCallScorer:
                 'error': f"计分失败: {str(e)}"
             }
 
+    def _analyze_trend(self, stock_data: Dict, current_price: float) -> Dict[str, Any]:
+        """分析当前趋势"""
+        try:
+            price_history = stock_data.get('price_history', [])
+            if isinstance(price_history, list) and len(price_history) >= 6:
+                price_series = pd.Series(price_history)
+            else:
+                price_series = pd.Series([current_price] * 7)
+
+            return self.trend_analyzer.analyze_trend_for_strategy(
+                price_series, current_price, 'sell_call'
+            )
+        except Exception as e:
+            logger.error(f"趋势分析失败: {e}")
+            return {
+                'trend': 'sideways',
+                'trend_strength': 0.5,
+                'trend_alignment_score': 60,
+                'display_info': {
+                    'trend_name_cn': '横盘整理',
+                    'is_ideal_trend': False,
+                    'warning': '无法确定趋势'
+                }
+            }
+
+    def _get_atr(self, stock_data: Dict) -> float:
+        """获取或计算ATR"""
+        atr = stock_data.get('atr_14', 0)
+        if atr > 0:
+            return atr
+
+        try:
+            high = stock_data.get('high_prices', [])
+            low = stock_data.get('low_prices', [])
+            close = stock_data.get('close_prices', stock_data.get('price_history', []))
+
+            if high and low and close:
+                return self.atr_calculator.calculate_atr(
+                    pd.Series(high), pd.Series(low), pd.Series(close)
+                )
+        except Exception as e:
+            logger.warning(f"ATR计算失败: {e}")
+
+        vol_30d = stock_data.get('volatility_30d', 0.25)
+        current_price = stock_data.get('current_price', 100)
+        return current_price * vol_30d / np.sqrt(252)
+
     def _score_individual_call(self, call_option: Dict, current_price: float,
-                              stock_data: Dict) -> Optional[Dict]:
-        """计分单个看涨期权"""
+                              stock_data: Dict, trend_info: Dict = None,
+                              atr_14: float = 0, is_covered: bool = False) -> Optional[Dict]:
+        """计分单个看涨期权（优化版本：含趋势和ATR评分）"""
         try:
             strike = call_option.get('strike', 0)
             bid = call_option.get('bid', 0)
@@ -113,60 +197,69 @@ class SellCallScorer:
             if not all([strike, bid > 0, days_to_expiry > 0]):
                 return None
 
-            # 只考虑虚值或平值看涨期权（适合卖出）
             # CALL期权：行权价 > 当前股价 才是虚值(OTM)，才适合卖出
-            if strike < current_price * 0.98:  # 实值超过2%，跳过
+            if strike < current_price * 0.98:
                 return None
 
-            # 基础计分指标
             mid_price = (bid + ask) / 2
-
-            # 对于 Sell Call，只计算时间价值部分的收益（不含内在价值）
-            # 内在价值 = max(0, current_price - strike)（对于ITM call）
-            # 时间价值 = mid_price - 内在价值
             intrinsic_value = max(0, current_price - strike)
             time_value = max(0, mid_price - intrinsic_value)
 
-            # 收益率应该基于时间价值，而非总权利金
-            # 因为卖出 ITM call 的内在价值部分不是"收益"
             if time_value <= 0:
-                return None  # 没有时间价值的期权不适合卖出
+                return None
 
-            # 单次收益率 = 时间价值 / 当前股价 (对于covered call)
             premium_yield = (time_value / current_price) * 100
-            upside_buffer = ((strike - current_price) / current_price) * 100  # 上涨缓冲%
+            upside_buffer = ((strike - current_price) / current_price) * 100
 
-            # 年化收益率计算
             annualized_return = (premium_yield / days_to_expiry) * 365
 
             # 计算各项得分
             scores = {}
 
-            # 1. 期权费收益率得分 (25%)
+            # 1. 期权费收益率得分 (20%)
             scores['premium_yield'] = self._score_premium_yield(premium_yield, days_to_expiry)
 
-            # 2. 超买程度得分 (20%)
-            scores['overvaluation'] = self._score_overvaluation(current_price, stock_data)
+            # 2. 新增：阻力位强度评分 (20%)
+            scores['resistance_strength'] = self._score_resistance_strength(
+                strike, current_price, stock_data
+            )
 
-            # 3. 阻力位分析得分 (20%)
-            scores['resistance_level'] = self._score_resistance_level(strike, current_price, stock_data)
+            # 3. 新增：趋势匹配度评分 (15%)
+            if trend_info:
+                scores['trend_alignment'] = trend_info.get('trend_alignment_score', 60)
+            else:
+                scores['trend_alignment'] = 60
 
-            # 4. 流动性得分 (15%)
+            # 4. 上涨缓冲评分 - 使用ATR动态计算 (15%)
+            atr_safety = self._calculate_atr_safety(current_price, strike, atr_14)
+            scores['upside_buffer'] = self._score_upside_buffer_with_atr(
+                upside_buffer, atr_safety
+            )
+
+            # 5. 流动性得分 (10%)
             scores['liquidity'] = self._score_liquidity(volume, open_interest, bid, ask)
 
-            # 5. 时间衰减得分 (10%)
+            # 6. 新增：Covered Call 加分 (10%)
+            scores['is_covered'] = 100 if is_covered else 50
+
+            # 7. 时间衰减得分 (5%)
             scores['time_decay'] = self._score_time_decay(days_to_expiry)
 
-            # 6. 波动率择时得分 (10%)
-            scores['volatility_timing'] = self._score_volatility_timing(
-                implied_volatility, stock_data.get('volatility_30d', 0.2)
-            )
+            # 8. 超买程度得分 (5%)
+            scores['overvaluation'] = self._score_overvaluation(current_price, stock_data)
 
             # 计算加权总分
             total_score = sum(
-                scores[factor] * self.weight_config[factor]
+                scores[factor] * self.weight_config.get(factor, 0)
                 for factor in scores.keys()
             )
+
+            # 构建趋势警告信息
+            trend_warning = None
+            if trend_info and trend_info.get('display_info'):
+                display = trend_info['display_info']
+                if not display.get('is_ideal_trend'):
+                    trend_warning = display.get('warning')
 
             return {
                 'option_symbol': call_option.get('symbol', f"CALL_{strike}_{call_option.get('expiry')}"),
@@ -176,11 +269,11 @@ class SellCallScorer:
                 'bid': bid,
                 'ask': ask,
                 'mid_price': round(mid_price, 2),
-                'time_value': round(time_value, 2),  # 时间价值
-                'intrinsic_value': round(intrinsic_value, 2),  # 内在价值
-                'premium_yield': round(premium_yield, 2),  # 单次收益率% (基于时间价值)
-                'annualized_return': round(annualized_return, 2),  # 年化收益率
-                'is_short_term': days_to_expiry <= 7,  # 是否短期期权
+                'time_value': round(time_value, 2),
+                'intrinsic_value': round(intrinsic_value, 2),
+                'premium_yield': round(premium_yield, 2),
+                'annualized_return': round(annualized_return, 2),
+                'is_short_term': days_to_expiry <= 7,
                 'upside_buffer': round(upside_buffer, 2),
                 'implied_volatility': round(implied_volatility * 100, 1),
                 'volume': volume,
@@ -188,15 +281,120 @@ class SellCallScorer:
                 'score': round(total_score, 1),
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'assignment_risk': self._calculate_assignment_risk(current_price, strike),
-                'max_profit': round(time_value * 100, 0),  # 最大收益是时间价值部分
+                'max_profit': round(time_value * 100, 0),
                 'breakeven': round(current_price + mid_price, 2),
                 'profit_range': f"${current_price:.2f} - ${strike:.2f}",
-                'strategy_notes': self._generate_call_notes(current_price, strike, premium_yield, days_to_expiry)
+                'strategy_notes': self._generate_call_notes(current_price, strike, premium_yield, days_to_expiry),
+                # 新增：ATR安全边际信息
+                'atr_safety': atr_safety,
+                # 新增：趋势信息
+                'trend_warning': trend_warning,
+                'is_ideal_trend': trend_info.get('is_ideal_trend', True) if trend_info else True,
+                # 新增：Covered Call标识
+                'is_covered': is_covered,
             }
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")
             return None
+
+    def _calculate_atr_safety(self, current_price: float, strike: float,
+                             atr_14: float) -> Dict[str, Any]:
+        """计算基于ATR的上涨缓冲"""
+        if atr_14 <= 0:
+            return {
+                'safety_ratio': 0,
+                'atr_multiples': 0,
+                'is_safe': False
+            }
+        return self.atr_calculator.calculate_atr_based_safety(
+            current_price, strike, atr_14, atr_ratio=2.0
+        )
+
+    def _score_upside_buffer_with_atr(self, upside_buffer: float,
+                                      atr_safety: Dict) -> float:
+        """结合ATR的上涨缓冲评分"""
+        # 基础评分（基于百分比缓冲）
+        if upside_buffer >= 10:
+            base_score = 80
+        elif upside_buffer >= 5:
+            base_score = 60 + (upside_buffer - 5) * 4
+        elif upside_buffer >= 2:
+            base_score = 40 + (upside_buffer - 2) * 6.67
+        else:
+            base_score = max(10, upside_buffer * 20)
+
+        # ATR调整
+        safety_ratio = atr_safety.get('safety_ratio', 0)
+
+        if safety_ratio >= 1.5:
+            atr_bonus = 15
+        elif safety_ratio >= 1.0:
+            atr_bonus = 5
+        elif safety_ratio >= 0.5:
+            atr_bonus = -10
+        else:
+            atr_bonus = -20
+
+        return min(100, max(0, base_score + atr_bonus))
+
+    def _score_resistance_strength(self, strike: float, current_price: float,
+                                   stock_data: Dict) -> float:
+        """评分执行价作为阻力位的强度"""
+        try:
+            support_resistance = stock_data.get('support_resistance', {})
+
+            # 获取阻力位
+            resistance_1 = support_resistance.get('resistance_1', 0)
+            resistance_2 = support_resistance.get('resistance_2', 0)
+            high_52w = support_resistance.get('high_52w', 0)
+
+            # MA阻力
+            ma_50 = stock_data.get('ma_50', 0)
+            ma_200 = stock_data.get('ma_200', 0)
+
+            scores = []
+
+            # 检查执行价是否接近各阻力位
+            resistance_levels = [
+                (resistance_1, 25, 'R1'),
+                (resistance_2, 20, 'R2'),
+                (high_52w, 25, '52W High'),
+            ]
+
+            # 如果价格在MA上方，MA可以作为阻力参考
+            if current_price > ma_50 > 0:
+                resistance_levels.append((ma_50 * 1.05, 15, 'MA50+5%'))
+            if current_price > ma_200 > 0:
+                resistance_levels.append((ma_200 * 1.08, 15, 'MA200+8%'))
+
+            for level, max_score, name in resistance_levels:
+                if level and level > 0:
+                    diff_pct = abs(strike - level) / current_price * 100
+                    if diff_pct <= 1:
+                        scores.append(max_score)
+                    elif diff_pct <= 3:
+                        scores.append(max_score * 0.7)
+                    elif diff_pct <= 5:
+                        scores.append(max_score * 0.4)
+
+            if not scores:
+                # 基于上涨缓冲给分
+                upside_pct = (strike - current_price) / current_price * 100
+                if 5 <= upside_pct <= 10:
+                    return 60
+                elif 2 <= upside_pct < 5:
+                    return 50
+                elif upside_pct > 15:
+                    return 30
+                else:
+                    return 40
+
+            return min(100, sum(scores))
+
+        except Exception as e:
+            logger.error(f"阻力位评分失败: {e}")
+            return 50
 
     def _score_premium_yield(self, premium_yield: float, days_to_expiry: int) -> float:
         """计分期权费收益率"""
@@ -405,32 +603,55 @@ class SellCallScorer:
         return notes
 
     def _generate_strategy_analysis(self, scored_options: List, current_price: float,
-                                   stock_data: Dict) -> Dict[str, Any]:
+                                   stock_data: Dict, trend_info: Dict = None,
+                                   is_covered: bool = False) -> Dict[str, Any]:
         """生成策略分析摘要"""
         if not scored_options:
             return {
                 'market_outlook': 'neutral',
                 'strategy_suitability': 'poor',
                 'risk_level': 'high',
-                'recommendations': ['当前市场条件下无合适的Sell Call机会']
+                'recommendations': ['当前市场条件下无合适的Sell Call机会'],
+                'trend_analysis': trend_info.get('display_info') if trend_info else None
             }
 
-        # 分析最佳期权
         best_option = scored_options[0]
         avg_score = np.mean([opt.get('score', 0) for opt in scored_options[:5]])
 
+        # 趋势影响策略适宜性判断
+        trend_is_ideal = trend_info.get('is_ideal_trend', True) if trend_info else True
+        if not trend_is_ideal:
+            if avg_score >= 75:
+                suitability = 'good'
+            elif avg_score >= 55:
+                suitability = 'moderate'
+            else:
+                suitability = 'poor'
+        else:
+            suitability = 'excellent' if avg_score >= 75 else 'good' if avg_score >= 55 else 'moderate'
+
+        # Covered Call 提升适宜性
+        if is_covered and suitability != 'excellent':
+            suitability_upgrade = {'poor': 'moderate', 'moderate': 'good', 'good': 'excellent'}
+            suitability = suitability_upgrade.get(suitability, suitability)
+
         analysis = {
             'market_outlook': self._assess_market_outlook(scored_options, stock_data),
-            'strategy_suitability': 'excellent' if avg_score >= 75 else 'good' if avg_score >= 55 else 'moderate',
+            'strategy_suitability': suitability,
             'risk_level': self._assess_risk_level(scored_options),
             'best_opportunity': {
                 'strike': best_option.get('strike'),
                 'premium_yield': best_option.get('premium_yield'),
                 'score': best_option.get('score'),
                 'days_to_expiry': best_option.get('days_to_expiry'),
-                'upside_buffer': best_option.get('upside_buffer')
+                'upside_buffer': best_option.get('upside_buffer'),
+                'resistance_score': best_option.get('score_breakdown', {}).get('resistance_strength', 0),
             },
-            'recommendations': self._generate_recommendations(scored_options, current_price, stock_data)
+            'recommendations': self._generate_recommendations(
+                scored_options, current_price, stock_data, trend_info, is_covered
+            ),
+            'trend_analysis': trend_info.get('display_info') if trend_info else None,
+            'is_covered_call': is_covered,
         }
 
         return analysis
@@ -474,7 +695,8 @@ class SellCallScorer:
             return 'high'
 
     def _generate_recommendations(self, scored_options: List, current_price: float,
-                                 stock_data: Dict) -> List[str]:
+                                 stock_data: Dict, trend_info: Dict = None,
+                                 is_covered: bool = False) -> List[str]:
         """生成策略建议"""
         recommendations = []
 
@@ -484,13 +706,41 @@ class SellCallScorer:
 
         best_option = scored_options[0]
 
+        # 新增：Covered Call 提示
+        if is_covered:
+            recommendations.append("✅ 持有现股，可执行 Covered Call 策略（风险可控）")
+
+        # 新增：趋势提示
+        if trend_info:
+            display = trend_info.get('display_info', {})
+            is_ideal = display.get('is_ideal_trend', True)
+
+            if is_ideal:
+                recommendations.append(f"当前{display.get('trend_name_cn', '上涨趋势')}，适合Sell Call策略")
+            else:
+                recommendations.append(f"⚠️ {display.get('warning', '趋势不匹配')}")
+
         if best_option.get('score', 0) >= 70:
             recommendations.append(f"推荐卖出执行价 ${best_option.get('strike')} 的看涨期权")
+
+        # 新增：阻力位提示
+        resistance_score = best_option.get('score_breakdown', {}).get('resistance_strength', 0)
+        if resistance_score >= 70:
+            recommendations.append("执行价接近重要阻力位，被突破风险较低")
+        elif resistance_score < 40:
+            recommendations.append("⚠️ 执行价远离阻力位，需注意上涨风险")
 
         # 基于市场状况给建议
         change_percent = stock_data.get('change_percent', 0)
         if change_percent >= 2:
             recommendations.append("股价有所上涨，是卖出看涨期权的好时机")
+
+        # 新增：ATR安全提示
+        atr_safety = best_option.get('atr_safety', {})
+        if atr_safety.get('is_safe'):
+            recommendations.append(f"上涨缓冲{atr_safety.get('atr_multiples', 0):.1f}倍ATR，波动风险可控")
+        elif atr_safety.get('safety_ratio', 0) < 0.5:
+            recommendations.append("⚠️ 上涨缓冲不足，高波动时可能被突破")
 
         resistance_distance = self._calculate_resistance_distance(stock_data)
         if resistance_distance <= 8:
