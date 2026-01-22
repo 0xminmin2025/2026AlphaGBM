@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
 import StockSearchInput from '@/components/ui/StockSearchInput';
-import { NarrativeRadar } from '@/components/NarrativeRadar';
+// import { NarrativeRadar } from '@/components/NarrativeRadar'; // 暂时隐藏叙事雷达功能
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
@@ -565,9 +565,10 @@ export default function Home() {
     const [activeTab, setActiveTab] = useState('analysis');
     // URL 参数支持
     const [searchParams] = useSearchParams();
-    const initialMode = searchParams.get('mode') === 'narrative' ? 'narrative' : 'manual';
-    // 选股模式：'manual' = 自选股票, 'narrative' = 叙事雷达
-    const [stockMode, setStockMode] = useState<'manual' | 'narrative'>(initialMode);
+    // 叙事雷达功能暂时隐藏
+    // const initialMode = searchParams.get('mode') === 'narrative' ? 'narrative' : 'manual';
+    // const [stockMode, setStockMode] = useState<'manual' | 'narrative'>(initialMode);
+    void searchParams; // 保留 searchParams 以备后用
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
@@ -633,15 +634,15 @@ export default function Home() {
         }
     };
 
-    // 从叙事雷达选择股票后，切换到手动模式并触发分析
-    const handleSelectStockFromNarrative = (symbol: string) => {
-        setTicker(symbol);
-        setStockMode('manual');
-        // 延迟触发分析，等待状态更新
-        setTimeout(() => {
-            handleAnalyze();
-        }, 100);
-    };
+    // 从叙事雷达选择股票后，切换到手动模式并触发分析 - 暂时隐藏
+    // const handleSelectStockFromNarrative = (symbol: string) => {
+    //     setTicker(symbol);
+    //     setStockMode('manual');
+    //     // 延迟触发分析，等待状态更新
+    //     setTimeout(() => {
+    //         handleAnalyze();
+    //     }, 100);
+    // };
 
     const getRiskClass = (score: number) => {
         if (score >= 6) return 'risk-high';
@@ -780,8 +781,8 @@ export default function Home() {
                         {t('stock.form.title')}
                     </h5>
 
-                    {/* 模式切换按钮 */}
-                    <div className="flex gap-3 mb-5">
+                    {/* 模式切换按钮 - 叙事雷达暂时隐藏 */}
+                    {/* <div className="flex gap-3 mb-5">
                         <button
                             onClick={() => setStockMode('manual')}
                             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border transition-all ${
@@ -804,12 +805,10 @@ export default function Home() {
                             <i className="bi bi-broadcast"></i>
                             <span className="font-medium">{i18n.language === 'zh' ? '叙事雷达' : 'Narrative Radar'}</span>
                         </button>
-                    </div>
+                    </div> */}
 
-                    {/* 自选股票模式 */}
-                    {stockMode === 'manual' && (
-                        <>
-                            <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
+                    {/* 自选股票模式 - 现在是唯一模式 */}
+                    <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
                                 <div>
                                     <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
                                     <CustomSelect
@@ -856,16 +855,14 @@ export default function Home() {
                             <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
                                 {t(`stock.style.${style}.desc`)}
                             </div>
-                        </>
-                    )}
 
-                    {/* 叙事雷达模式 */}
-                    {stockMode === 'narrative' && (
+                    {/* 叙事雷达模式 - 暂时隐藏 */}
+                    {/* {stockMode === 'narrative' && (
                         <NarrativeRadar
                             onSelectStock={handleSelectStockFromNarrative}
                             hideTitle={true}
                         />
-                    )}
+                    )} */}
 
                     {error && (
                         <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
