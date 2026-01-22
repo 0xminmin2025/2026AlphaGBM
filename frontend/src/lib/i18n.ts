@@ -208,7 +208,7 @@ const resources = {
             "stock.aiReport.title": "AI Investment Analysis",
             "stock.aiReport.generated": "AI Generated",
             "stock.loading.progress": "Analysis Progress",
-            "stock.loading.connecting": "Connecting to Gemini for deep reasoning...",
+            "stock.loading.connecting": "Connecting for deep analysis...",
             "stock.error.title": "❌ Analysis Failed",
             "stock.error.viewFull": "View full error message",
             "stock.history.title": "Historical Analysis Report",
@@ -357,6 +357,17 @@ const resources = {
             "stock.risk.level.medium": "Medium",
             "stock.risk.level.high": "High",
             "stock.risk.level.overall": "Overall Risk Level",
+
+            // Option Opportunity Guide
+            "stock.optionOpportunity.title": "Option Trading Opportunities",
+            "stock.optionOpportunity.desc": "Based on the analysis results, here are option strategies that may be suitable for this stock:",
+            "stock.optionOpportunity.sellPutDesc": "Collect premium, buy stock at lower price if assigned",
+            "stock.optionOpportunity.buyCallDesc": "Leverage bullish bet with limited downside",
+            "stock.optionOpportunity.sellCallDesc": "Collect premium in downtrend",
+            "stock.optionOpportunity.buyPutDesc": "Hedge risk or profit from decline",
+            "stock.optionOpportunity.sellPutSidewaysDesc": "Earn time decay in range-bound market",
+            "stock.optionOpportunity.sellCallSidewaysDesc": "Collect premium with upside resistance",
+            "stock.optionOpportunity.viewOptions": "View {{symbol}} Options Chain →",
 
             // Privacy Policy
             "privacy.title": "Privacy Policy",
@@ -909,7 +920,7 @@ const resources = {
             "stock.aiReport.title": "AI投资分析",
             "stock.aiReport.generated": "AI Generated",
             "stock.loading.progress": "分析进度",
-            "stock.loading.connecting": "正在连接 Gemini 进行深度推演...",
+            "stock.loading.connecting": "正在连接进行深度分析...",
             "stock.error.title": "❌ 分析失败",
             "stock.error.viewFull": "查看完整错误信息",
             "stock.history.title": "历史分析报告",
@@ -1058,6 +1069,17 @@ const resources = {
             "stock.risk.level.medium": "中",
             "stock.risk.level.high": "高",
             "stock.risk.level.overall": "综合风控等级",
+
+            // 期权交易机会引导
+            "stock.optionOpportunity.title": "期权交易机会",
+            "stock.optionOpportunity.desc": "基于分析结果，以下是可能适合该股票的期权策略：",
+            "stock.optionOpportunity.sellPutDesc": "收取权利金，若被行权则以更低价格买入股票",
+            "stock.optionOpportunity.buyCallDesc": "杠杆做多，下行风险有限",
+            "stock.optionOpportunity.sellCallDesc": "在下跌趋势中收取权利金",
+            "stock.optionOpportunity.buyPutDesc": "对冲风险或从下跌中获利",
+            "stock.optionOpportunity.sellPutSidewaysDesc": "在震荡行情中赚取时间价值",
+            "stock.optionOpportunity.sellCallSidewaysDesc": "在上方阻力位附近收取权利金",
+            "stock.optionOpportunity.viewOptions": "查看 {{symbol}} 期权链 →",
 
             // 隐私声明
             "privacy.title": "数据隐私声明",

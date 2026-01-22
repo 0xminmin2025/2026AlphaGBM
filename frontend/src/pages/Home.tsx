@@ -1496,6 +1496,149 @@ export default function Home() {
                     );
                 })()}
 
+                {/* Option Trading Opportunities Guide */}
+                {result && result.success && (() => {
+                    const d = result.data;
+                    // Determine trend based on price vs MA
+                    const trend = d.price > d.ma50 && d.ma50 > d.ma200 ? 'uptrend' :
+                                  d.price < d.ma200 ? 'downtrend' : 'sideways';
+
+                    return (
+                        <div className="option-opportunity-guide" style={{
+                            marginTop: '2rem',
+                            padding: '1.5rem',
+                            background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.1) 0%, rgba(13, 155, 151, 0.05) 100%)',
+                            border: '1px solid rgba(13, 155, 151, 0.3)',
+                            borderRadius: '12px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                                <i className="bi bi-lightning-charge-fill" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                                    {t('stock.optionOpportunity.title')}
+                                </h3>
+                            </div>
+
+                            <p style={{ color: 'var(--muted-foreground)', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
+                                {t('stock.optionOpportunity.desc')}
+                            </p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                                {trend === 'uptrend' && (
+                                    <>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(34, 197, 94, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontSize: '1.25rem' }}>📈</span>
+                                                <strong style={{ color: 'var(--bull)' }}>Sell Put</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellPutDesc')}
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(34, 197, 94, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontSize: '1.25rem' }}>🚀</span>
+                                                <strong style={{ color: 'var(--bull)' }}>Buy Call</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.buyCallDesc')}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                                {trend === 'downtrend' && (
+                                    <>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontSize: '1.25rem' }}>📉</span>
+                                                <strong style={{ color: 'var(--bear)' }}>Sell Call</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellCallDesc')}
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontSize: '1.25rem' }}>🛡️</span>
+                                                <strong style={{ color: 'var(--bear)' }}>Buy Put</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.buyPutDesc')}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                                {trend === 'sideways' && (
+                                    <>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(245, 158, 11, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(245, 158, 11, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-cash-stack" style={{ fontSize: '1.25rem', color: 'var(--warning)' }}></i>
+                                                <strong style={{ color: 'var(--warning)' }}>Sell Put</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellPutSidewaysDesc')}
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(245, 158, 11, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(245, 158, 11, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-currency-dollar" style={{ fontSize: '1.25rem', color: 'var(--warning)' }}></i>
+                                                <strong style={{ color: 'var(--warning)' }}>Sell Call</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellCallSidewaysDesc')}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <Button
+                                onClick={() => navigate(`/options?ticker=${d.symbol}`)}
+                                className="btn-primary"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    background: 'var(--primary)',
+                                    border: 'none'
+                                }}
+                            >
+                                <i className="bi bi-arrow-right-circle"></i>
+                                {t('stock.optionOpportunity.viewOptions', { symbol: d.symbol })}
+                            </Button>
+                        </div>
+                    );
+                })()}
+
                 {/* Empty State */}
                 {!result && !loading && (
                     <div className="text-center py-20 text-muted">
