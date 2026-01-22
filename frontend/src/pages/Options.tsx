@@ -403,6 +403,12 @@ const styles = `
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Risk Warning Collapse Animation */
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
     /* Option Detail Modal - Compact */
     .option-modal-overlay {
         position: fixed;
@@ -711,6 +717,11 @@ export default function Options() {
     const [stockHistory, setStockHistory] = useState<{ dates: string[], prices: number[] } | null>(null);
     const [stockHistoryOHLC, setStockHistoryOHLC] = useState<OHLCData[] | null>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // Risk warning collapse state - default collapsed, persisted in localStorage
+    const [riskExpanded, setRiskExpanded] = useState(() => {
+        return localStorage.getItem('optionsRiskExpanded') === 'true';
+    });
 
     // Multi-stock task tracking
     const pendingTasksRef = useRef<Map<string, { symbol: string; taskId: string }>>(new Map());
@@ -2022,45 +2033,70 @@ export default function Options() {
                         </div>
                     )}
 
-                    {/* Risk Warning */}
-                    <div className="card p-4" style={{
+                    {/* Risk Warning - Collapsible */}
+                    <div style={{
                         backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        border: '2px solid var(--warning)',
+                        border: '1px solid var(--warning)',
                         borderRadius: '0.5rem',
-                        marginBottom: '1.5rem'
+                        marginBottom: '1rem',
+                        overflow: 'hidden'
                     }}>
-                        <div className="flex items-start gap-3">
-                            <i className="bi bi-exclamation-triangle-fill" style={{
+                        {/* Collapsible Header */}
+                        <button
+                            onClick={() => {
+                                const newState = !riskExpanded;
+                                setRiskExpanded(newState);
+                                localStorage.setItem('optionsRiskExpanded', String(newState));
+                            }}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                width: '100%',
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
                                 color: 'var(--warning)',
-                                fontSize: '1.5rem',
-                                flexShrink: 0,
-                                marginTop: '0.2rem'
-                            }}></i>
-                            <div style={{ flex: 1 }}>
-                                <h3 style={{
-                                    fontSize: '1.1rem',
-                                    fontWeight: 600,
-                                    color: 'var(--warning)',
-                                    marginBottom: '0.75rem'
-                                }}>
-                                    {t('options.risk.title')}
-                                </h3>
-                                <div style={{ color: 'var(--foreground)', lineHeight: 1.8 }}>
-                                    <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>{t('options.risk.highRisk')}</strong>{t('options.risk.highRiskDesc')}
-                                    </p>
-                                    <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>{t('options.risk.earnings')}</strong>{t('options.risk.earningsDesc')}
-                                    </p>
-                                    <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>{t('options.risk.dataNote')}</strong>{t('options.risk.dataDesc')}
-                                    </p>
-                                    <p style={{ marginBottom: 0, fontWeight: 600, color: 'var(--warning)' }}>
-                                        <strong>{t('options.risk.liveAdvice')}</strong>{t('options.risk.liveAdviceDesc')}
-                                    </p>
-                                </div>
+                                fontWeight: 600,
+                                fontSize: '0.95rem',
+                                textAlign: 'left'
+                            }}
+                            className="hover:bg-[rgba(245,158,11,0.15)] transition-colors"
+                        >
+                            <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: '1.1rem' }}></i>
+                            <span style={{ flex: 1 }}>{t('options.risk.title')}</span>
+                            <i className={`bi bi-chevron-${riskExpanded ? 'up' : 'down'}`} style={{ fontSize: '0.9rem' }}></i>
+                        </button>
+
+                        {/* Collapsible Content */}
+                        {riskExpanded && (
+                            <div style={{
+                                padding: '0 1rem 1rem 1rem',
+                                borderTop: '1px solid rgba(245, 158, 11, 0.2)',
+                                color: 'var(--foreground)',
+                                lineHeight: 1.7,
+                                fontSize: '0.9rem',
+                                animation: 'slideDown 0.2s ease-out'
+                            }}>
+                                <p style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.highRisk')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.highRiskDesc')}</span>
+                                </p>
+                                <p style={{ marginBottom: '0.5rem' }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.earnings')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.earningsDesc')}</span>
+                                </p>
+                                <p style={{ marginBottom: '0.5rem' }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.dataNote')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.dataDesc')}</span>
+                                </p>
+                                <p style={{ marginBottom: 0 }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.liveAdvice')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.liveAdviceDesc')}</span>
+                                </p>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Options Table */}
