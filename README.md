@@ -307,6 +307,37 @@ docker-compose up -d
 
 ## 🌟 最新更新
 
+### v2.4 - 2026年1月22日
+
+#### UI/UX 改进
+- ✅ **风险提示优化**：可折叠面板设计，默认收起节省空间
+  - 折叠时高度从 ~150px 降至 ~44px
+  - 用户偏好通过 localStorage 持久化
+  - 平滑动画过渡效果
+- ✅ **首页优化**：暂时隐藏模拟投资组合区域（待数据接入后启用）
+
+#### SEO 搜索优化
+- ✅ **完整 SEO 支持**：大幅提升搜索引擎可见性
+  - index.html 添加完整 meta 标签（description、keywords、author）
+  - Open Graph 标签支持（Facebook、LinkedIn 分享预览）
+  - Twitter Card 支持
+  - JSON-LD 结构化数据（Schema.org SoftwareApplication）
+  - 主题色配置（#0D9B97）
+- ✅ **搜索引擎爬虫配置**：
+  - robots.txt 爬虫规则
+  - sitemap.xml 站点地图（含多语言 hreflang 支持）
+- ✅ **动态 SEO**：使用 react-helmet-async
+  - 首页、期权研究、股票分析页面动态 meta
+  - 根据语言自动切换 title 和 description
+  - canonical URL 配置
+
+#### 技术改进
+- ✅ **TypeScript 修复**：修复 useTaskPolling 类型问题
+- ✅ **UI 组件增强**：
+  - Button 组件添加 strategy、brand 变体
+  - Card 组件添加 glass、elevated、featured 变体
+  - 统一品牌色系统
+
 ### v2.3 - 2026年1月21日
 
 #### 期权优先版本重构
