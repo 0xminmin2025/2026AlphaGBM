@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
-import StockSearchInput from '@/components/ui/StockSearchInput';
+import MultiStockInput from '@/components/ui/MultiStockInput';
 import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
 import { useTranslation } from 'react-i18next';
 
@@ -551,6 +551,7 @@ type RiskReturnProfile = {
 
 type OptionData = {
     identifier: string;
+    symbol?: string;  // Stock symbol for multi-stock mode
     strike: number;
     latest_price: number;
     bid_price: number;
@@ -615,7 +616,7 @@ export default function Options() {
         'buy_call': `Buy Call (${t('options.strategy.buyCall')})`
     };
 
-    const [ticker, setTicker] = useState('');
+    const [tickers, setTickers] = useState<string[]>([]);
     const [expirations, setExpirations] = useState<ExpirationDate[]>([]);
     const [selectedExpiry, setSelectedExpiry] = useState('');
     const [chain, setChain] = useState<OptionChainResponse | null>(null);
@@ -636,6 +637,7 @@ export default function Options() {
     const [strikeRange, setStrikeRange] = useState<[number, number]>([0, 0]);
     const [returnRange, setReturnRange] = useState<[number, number]>([0, 0]);
     const [selectedRiskStyle, setSelectedRiskStyle] = useState<string | null>(null);
+    const [tickerFilter, setTickerFilter] = useState<string[]>([]);  // Multi-stock filter
 
     // View mode state (analysis vs income)
     const [viewMode, setViewMode] = useState<'analysis' | 'income'>('analysis');
@@ -650,7 +652,143 @@ export default function Options() {
     const [stockHistoryOHLC, setStockHistoryOHLC] = useState<OHLCData[] | null>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
-    // Initialize task polling hook
+    // Multi-stock task tracking
+    const pendingTasksRef = useRef<Map<string, { symbol: string; taskId: string }>>(new Map());
+    const completedResultsRef = useRef<Map<string, OptionChainResponse>>(new Map());
+    const expectedTickersRef = useRef<string[]>([]);
+
+    // Helper function to merge multiple chain results
+    const mergeChainResults = (results: Map<string, OptionChainResponse>): OptionChainResponse => {
+        const allCalls: OptionData[] = [];
+        const allPuts: OptionData[] = [];
+        let firstSymbol = '';
+        let firstExpiry = '';
+        let avgStockPrice = 0;
+        let priceCount = 0;
+
+        results.forEach((chainData, symbol) => {
+            if (!firstSymbol) {
+                firstSymbol = chainData.symbol;
+                firstExpiry = chainData.expiry_date;
+            }
+
+            // Add symbol to each option
+            const callsWithSymbol = (chainData.calls || []).map(opt => ({ ...opt, symbol }));
+            const putsWithSymbol = (chainData.puts || []).map(opt => ({ ...opt, symbol }));
+
+            allCalls.push(...callsWithSymbol);
+            allPuts.push(...putsWithSymbol);
+
+            if (chainData.real_stock_price) {
+                avgStockPrice += chainData.real_stock_price;
+                priceCount++;
+            }
+        });
+
+        // Sort by score descending (will be re-sorted by strategy later)
+        const sortByScore = (a: OptionData, b: OptionData) => {
+            const scoreA = a.scores?.total_score || 0;
+            const scoreB = b.scores?.total_score || 0;
+            return scoreB - scoreA;
+        };
+
+        allCalls.sort(sortByScore);
+        allPuts.sort(sortByScore);
+
+        return {
+            symbol: results.size > 1 ? Array.from(results.keys()).join(', ') : firstSymbol,
+            expiry_date: firstExpiry,
+            calls: allCalls,
+            puts: allPuts,
+            real_stock_price: priceCount > 0 ? avgStockPrice / priceCount : undefined,
+            data_source: 'merged'
+        };
+    };
+
+    // Handle task completion for multi-stock mode
+    const handleTaskComplete = (taskResult: OptionChainResponse, symbol: string) => {
+        console.log(`Task completed for ${symbol}:`, taskResult);
+
+        // Store the result
+        completedResultsRef.current.set(symbol, taskResult);
+
+        // Remove from pending tasks
+        pendingTasksRef.current.delete(symbol);
+
+        // Check if all tasks are complete
+        const expectedTickers = expectedTickersRef.current;
+        const completedCount = completedResultsRef.current.size;
+        const totalCount = expectedTickers.length;
+
+        setTaskProgress(Math.round((completedCount / totalCount) * 100));
+        setTaskStep(t('options.multiStock.progress', { completed: completedCount, total: totalCount }));
+
+        if (completedCount === totalCount) {
+            // All tasks completed - merge results
+            const mergedChain = mergeChainResults(completedResultsRef.current);
+            setChain(mergedChain);
+
+            if (mergedChain.real_stock_price) {
+                setStockPrice(mergedChain.real_stock_price);
+            }
+
+            setLoading(false);
+            setTaskProgress(100);
+            setTaskStep(t('options.taskComplete'));
+
+            // Save to browser history
+            HistoryStorage.saveOptionAnalysis({
+                symbol: expectedTickers.join(', '),
+                expiryDate: selectedExpiry,
+                analysisType: 'chain',
+                data: mergedChain
+            });
+
+            // Clear refs for next request
+            completedResultsRef.current.clear();
+            pendingTasksRef.current.clear();
+            expectedTickersRef.current = [];
+        }
+    };
+
+    // Helper function to poll a single task
+    const pollTask = async (taskId: string, symbol: string) => {
+        const poll = async () => {
+            try {
+                const response = await api.get(`/tasks/${taskId}/status`);
+                const status = response.data;
+
+                if (status.status === 'completed') {
+                    const resultResponse = await api.get(`/tasks/${taskId}/result`);
+                    handleTaskComplete(resultResponse.data.result_data, symbol);
+                } else if (status.status === 'failed') {
+                    console.error(`Task failed for ${symbol}:`, status.error_message);
+                    // Still mark as complete but with empty data
+                    handleTaskComplete({
+                        symbol,
+                        expiry_date: selectedExpiry,
+                        calls: [],
+                        puts: [],
+                    }, symbol);
+                } else {
+                    // Continue polling
+                    setTimeout(poll, 2000);
+                }
+            } catch (error) {
+                console.error(`Polling error for ${symbol}:`, error);
+                handleTaskComplete({
+                    symbol,
+                    expiry_date: selectedExpiry,
+                    calls: [],
+                    puts: [],
+                }, symbol);
+            }
+        };
+
+        poll();
+    };
+
+    // Initialize task polling hook for single stock fallback
     const { startPolling } = useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Options task completed:', taskResult);
@@ -669,7 +807,7 @@ export default function Options() {
 
             // Save to browser history
             HistoryStorage.saveOptionAnalysis({
-                symbol: ticker,
+                symbol: tickers[0] || '',
                 expiryDate: selectedExpiry,
                 analysisType: 'chain',
                 data: taskResult
@@ -688,9 +826,9 @@ export default function Options() {
         }
     });
 
-    // Fetch Expirations
+    // Fetch Expirations for multiple stocks
     const fetchExpirations = async () => {
-        if (!ticker) {
+        if (tickers.length === 0) {
             setError(t('options.form.enterTicker'));
             return;
         }
@@ -701,8 +839,45 @@ export default function Options() {
         setChain(null);
 
         try {
-            const response = await api.get(`/options/expirations/${ticker}`);
-            setExpirations(response.data.expirations || []);
+            // Parallel fetch expirations for all stocks
+            const results = await Promise.all(
+                tickers.map(t => api.get(`/options/expirations/${t}`))
+            );
+
+            // Get all expiration dates arrays
+            const allExpirations = results.map(r => r.data.expirations || []);
+
+            if (tickers.length === 1) {
+                // Single stock mode - use all expirations
+                setExpirations(allExpirations[0]);
+            } else {
+                // Multi stock mode - calculate intersection
+                const dateMap = new Map<string, { date: string; period_tag?: string; count: number }>();
+
+                allExpirations.forEach(exps => {
+                    exps.forEach((exp: ExpirationDate) => {
+                        const existing = dateMap.get(exp.date);
+                        if (existing) {
+                            existing.count += 1;
+                        } else {
+                            dateMap.set(exp.date, { date: exp.date, period_tag: exp.period_tag, count: 1 });
+                        }
+                    });
+                });
+
+                // Filter to only dates that appear in all stocks
+                const intersection = Array.from(dateMap.values())
+                    .filter(exp => exp.count === tickers.length)
+                    .map(({ date, period_tag }) => ({ date, period_tag }))
+                    .sort((a, b) => a.date.localeCompare(b.date));
+
+                if (intersection.length === 0) {
+                    setError(t('options.multiStock.noCommonExpiry'));
+                    setExpirations([]);
+                } else {
+                    setExpirations(intersection);
+                }
+            }
         } catch (err: any) {
             console.error(err);
             setError(err.response?.data?.error || 'Failed to fetch expirations');
@@ -711,9 +886,9 @@ export default function Options() {
         }
     };
 
-    // Fetch Chain
+    // Fetch Chain for multiple stocks
     const fetchChain = async (expiry: string) => {
-        if (!ticker || !expiry) return;
+        if (tickers.length === 0 || !expiry) return;
         setLoading(true);
         setError('');
         setTaskProgress(0);
@@ -723,21 +898,64 @@ export default function Options() {
         setIsHistoricalView(false);
         setHistoricalChain(null);
 
+        // Clear previous results
+        completedResultsRef.current.clear();
+        pendingTasksRef.current.clear();
+        expectedTickersRef.current = [...tickers];
+
         try {
-            // Create async task for options chain analysis
-            const response = await api.post(`/options/chain/${ticker}/${expiry}`, {
-                async: true // Use async mode
-            });
+            if (tickers.length === 1) {
+                // Single stock mode - use existing polling
+                const response = await api.post(`/options/chain/${tickers[0]}/${expiry}`, {
+                    async: true
+                });
 
-            if (response.data.success && response.data.task_id) {
-                console.log('Options task created:', response.data.task_id);
-                setTaskStep(t('options.taskCreated'));
-
-                // Start polling for task status
-                startPolling(response.data.task_id);
+                if (response.data.success && response.data.task_id) {
+                    console.log('Options task created:', response.data.task_id);
+                    setTaskStep(t('options.taskCreated'));
+                    startPolling(response.data.task_id);
+                } else {
+                    setError(response.data.error || 'Failed to create options analysis task');
+                    setLoading(false);
+                }
             } else {
-                setError(response.data.error || 'Failed to create options analysis task');
-                setLoading(false);
+                // Multi-stock mode - parallel requests
+                setTaskStep(t('options.multiStock.startingTasks', { count: tickers.length }));
+
+                const taskPromises = tickers.map(async (symbol) => {
+                    try {
+                        const response = await api.post(`/options/chain/${symbol}/${expiry}`, {
+                            async: true
+                        });
+
+                        if (response.data.success && response.data.task_id) {
+                            pendingTasksRef.current.set(symbol, {
+                                symbol,
+                                taskId: response.data.task_id
+                            });
+                            // Start polling for this task
+                            pollTask(response.data.task_id, symbol);
+                            return { symbol, taskId: response.data.task_id, success: true };
+                        } else {
+                            return { symbol, success: false, error: response.data.error };
+                        }
+                    } catch (err: any) {
+                        return { symbol, success: false, error: err.response?.data?.error || err.message };
+                    }
+                });
+
+                const results = await Promise.all(taskPromises);
+                const failedTasks = results.filter(r => !r.success);
+
+                if (failedTasks.length === tickers.length) {
+                    // All tasks failed
+                    setError(t('options.multiStock.allTasksFailed'));
+                    setLoading(false);
+                } else if (failedTasks.length > 0) {
+                    // Some tasks failed - continue with successful ones
+                    console.warn('Some tasks failed:', failedTasks);
+                    expectedTickersRef.current = results.filter(r => r.success).map(r => r.symbol);
+                }
             }
         } catch (err: any) {
             console.error(err);
@@ -750,7 +968,7 @@ export default function Options() {
     const handleExpirySelect = (expiry: string) => {
         setSelectedExpiry(expiry);
         // 选择到期日后立即运行分析（此时策略和股票代码都已选择）
-        if (expiry && strategy && ticker) {
+        if (expiry && strategy && tickers.length > 0) {
             fetchChain(expiry);
         }
     };
@@ -820,12 +1038,28 @@ export default function Options() {
                     return profile?.style === selectedRiskStyle;
                 });
             }
+
+            // Apply ticker filter (multi-stock mode)
+            if (tickerFilter.length > 0) {
+                options = options.filter(opt => {
+                    const optSymbol = opt.symbol || displayChain?.symbol || '';
+                    return tickerFilter.includes(optSymbol);
+                });
+            }
         } catch (error) {
             console.error('Error applying filters:', error);
         }
 
         // Sort based on selected column and direction
         options.sort((a, b) => {
+            // Handle symbol sorting separately (string comparison)
+            if (sortColumn === 'symbol') {
+                const symbolA = (a.symbol || displayChain?.symbol || '').toUpperCase();
+                const symbolB = (b.symbol || displayChain?.symbol || '').toUpperCase();
+                const diff = symbolA.localeCompare(symbolB);
+                return sortDirection === 'asc' ? diff : -diff;
+            }
+
             let valueA: number | null = null;
             let valueB: number | null = null;
 
@@ -916,7 +1150,8 @@ export default function Options() {
 
         // Fetch stock history (1 month)
         try {
-            const response = await api.get(`/options/history/${ticker}`, {
+            const stockSymbol = option.symbol || (tickers.length === 1 ? tickers[0] : displayChain?.symbol) || '';
+            const response = await api.get(`/options/history/${stockSymbol}`, {
                 params: { days: 30 }
             });
 
@@ -1200,16 +1435,17 @@ export default function Options() {
                     {t('options.form.title')}
                 </h5>
 
-                {/* Step 1: Enter Stock Symbol */}
+                {/* Step 1: Enter Stock Symbol(s) */}
                 <div className="mb-4 flex items-center gap-3">
                     <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                        <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>{t('options.form.step1')}</span> {t('options.form.step1Label')}
+                        <span style={{ color: tickers.length > 0 ? 'var(--primary)' : 'var(--muted-foreground)' }}>{t('options.form.step1')}</span> {t('options.form.step1Label')}
                     </label>
                     <div className="flex-1">
-                        <StockSearchInput
-                            value={ticker}
-                            onChange={setTicker}
-                            placeholder={t('options.form.tickerPlaceholder')}
+                        <MultiStockInput
+                            values={tickers}
+                            onChange={setTickers}
+                            maxCount={3}
+                            placeholder={t('options.multiStock.placeholder')}
                         />
                     </div>
                 </div>
@@ -1218,7 +1454,7 @@ export default function Options() {
                 <div className="mb-4">
                     <div className="flex items-center gap-3 flex-wrap">
                         <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <span style={{ color: strategy ? 'var(--primary)' : (ticker ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step2')}</span> {t('options.form.step2Label')}
+                            <span style={{ color: strategy ? 'var(--primary)' : (tickers.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step2')}</span> {t('options.form.step2Label')}
                         </label>
                         <div className="flex gap-2 flex-1 flex-wrap" style={{ minWidth: 0 }}>
                         {(Object.keys(strategyLabels) as Strategy[]).map(s => (
@@ -1226,10 +1462,10 @@ export default function Options() {
                                 key={s}
                                 className={`strategy-btn ${strategy === s ? 'active' : ''}`}
                                 onClick={() => setStrategy(s)}
-                                disabled={!ticker}
-                                style={{ 
-                                    opacity: ticker ? 1 : 0.5, 
-                                    cursor: ticker ? 'pointer' : 'not-allowed',
+                                disabled={tickers.length === 0}
+                                style={{
+                                    opacity: tickers.length > 0 ? 1 : 0.5,
+                                    cursor: tickers.length > 0 ? 'pointer' : 'not-allowed',
                                     flex: '1 1 0',
                                     minWidth: '100px'
                                 }}
@@ -1245,11 +1481,11 @@ export default function Options() {
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                     <div className="flex-1 min-w-[200px] flex items-center gap-3">
                         <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (ticker && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step3')}</span> {t('options.form.step3Label')}
+                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (tickers.length > 0 && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step3')}</span> {t('options.form.step3Label')}
                         </label>
                         <Button
                             onClick={fetchExpirations}
-                            disabled={expirationsLoading || !ticker || !strategy}
+                            disabled={expirationsLoading || tickers.length === 0 || !strategy}
                             className="btn-primary flex-1"
                         >
                             {expirationsLoading ? (
@@ -1520,8 +1756,11 @@ export default function Options() {
                                                     }`}></i>
                                                 </span>
 
-                                                {/* 期权类型 */}
+                                                {/* 期权类型 (多股票模式下显示股票代码) */}
                                                 <span className="text-white flex-1 font-medium">
+                                                    {tickers.length > 1 && opt.symbol && (
+                                                        <span className="text-[#0D9B97] font-mono mr-1">{opt.symbol}</span>
+                                                    )}
                                                     {isPut ? 'Sell Put' : 'Sell Call'} ${opt.strike}
                                                 </span>
 
@@ -1636,6 +1875,22 @@ export default function Options() {
                                             }}
                                             onClick={() => handleOptionClick(opt)}
                                         >
+                                            {/* 多股票模式下显示股票代码 */}
+                                            {tickers.length > 1 && opt.symbol && (
+                                                <div style={{
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 700,
+                                                    color: 'white',
+                                                    backgroundColor: 'var(--primary)',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    display: 'inline-block',
+                                                    marginBottom: '0.5rem',
+                                                    fontFamily: 'monospace'
+                                                }}>
+                                                    {opt.symbol}
+                                                </div>
+                                            )}
                                             <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
                                                 ${opt.strike}
                                             </div>
@@ -1800,6 +2055,50 @@ export default function Options() {
 
                                 return (
                                     <div className="p-4" style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
+                                        {/* Stock Filter (Multi-stock mode only) */}
+                                        {tickers.length > 1 && (
+                                            <div className="mb-4">
+                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                    {t('options.filter.byStock')}
+                                                </label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        onClick={() => setTickerFilter([])}
+                                                        className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                        style={{
+                                                            backgroundColor: tickerFilter.length === 0 ? 'var(--primary)' : 'transparent',
+                                                            color: tickerFilter.length === 0 ? 'white' : 'var(--muted-foreground)',
+                                                            borderColor: tickerFilter.length === 0 ? 'var(--primary)' : 'var(--border)',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        {t('options.filter.allStocks')}
+                                                    </button>
+                                                    {tickers.map(ticker => (
+                                                        <button
+                                                            key={ticker}
+                                                            onClick={() => {
+                                                                if (tickerFilter.includes(ticker)) {
+                                                                    setTickerFilter(tickerFilter.filter(t => t !== ticker));
+                                                                } else {
+                                                                    setTickerFilter([...tickerFilter, ticker]);
+                                                                }
+                                                            }}
+                                                            className={`px-3 py-1.5 rounded-full text-sm transition-all border font-mono font-semibold`}
+                                                            style={{
+                                                                backgroundColor: tickerFilter.includes(ticker) ? 'rgba(13, 155, 151, 0.2)' : 'transparent',
+                                                                color: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--muted-foreground)',
+                                                                borderColor: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--border)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {ticker}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Risk Style Filter */}
                                         <div className="mb-4">
                                             <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
@@ -1920,6 +2219,16 @@ export default function Options() {
                                 <table className="option-table">
                                 <thead>
                                     <tr>
+                                        {/* Show symbol column only in multi-stock mode */}
+                                        {tickers.length > 1 && (
+                                            <th
+                                                onClick={() => handleSort('symbol')}
+                                                style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            >
+                                                <div>{t('options.table.symbol')}</div>
+                                                <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Symbol{getSortIndicator('symbol')}</div>
+                                            </th>
+                                        )}
                                         <th
                                             onClick={() => handleSort('strike')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -1999,7 +2308,7 @@ export default function Options() {
                                 <tbody>
                                     {filteredOptions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
+                                            <td colSpan={tickers.length > 1 ? 12 : 11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
                                                 {t('options.table.noData')}
                                             </td>
                                         </tr>
@@ -2007,20 +2316,20 @@ export default function Options() {
                                         filteredOptions.map(opt => {
                                             const totalScore = getOptionScore(opt);
                                             const isRecommended = totalScore >= 60;
-                                            
+
                                             // 计算行权概率：优先使用assignment_probability（已是0-100%格式），否则用delta的绝对值
                                             const exerciseProb = opt.scores?.assignment_probability
                                                 ? opt.scores.assignment_probability  // 已经是百分比格式，不需要再乘100
                                                 : (opt.delta ? Math.abs(opt.delta) * 100 : 0);
-                                            
+
                                             // 计算价格差百分比：CALL是(strike - stockPrice)/stockPrice，PUT是(stockPrice - strike)/stockPrice
                                             const stockPrice = displayStockPrice || 0;
-                                            const priceDiffPercent = stockPrice > 0 
-                                                ? (opt.put_call === 'CALL' 
+                                            const priceDiffPercent = stockPrice > 0
+                                                ? (opt.put_call === 'CALL'
                                                     ? ((opt.strike - stockPrice) / stockPrice) * 100
                                                     : ((stockPrice - opt.strike) / stockPrice) * 100)
                                                 : 0;
-                                            
+
                                             // 计算权利金：优先使用premium，否则用中间价
                                             const premium = opt.premium ||
                                                 ((opt.bid_price && opt.ask_price)
@@ -2034,6 +2343,12 @@ export default function Options() {
                                                     onClick={() => handleOptionClick(opt)}
                                                     style={{ cursor: 'pointer' }}
                                                 >
+                                                    {/* Show symbol cell only in multi-stock mode */}
+                                                    {tickers.length > 1 && (
+                                                        <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                                                            {opt.symbol || displayChain?.symbol}
+                                                        </td>
+                                                    )}
                                                     <td style={{ fontWeight: 600 }}>
                                                         ${opt.strike}
                                                     </td>
@@ -2086,7 +2401,7 @@ export default function Options() {
             <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
                 <OptionsAnalysisHistory
                     onSelectHistory={(symbol, _analysisType, _optionIdentifier, expiryDate) => {
-                        setTicker(symbol);
+                        setTickers([symbol]);
                         setActiveTab('analysis');
                         // Try to load the expiry date if it matches available expirations
                         if (expiryDate && expirations.find(exp => exp.date === expiryDate)) {
@@ -2142,7 +2457,7 @@ export default function Options() {
                         const expiryDate = optionData.history_metadata?.expiry_date || chainData.expiry_date;
                         
                         if (symbol) {
-                            setTicker(symbol);
+                            setTickers([symbol]);
                         }
                         if (expiryDate) {
                             setSelectedExpiry(expiryDate);
