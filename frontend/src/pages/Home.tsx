@@ -1532,7 +1532,7 @@ export default function Home() {
                                             border: '1px solid rgba(34, 197, 94, 0.2)'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                <span style={{ fontSize: '1.25rem' }}>📈</span>
+                                                <i className="bi bi-graph-up-arrow" style={{ fontSize: '1.25rem', color: 'var(--bull)' }}></i>
                                                 <strong style={{ color: 'var(--bull)' }}>Sell Put</strong>
                                             </div>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
@@ -1546,7 +1546,7 @@ export default function Home() {
                                             border: '1px solid rgba(34, 197, 94, 0.2)'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                <span style={{ fontSize: '1.25rem' }}>🚀</span>
+                                                <i className="bi bi-rocket-takeoff" style={{ fontSize: '1.25rem', color: 'var(--bull)' }}></i>
                                                 <strong style={{ color: 'var(--bull)' }}>Buy Call</strong>
                                             </div>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
@@ -1564,7 +1564,7 @@ export default function Home() {
                                             border: '1px solid rgba(239, 68, 68, 0.2)'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                <span style={{ fontSize: '1.25rem' }}>📉</span>
+                                                <i className="bi bi-graph-down-arrow" style={{ fontSize: '1.25rem', color: 'var(--bear)' }}></i>
                                                 <strong style={{ color: 'var(--bear)' }}>Sell Call</strong>
                                             </div>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
@@ -1578,7 +1578,7 @@ export default function Home() {
                                             border: '1px solid rgba(239, 68, 68, 0.2)'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                <span style={{ fontSize: '1.25rem' }}>🛡️</span>
+                                                <i className="bi bi-shield-check" style={{ fontSize: '1.25rem', color: 'var(--bear)' }}></i>
                                                 <strong style={{ color: 'var(--bear)' }}>Buy Put</strong>
                                             </div>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>

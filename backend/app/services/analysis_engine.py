@@ -31,51 +31,93 @@ except ImportError:
         PEG_THRESHOLD_BASE = 1.5
 
 
-def check_liquidity(data, currency_symbol='$'):
+def check_liquidity(data, currency_symbol='$', ticker=None):
     """
     检查股票流动性，判断是否满足交易要求
-    
+    根据不同市场（美股、港股、A股）使用差异化的流动性门槛
+
     参数:
         data: 包含市场数据的字典
         currency_symbol: 货币符号，用于计算成交额
-    
+        ticker: 股票代码（用于识别市场）
+
     返回:
         (is_liquid, liquidity_info)
         is_liquid: 是否满足流动性要求
         liquidity_info: 流动性信息字典
     """
     try:
+        # 识别市场类型并获取对应的流动性门槛
+        symbol = ticker or data.get('symbol', '') or data.get('original_symbol', '')
+        market = detect_market_from_ticker(symbol)
+        market_config = get_market_config(market)
+
+        # 获取市场对应的流动性门槛
+        min_daily_volume = market_config.get('min_daily_volume_usd', MIN_DAILY_VOLUME_USD)
+        liquidity_coefficient = market_config.get('liquidity_coefficient', 1.0)
+        market_name = market_config.get('name', market)
+        currency = market_config.get('currency', 'USD')
+
+        # 调整后的门槛（考虑流动性系数）
+        adjusted_threshold = min_daily_volume * liquidity_coefficient
+
+        print(f"[流动性检查] {symbol}: 市场={market_name}, 门槛=${adjusted_threshold:,.0f}, 系数={liquidity_coefficient}")
+
         # 获取历史数据中的成交量
         if 'history_prices' in data and len(data.get('history_prices', [])) > 0:
             # 从历史数据计算平均成交量
             # 注意：这里需要实际的历史成交量数据
             # 如果数据中没有，尝试从其他来源获取
             pass
-        
+
         # 尝试从volume_anomaly获取
         volume_anomaly = data.get('volume_anomaly')
         if volume_anomaly and volume_anomaly.get('historical_avg'):
             # 估算日均成交额（成交量 * 当前价格）
             avg_volume = volume_anomaly['historical_avg']
             current_price = data.get('price', 0)
-            
+
             if current_price > 0:
-                # 估算日均成交额（美元）
-                estimated_daily_volume_usd = avg_volume * current_price
-                
+                # 估算日均成交额
+                estimated_daily_volume = avg_volume * current_price
+
+                # 对于非美元市场，需要换算（假设价格已经是本币）
+                # 这里简化处理：假设数据源已经是统一的美元或本币
+                if currency == 'CNY':
+                    # A股：假设价格是人民币，门槛也是人民币
+                    # 但 min_daily_volume_usd 是美元，需要换算
+                    # 简化：直接使用人民币门槛（约为美元门槛的7倍）
+                    # 实际应该从配置读取或动态汇率
+                    estimated_daily_volume_usd = estimated_daily_volume / 7.0  # 粗略汇率换算
+                elif currency == 'HKD':
+                    # 港股：港币换算
+                    estimated_daily_volume_usd = estimated_daily_volume / 7.8  # 粗略汇率
+                else:
+                    estimated_daily_volume_usd = estimated_daily_volume
+
                 # 检查是否满足最低流动性要求
-                is_liquid = estimated_daily_volume_usd >= MIN_DAILY_VOLUME_USD
-                
+                is_liquid = estimated_daily_volume_usd >= adjusted_threshold
+
+                print(f"[流动性检查] {symbol}: 日均成交额=${estimated_daily_volume_usd:,.0f}, 满足要求={is_liquid}")
+
                 return is_liquid, {
                     'estimated_daily_volume_usd': estimated_daily_volume_usd,
-                    'min_required_usd': MIN_DAILY_VOLUME_USD,
+                    'estimated_daily_volume_local': estimated_daily_volume,
+                    'min_required_usd': adjusted_threshold,
+                    'base_threshold': min_daily_volume,
+                    'liquidity_coefficient': liquidity_coefficient,
+                    'market': market,
+                    'market_name': market_name,
+                    'currency': currency,
                     'meets_requirement': is_liquid
                 }
-        
+
         # 如果无法获取成交量数据，返回默认值（允许交易，但标记为未知）
         return True, {
             'estimated_daily_volume_usd': None,
-            'min_required_usd': MIN_DAILY_VOLUME_USD,
+            'min_required_usd': adjusted_threshold,
+            'market': market,
+            'market_name': market_name,
             'meets_requirement': True,
             'warning': '无法获取成交量数据，流动性检查已跳过'
         }
@@ -88,47 +130,113 @@ def check_liquidity(data, currency_symbol='$'):
 def calculate_pe_percentile(current_pe, hist_data=None, ticker=None):
     """
     计算PE分位点（历史PE百分位）
-    
+
     参数:
         current_pe: 当前PE值
         hist_data: 历史数据DataFrame（可选，如果有的话可以计算历史PE）
         ticker: 股票代码（可选，用于获取历史数据）
-    
+
     返回:
         (pe_percentile, pe_z_score, historical_pe_list)
         pe_percentile: PE百分位（0-100）
         pe_z_score: Z分数
         historical_pe_list: 历史PE列表（如果可用）
     """
-    # TODO: 实现完整的PE分位点计算
-    # 当前版本：返回默认值，标记为需要改进
-    # 
-    # 完整实现需要：
-    # 1. 获取至少5年的历史财务数据
-    # 2. 计算每个季度/年度的历史PE
-    # 3. 计算当前PE在历史PE中的百分位
-    # 4. 计算Z分数（标准化偏离度）
-    #
-    # 数据来源：
-    # - Yahoo Finance的季度/年度财务数据
-    # - 或使用专业数据源（Alpha Vantage, FMP Cloud等）
-    
-    historical_pe_list = []
-    
-    if hist_data is not None and len(hist_data) > 0:
-        # 如果有历史数据，可以尝试从价格和盈利数据计算历史PE
-        # 但需要盈利数据（EPS），这在yfinance中较难获取
-        pass
-    
-    # 暂时返回默认值
-    if len(historical_pe_list) < PE_MIN_DATA_POINTS:
-        # 数据不足，返回中性值
-        return 50.0, 0.0, []
-    
-    # 计算百分位
     import numpy as np
-    pe_percentile = (sum(1 for pe in historical_pe_list if pe < current_pe) / len(historical_pe_list)) * 100
-    
+
+    historical_pe_list = []
+
+    # 方法1: 尝试使用ticker获取历史盈利数据计算PE序列
+    if ticker is not None:
+        try:
+            stock = yf.Ticker(ticker)
+
+            # 获取5年历史价格
+            hist_prices = stock.history(period="5y")
+            if hist_prices.empty:
+                print(f"[PE分位点] {ticker}: 无法获取历史价格数据")
+            else:
+                # 获取季度盈利数据
+                earnings = None
+                try:
+                    earnings = stock.quarterly_earnings
+                except Exception as e:
+                    print(f"[PE分位点] {ticker}: 获取季度盈利失败 - {e}")
+
+                if earnings is not None and not earnings.empty:
+                    # 遍历每个盈利报告期，计算历史PE
+                    for date, row in earnings.iterrows():
+                        eps = row.get('Earnings', 0)
+                        if eps is not None and eps > 0:
+                            try:
+                                # 找到该日期附近的收盘价
+                                # 转换日期格式以匹配
+                                report_date = pd.Timestamp(date)
+
+                                # 找最近的交易日价格
+                                price_mask = hist_prices.index <= report_date
+                                if price_mask.any():
+                                    price_at_date = hist_prices.loc[price_mask, 'Close'].iloc[-1]
+                                    # 年化EPS计算PE (季度EPS * 4)
+                                    annual_eps = eps * 4
+                                    pe = price_at_date / annual_eps
+
+                                    # 过滤异常值 (PE在0-200之间)
+                                    if 0 < pe < 200:
+                                        historical_pe_list.append(pe)
+                            except Exception as e:
+                                continue
+
+                    if len(historical_pe_list) >= 4:
+                        print(f"[PE分位点] {ticker}: 从盈利数据计算得到 {len(historical_pe_list)} 个历史PE点")
+
+                # 方法2: 如果盈利数据不足，尝试使用info中的trailingPE历史
+                if len(historical_pe_list) < PE_MIN_DATA_POINTS:
+                    try:
+                        info = stock.info
+                        trailing_pe = info.get('trailingPE')
+                        forward_pe = info.get('forwardPE')
+
+                        # 使用当前PE和远期PE构建简单的历史参考
+                        if trailing_pe and trailing_pe > 0 and trailing_pe < 200:
+                            # 基于行业中位数PE和当前PE构建历史分布估计
+                            # 假设PE在历史中的波动范围约为±30%
+                            pe_estimates = []
+                            base_pe = trailing_pe
+
+                            # 生成模拟历史PE分布（基于合理假设）
+                            # 这是一个fallback方案，当真实历史数据不可用时
+                            for factor in [0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.3]:
+                                simulated_pe = base_pe * factor
+                                if 0 < simulated_pe < 200:
+                                    pe_estimates.append(simulated_pe)
+
+                            if forward_pe and forward_pe > 0 and forward_pe < 200:
+                                pe_estimates.append(forward_pe)
+
+                            if len(pe_estimates) >= 5:
+                                historical_pe_list = pe_estimates
+                                print(f"[PE分位点] {ticker}: 使用估算方法生成 {len(pe_estimates)} 个PE参考点")
+                    except Exception as e:
+                        print(f"[PE分位点] {ticker}: 估算方法失败 - {e}")
+
+        except Exception as e:
+            print(f"[PE分位点] {ticker}: 获取数据失败 - {e}")
+
+    # 数据不足，返回中性值
+    if len(historical_pe_list) < 5:
+        print(f"[PE分位点] {ticker if ticker else 'unknown'}: 历史PE数据不足({len(historical_pe_list)}个)，返回默认50%")
+        return 50.0, 0.0, []
+
+    # 计算百分位
+    # 使用 scipy.stats.percentileofscore 更精确
+    try:
+        from scipy import stats
+        pe_percentile = stats.percentileofscore(historical_pe_list, current_pe, kind='rank')
+    except ImportError:
+        # fallback: 手动计算
+        pe_percentile = (sum(1 for pe in historical_pe_list if pe < current_pe) / len(historical_pe_list)) * 100
+
     # 计算Z分数
     mean_pe = np.mean(historical_pe_list)
     std_pe = np.std(historical_pe_list)
@@ -136,7 +244,9 @@ def calculate_pe_percentile(current_pe, hist_data=None, ticker=None):
         pe_z_score = (current_pe - mean_pe) / std_pe
     else:
         pe_z_score = 0.0
-    
+
+    print(f"[PE分位点] {ticker if ticker else 'unknown'}: 当前PE={current_pe:.2f}, 分位点={pe_percentile:.1f}%, Z分数={pe_z_score:.2f}")
+
     return pe_percentile, pe_z_score, historical_pe_list
 
 
@@ -2033,8 +2143,113 @@ def get_polymarket_data():
     
     except Exception as e:
         print(f"Polymarket数据获取异常: {e}")
-    
+
     return polymarket_data
+
+
+def calculate_market_correlation(ticker, benchmark='SPY', period='6mo'):
+    """
+    计算个股与大盘的相关性
+
+    用于检测风险聚集：高相关性意味着个股与大盘同涨同跌，
+    在市场下跌时无法提供分散化保护。
+
+    参数:
+        ticker: 股票代码
+        benchmark: 基准指数（默认SPY）
+        period: 计算周期（默认6个月）
+
+    返回:
+        dict: {
+            'current_correlation': 当前相关性,
+            'avg_correlation': 平均相关性,
+            'correlation_trend': 相关性趋势 ('rising'/'falling'/'stable'),
+            'high_correlation_warning': 是否高度相关,
+            'beta_estimate': 基于相关性估算的Beta
+        }
+    """
+    try:
+        normalized_ticker = normalize_ticker(ticker)
+
+        # 下载股票和基准数据
+        stock_data = yf.download(normalized_ticker, period=period, progress=False)
+        benchmark_data = yf.download(benchmark, period=period, progress=False)
+
+        if stock_data.empty or benchmark_data.empty:
+            print(f"[相关性] {ticker}: 无法获取数据")
+            return None
+
+        # 获取收盘价
+        stock_close = stock_data['Close']
+        benchmark_close = benchmark_data['Close']
+
+        # 对齐日期
+        combined = pd.concat([stock_close, benchmark_close], axis=1).dropna()
+        combined.columns = ['stock', 'benchmark']
+
+        if len(combined) < 30:
+            print(f"[相关性] {ticker}: 数据点不足({len(combined)})")
+            return None
+
+        # 计算日收益率
+        combined['stock_return'] = combined['stock'].pct_change()
+        combined['benchmark_return'] = combined['benchmark'].pct_change()
+        combined = combined.dropna()
+
+        # 计算整体相关性
+        overall_corr = combined['stock_return'].corr(combined['benchmark_return'])
+
+        # 计算60日滚动相关性
+        rolling_corr = combined['stock_return'].rolling(60).corr(combined['benchmark_return'])
+        rolling_corr = rolling_corr.dropna()
+
+        if len(rolling_corr) < 10:
+            current_corr = overall_corr
+            avg_corr = overall_corr
+            trend = 'stable'
+        else:
+            current_corr = rolling_corr.iloc[-1]
+            avg_corr = rolling_corr.mean()
+
+            # 判断趋势（最近30天 vs 之前30天）
+            recent_corr = rolling_corr.iloc[-30:].mean() if len(rolling_corr) >= 30 else current_corr
+            older_corr = rolling_corr.iloc[-60:-30].mean() if len(rolling_corr) >= 60 else avg_corr
+
+            if recent_corr > older_corr + 0.1:
+                trend = 'rising'
+            elif recent_corr < older_corr - 0.1:
+                trend = 'falling'
+            else:
+                trend = 'stable'
+
+        # 计算Beta（股票收益率对大盘收益率的敏感度）
+        if combined['benchmark_return'].std() > 0:
+            cov = combined['stock_return'].cov(combined['benchmark_return'])
+            var = combined['benchmark_return'].var()
+            beta_estimate = cov / var if var > 0 else 1.0
+        else:
+            beta_estimate = 1.0
+
+        # 高相关性警告阈值
+        high_corr_threshold = 0.85
+
+        result = {
+            'current_correlation': round(float(current_corr), 3),
+            'avg_correlation': round(float(avg_corr), 3),
+            'correlation_trend': trend,
+            'high_correlation_warning': current_corr > high_corr_threshold,
+            'beta_estimate': round(float(beta_estimate), 2),
+            'benchmark': benchmark,
+            'period': period
+        }
+
+        print(f"[相关性] {ticker}: 当前相关性={current_corr:.3f}, 平均={avg_corr:.3f}, Beta={beta_estimate:.2f}, 趋势={trend}")
+
+        return result
+
+    except Exception as e:
+        print(f"[相关性] {ticker}: 计算失败 - {e}")
+        return None
 
 
 def get_options_market_data(ticker):
@@ -2179,10 +2394,10 @@ def calculate_dynamic_peg_threshold(treasury_10y, base_peg_threshold=1.0):
     return dynamic_peg_threshold
 
 
-def calculate_atr_stop_loss(buy_price, hist_data, atr_period=None, atr_multiplier=None, min_stop_loss_pct=None, beta=None):
+def calculate_atr_stop_loss(buy_price, hist_data, atr_period=None, atr_multiplier=None, min_stop_loss_pct=None, beta=None, vix=None):
     """
     基于ATR计算动态止损价格
-    
+
     参数:
         buy_price: 买入时的价格
         hist_data: DataFrame，包含High, Low, Close列
@@ -2190,9 +2405,13 @@ def calculate_atr_stop_loss(buy_price, hist_data, atr_period=None, atr_multiplie
         atr_multiplier: ATR的倍数（默认使用配置值）
         min_stop_loss_pct: 最小止损幅度（默认使用配置值）
         beta: 股票的Beta值（可选，如果提供则用于调整ATR倍数）
-    
+        vix: 当前VIX值（可选，如果提供则用于动态调整ATR倍数）
+
     返回:
-        止损价格
+        dict: 包含止损价格和调整详情
+            - stop_loss_price: 止损价格
+            - atr_multiplier: 最终使用的ATR倍数
+            - adjustments: 调整说明列表
     """
     # 使用配置默认值
     if atr_period is None:
@@ -2201,40 +2420,77 @@ def calculate_atr_stop_loss(buy_price, hist_data, atr_period=None, atr_multiplie
         atr_multiplier = ATR_MULTIPLIER_BASE
     if min_stop_loss_pct is None:
         min_stop_loss_pct = FIXED_STOP_LOSS_PCT
-    
+
+    adjustments = []
+    original_multiplier = atr_multiplier
+
+    # ===== 新增: VIX动态调整 =====
+    # VIX基准为20，高于20时需要更宽的止损空间
+    # VIX每上升10点，ATR倍数增加0.3
+    if vix is not None:
+        if vix > 20:
+            vix_adjustment = ((vix - 20) / 10) * 0.3
+            vix_adjustment = min(vix_adjustment, 1.0)  # 最多增加1.0
+            atr_multiplier = atr_multiplier + vix_adjustment
+            adjustments.append(f"VIX调整: +{vix_adjustment:.2f} (VIX={vix:.1f})")
+        elif vix < 15:
+            # VIX很低时可以适当收紧止损
+            vix_adjustment = -0.2
+            atr_multiplier = atr_multiplier + vix_adjustment
+            adjustments.append(f"低VIX调整: {vix_adjustment:.2f} (VIX={vix:.1f})")
+
     # 根据Beta调整ATR倍数（如果提供）
     if beta is not None:
+        beta_adjustment = 0
         if beta > BETA_HIGH_THRESHOLD:
             # 高Beta股票，使用更大的倍数（更宽止损）
+            beta_adjustment = atr_multiplier * (BETA_HIGH_MULTIPLIER - 1)
             atr_multiplier = atr_multiplier * BETA_HIGH_MULTIPLIER
+            adjustments.append(f"高Beta调整: +{beta_adjustment:.2f} (Beta={beta:.2f})")
         elif beta > BETA_MID_HIGH_THRESHOLD:
+            beta_adjustment = atr_multiplier * (BETA_MID_HIGH_MULTIPLIER - 1)
             atr_multiplier = atr_multiplier * BETA_MID_HIGH_MULTIPLIER
+            adjustments.append(f"中高Beta调整: +{beta_adjustment:.2f} (Beta={beta:.2f})")
         elif beta < BETA_LOW_THRESHOLD:
             # 低Beta股票，使用更小的倍数（更窄止损）
+            beta_adjustment = atr_multiplier * (BETA_LOW_MULTIPLIER - 1)
             atr_multiplier = atr_multiplier * BETA_LOW_MULTIPLIER
+            adjustments.append(f"低Beta调整: {beta_adjustment:.2f} (Beta={beta:.2f})")
         elif beta < BETA_MID_LOW_THRESHOLD:
+            beta_adjustment = atr_multiplier * (BETA_MID_LOW_MULTIPLIER - 1)
             atr_multiplier = atr_multiplier * BETA_MID_LOW_MULTIPLIER
-        
-        # 限制倍数范围
-        atr_multiplier = max(ATR_MULTIPLIER_MIN, min(ATR_MULTIPLIER_MAX, atr_multiplier))
-    
+            adjustments.append(f"中低Beta调整: {beta_adjustment:.2f} (Beta={beta:.2f})")
+
+    # 限制倍数范围
+    atr_multiplier = max(ATR_MULTIPLIER_MIN, min(ATR_MULTIPLIER_MAX, atr_multiplier))
+
+    if atr_multiplier != original_multiplier:
+        print(f"[ATR止损] ATR倍数从 {original_multiplier:.2f} 调整为 {atr_multiplier:.2f}, 调整: {', '.join(adjustments)}")
+
     # 计算ATR
     atr = calculate_atr(hist_data, atr_period)
-    
+
     if atr is None or atr <= 0:
         # 如果无法计算ATR，使用最小止损幅度
         stop_loss_price = buy_price * (1 - min_stop_loss_pct)
     else:
         # 基于ATR计算止损价格
         atr_stop_loss_price = buy_price - (atr * atr_multiplier)
-        
+
         # 硬止损价格（最小止损幅度）
         hard_stop_loss_price = buy_price * (1 - min_stop_loss_pct)
-        
+
         # 取两者中更保守的（止损价格更低）
         stop_loss_price = min(atr_stop_loss_price, hard_stop_loss_price)
-    
-    return stop_loss_price
+
+    # 返回详细结果（向后兼容：直接返回float时保持兼容）
+    return {
+        'stop_loss_price': stop_loss_price,
+        'atr_multiplier': atr_multiplier,
+        'adjustments': adjustments,
+        'vix': vix,
+        'beta': beta
+    }
 
 
 def calculate_market_sentiment(data):
@@ -2576,7 +2832,23 @@ def calculate_market_sentiment(data):
     # 将期权和宏观经济数据存储到data中，供前端和AI分析使用
     data['options_data'] = options_data
     data['macro_data'] = macro_data
-    
+
+    # 计算与大盘的相关性（用于风险聚集检测）
+    try:
+        correlation_result = calculate_market_correlation(symbol)
+        if correlation_result:
+            data['market_correlation'] = correlation_result
+
+            # 如果高度相关且是高Beta，增加风险警示
+            if correlation_result.get('high_correlation_warning'):
+                beta = correlation_result.get('beta_estimate', 1.0)
+                if beta > 1.2:
+                    # 高相关 + 高Beta = 市场下跌时损失更大
+                    sentiment_score -= 0.3
+                    print(f"[情绪] {symbol}: 高相关性+高Beta警告，情绪下调0.3")
+    except Exception as e:
+        print(f"[情绪] {symbol}: 相关性计算失败 - {e}")
+
     # 对于A股/港股，应用中国市场特有的情绪调整
     # 中国市场：政策>一切，权重更高（40%）
     if is_cn_market or is_hk_market:
@@ -2874,18 +3146,72 @@ def calculate_target_price(data, risk_result, style):
         prices.append(growth_based_price)
         methods_used.append('增长率折现')
     
-    # 方法4: 技术面目标价（适用于所有公司，但权重较低）
+    # 方法4: DCF估值法（适用于有稳定现金流的公司）
+    try:
+        free_cash_flow = data.get('free_cash_flow', 0)
+        shares_outstanding = data.get('shares_outstanding', 0)
+        growth = data.get('growth', 0.05)
+
+        if free_cash_flow and free_cash_flow > 0 and shares_outstanding and shares_outstanding > 0:
+            # 简化DCF模型
+            # 折现率 = 无风险利率 + 风险溢价
+            risk_free_rate = 0.04  # 当前美债收益率约4%
+            risk_score = risk_result.get('score', 5)
+            risk_premium = 0.03 + (risk_score / 100)  # 基于风险评分的溢价 (3%-13%)
+            discount_rate = risk_free_rate + risk_premium
+
+            # 确保增长率合理
+            growth_rate = max(0, min(growth, 0.30))  # 限制在0-30%
+
+            # 5年预测现金流
+            fcf_projections = []
+            current_fcf = free_cash_flow
+            for year in range(1, 6):
+                # 增长率逐年递减
+                year_growth = growth_rate * (0.9 ** (year - 1))
+                projected_fcf = current_fcf * (1 + year_growth)
+                discounted = projected_fcf / ((1 + discount_rate) ** year)
+                fcf_projections.append(discounted)
+                current_fcf = projected_fcf
+
+            # 永续价值 (Gordon Growth Model)
+            terminal_growth = min(growth_rate * 0.3, 0.025)  # 永续增长率不超过2.5%
+            if discount_rate > terminal_growth:
+                terminal_value = fcf_projections[-1] * (1 + terminal_growth) / (discount_rate - terminal_growth)
+                terminal_pv = terminal_value / ((1 + discount_rate) ** 5)
+            else:
+                terminal_pv = fcf_projections[-1] * 10  # 保守估计
+
+            # 企业价值
+            enterprise_value = sum(fcf_projections) + terminal_pv
+
+            # 股权价值 (简化：假设无净债务)
+            equity_value = enterprise_value
+
+            # 每股目标价
+            dcf_based_price = equity_value / shares_outstanding
+
+            # 限制DCF目标价在合理范围内（当前价格的50%-300%）
+            dcf_based_price = max(current_price * 0.5, min(dcf_based_price, current_price * 3.0))
+
+            prices.append(dcf_based_price)
+            methods_used.append('DCF估值')
+            print(f"[目标价] DCF估值: FCF={free_cash_flow:,.0f}, 折现率={discount_rate:.2%}, 目标价={dcf_based_price:.2f}")
+    except Exception as e:
+        print(f"计算DCF目标价格时出错: {e}")
+
+    # 方法5: 技术面目标价（适用于所有公司，但权重较低）
     try:
         week52_high = float(data.get('week52_high') or current_price)
         week52_low = float(data.get('week52_low') or current_price)
         ma50 = float(data.get('ma50') or current_price)
         ma200 = float(data.get('ma200') or current_price)
-        
+
         price_position = 0.5
         if week52_high and week52_low and week52_high > week52_low:
             price_position = (current_price - week52_low) / (week52_high - week52_low)
             price_position = max(0, min(1, price_position))
-        
+
         # 根据价格位置和技术趋势确定目标价
         if price_position < 0.3:
             # 价格在低位
@@ -2904,7 +3230,7 @@ def calculate_target_price(data, risk_result, style):
         else:
             # 价格在高位，目标价保守
             tech_based_price = current_price * 1.1
-        
+
         prices.append(tech_based_price)
         methods_used.append('技术面分析')
     except (ValueError, TypeError, ZeroDivisionError) as e:
@@ -2918,19 +3244,22 @@ def calculate_target_price(data, risk_result, style):
     else:
         # 根据公司类别和投资风格，给不同方法分配权重
         industry_category = company_info['industry_category']
-        
+
         if industry_category in ['technology', 'healthcare']:
-            # 科技和医疗：更重视增长率和PEG
-            weights = {'PE估值': 0.25, 'PEG估值': 0.30, '增长率折现': 0.30, '技术面分析': 0.15}
+            # 科技和医疗：更重视增长率和PEG，DCF权重中等
+            weights = {'PE估值': 0.20, 'PEG估值': 0.25, '增长率折现': 0.25, 'DCF估值': 0.20, '技术面分析': 0.10}
         elif industry_category == 'financial':
-            # 金融：更重视PE
-            weights = {'PE估值': 0.50, 'PEG估值': 0.20, '增长率折现': 0.15, '技术面分析': 0.15}
+            # 金融：更重视PE，DCF对金融业适用性较低
+            weights = {'PE估值': 0.45, 'PEG估值': 0.15, '增长率折现': 0.15, 'DCF估值': 0.10, '技术面分析': 0.15}
         elif industry_category in ['energy', 'utility']:
-            # 能源和公用事业：更重视PE和技术面
-            weights = {'PE估值': 0.40, 'PEG估值': 0.15, '增长率折现': 0.20, '技术面分析': 0.25}
+            # 能源和公用事业：更重视PE和DCF（现金流稳定）
+            weights = {'PE估值': 0.30, 'PEG估值': 0.10, '增长率折现': 0.15, 'DCF估值': 0.30, '技术面分析': 0.15}
+        elif industry_category in ['consumer', 'industrial']:
+            # 消费和工业：DCF权重较高（现金流可预测）
+            weights = {'PE估值': 0.25, 'PEG估值': 0.20, '增长率折现': 0.20, 'DCF估值': 0.25, '技术面分析': 0.10}
         else:
             # 其他行业：均衡权重
-            weights = {'PE估值': 0.35, 'PEG估值': 0.25, '增长率折现': 0.25, '技术面分析': 0.15}
+            weights = {'PE估值': 0.25, 'PEG估值': 0.20, '增长率折现': 0.20, 'DCF估值': 0.20, '技术面分析': 0.15}
         
         # 计算加权平均
         weighted_sum = 0

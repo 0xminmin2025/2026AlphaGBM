@@ -358,7 +358,15 @@ def calculate_ev_model(data, risk_result, style):
         
         # 计算 EV 评级（0-10 分）
         ev_score = calculate_ev_score(ev_weighted, risk_result)
-        
+
+        # 计算 EV 信心度评分
+        confidence_result = calculate_ev_confidence(
+            ev_1week['ev'],
+            ev_1month['ev'],
+            ev_3months['ev'],
+            data
+        )
+
         result = {
             'ev_1week': ev_1week,
             'ev_1month': ev_1month,
@@ -371,10 +379,11 @@ def calculate_ev_model(data, risk_result, style):
                 '3months': weight_3months
             },
             'recommendation': recommendation,
-            'ev_score': ev_score
+            'ev_score': ev_score,
+            'confidence': confidence_result
         }
-        
-        logger.info(f"EV 模型计算完成: 加权EV={ev_weighted:.2%}, 评分={ev_score:.1f}/10")
+
+        logger.info(f"EV 模型计算完成: 加权EV={ev_weighted:.2%}, 评分={ev_score:.1f}/10, 信心度={confidence_result['level']}")
         
         return result
         
@@ -506,4 +515,162 @@ def calculate_ev_score(ev_weighted, risk_result):
     except Exception as e:
         logger.error(f"计算 EV 评分失败: {e}")
         return 5.0  # 默认中性评分
+
+
+def calculate_ev_confidence(ev_1week, ev_1month, ev_3months, data=None):
+    """
+    计算 EV 模型的信心度
+
+    基于以下因素评估预测的可信度：
+    1. 时间一致性：三个时间维度的EV方向是否一致
+    2. 信号强度：EV绝对值是否足够大（弱信号信心低）
+    3. 数据质量：是否有足够的历史数据支撑
+    4. 波动率稳定性：近期波动率是否稳定
+
+    参数:
+        ev_1week: 1周EV值
+        ev_1month: 1月EV值
+        ev_3months: 3月EV值
+        data: 市场数据（可选）
+
+    返回:
+        dict: {
+            'level': 'HIGH'/'MEDIUM'/'LOW',
+            'score': 0-100,
+            'factors': [...],
+            'description': '...'
+        }
+    """
+    try:
+        score = 50  # 基础分
+        factors = []
+
+        # 定义方向阈值（绝对值小于2%视为中性）
+        neutral_threshold = 0.02
+
+        def get_direction(ev):
+            if ev > neutral_threshold:
+                return 'up'
+            elif ev < -neutral_threshold:
+                return 'down'
+            return 'neutral'
+
+        dir_1week = get_direction(ev_1week)
+        dir_1month = get_direction(ev_1month)
+        dir_3months = get_direction(ev_3months)
+
+        directions = [dir_1week, dir_1month, dir_3months]
+        non_neutral = [d for d in directions if d != 'neutral']
+
+        # 1. 时间一致性检查（权重40%）
+        if len(non_neutral) == 0:
+            # 全部中性
+            score += 0
+            factors.append('方向不明确（全部中性）')
+        elif len(set(non_neutral)) == 1:
+            # 非中性的方向完全一致
+            score += 40
+            factors.append(f'三个时间维度方向一致({non_neutral[0]})')
+        elif len(non_neutral) == 2 and len(set(non_neutral)) == 1:
+            # 两个有方向且一致
+            score += 25
+            factors.append('两个时间维度方向一致')
+        else:
+            # 方向存在分歧
+            score -= 15
+            factors.append('时间维度存在方向分歧')
+
+        # 2. 信号强度（权重30%）
+        avg_abs_ev = (abs(ev_1week) + abs(ev_1month) + abs(ev_3months)) / 3
+
+        if avg_abs_ev > 0.10:  # 平均EV > 10%
+            score += 30
+            factors.append(f'信号强度高(平均EV={avg_abs_ev:.1%})')
+        elif avg_abs_ev > 0.05:  # 平均EV 5-10%
+            score += 20
+            factors.append(f'信号强度中等(平均EV={avg_abs_ev:.1%})')
+        elif avg_abs_ev > 0.02:  # 平均EV 2-5%
+            score += 10
+            factors.append(f'信号强度偏弱(平均EV={avg_abs_ev:.1%})')
+        else:
+            score -= 10
+            factors.append(f'信号强度很弱(平均EV={avg_abs_ev:.1%})')
+
+        # 3. 数据质量检查（权重20%）
+        if data:
+            hist_prices = data.get('history_prices', [])
+            if len(hist_prices) >= 200:
+                score += 20
+                factors.append('历史数据充足(>200天)')
+            elif len(hist_prices) >= 60:
+                score += 10
+                factors.append('历史数据中等(60-200天)')
+            elif len(hist_prices) >= 20:
+                score += 5
+                factors.append('历史数据有限(20-60天)')
+            else:
+                score -= 10
+                factors.append('历史数据不足(<20天)')
+
+            # 4. 波动率稳定性（权重10%）
+            # 近期波动率与历史波动率的比较
+            if hist_prices and len(hist_prices) >= 60:
+                recent_prices = hist_prices[-20:]
+                older_prices = hist_prices[-60:-20]
+
+                if len(recent_prices) >= 2 and len(older_prices) >= 2:
+                    recent_returns = np.diff(recent_prices) / np.array(recent_prices[:-1])
+                    older_returns = np.diff(older_prices) / np.array(older_prices[:-1])
+
+                    recent_vol = np.std(recent_returns) if len(recent_returns) > 1 else 0
+                    older_vol = np.std(older_returns) if len(older_returns) > 1 else 0
+
+                    if older_vol > 0:
+                        vol_ratio = recent_vol / older_vol
+                        if 0.7 <= vol_ratio <= 1.3:
+                            score += 10
+                            factors.append('波动率稳定')
+                        elif vol_ratio > 1.5:
+                            score -= 5
+                            factors.append('近期波动率显著上升')
+                        elif vol_ratio < 0.5:
+                            score += 5
+                            factors.append('近期波动率下降')
+        else:
+            factors.append('无市场数据，无法评估数据质量')
+
+        # 限制分数范围
+        score = max(0, min(100, score))
+
+        # 确定信心度等级
+        if score >= 70:
+            level = 'HIGH'
+            description = '模型预测信心度高，三个时间维度方向一致，信号强度充足'
+        elif score >= 40:
+            level = 'MEDIUM'
+            description = '模型预测信心度中等，部分维度存在分歧或信号较弱'
+        else:
+            level = 'LOW'
+            description = '模型预测信心度低，方向不明确或数据不足'
+
+        return {
+            'level': level,
+            'score': score,
+            'factors': factors,
+            'description': description,
+            'directions': {
+                '1week': dir_1week,
+                '1month': dir_1month,
+                '3months': dir_3months
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"计算 EV 信心度失败: {e}")
+        return {
+            'level': 'LOW',
+            'score': 30,
+            'factors': ['计算过程出错'],
+            'description': '无法计算信心度'
+        }
 

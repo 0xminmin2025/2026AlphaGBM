@@ -101,17 +101,37 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
             hist = stock.history(period="1mo", timeout=10)
 
             if not hist.empty and len(hist) >= 15:
-                # Use ATR dynamic stop loss
-                stop_loss_price = analysis_engine.calculate_atr_stop_loss(
+                # 获取VIX值用于动态调整ATR倍数
+                vix = None
+                options_data = market_data.get('options_data', {})
+                if options_data:
+                    vix = options_data.get('vix')
+
+                # Use ATR dynamic stop loss with VIX adjustment
+                stop_loss_result = analysis_engine.calculate_atr_stop_loss(
                     buy_price=market_data['price'],
                     hist_data=hist,
                     atr_period=14,
                     atr_multiplier=2.5,
                     min_stop_loss_pct=0.05,
-                    beta=market_data.get('beta')
+                    beta=market_data.get('beta'),
+                    vix=vix
                 )
-                market_data['stop_loss_price'] = stop_loss_price
-                market_data['stop_loss_method'] = 'ATR动态止损'
+
+                # 处理新的返回格式（dict）
+                if isinstance(stop_loss_result, dict):
+                    market_data['stop_loss_price'] = stop_loss_result['stop_loss_price']
+                    market_data['stop_loss_method'] = 'ATR动态止损'
+                    market_data['stop_loss_details'] = {
+                        'atr_multiplier': stop_loss_result.get('atr_multiplier'),
+                        'adjustments': stop_loss_result.get('adjustments', []),
+                        'vix': stop_loss_result.get('vix'),
+                        'beta': stop_loss_result.get('beta')
+                    }
+                else:
+                    # 向后兼容：旧格式返回float
+                    market_data['stop_loss_price'] = stop_loss_result
+                    market_data['stop_loss_method'] = 'ATR动态止损'
             else:
                 # Fallback to fixed stop loss
                 stop_loss_price = market_data['price'] * 0.85
