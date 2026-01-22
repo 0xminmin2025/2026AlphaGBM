@@ -11,7 +11,7 @@ import { Menu, X, TrendingUp, Calculator, BarChart3, ArrowRight, Sparkles, Targe
 import FeedbackButton from '@/components/FeedbackButton';
 import PrivacyPolicy from '@/components/PrivacyPolicy';
 import HotRecommendations from '@/components/HotRecommendations';
-import SimulatedPortfolio from '@/components/SimulatedPortfolio';
+// import SimulatedPortfolio from '@/components/SimulatedPortfolio'; // Hidden until we have data
 
 // 样式
 const styles = `
@@ -482,8 +482,8 @@ export default function NewLanding() {
                 </div>
             </section>
 
-            {/* Simulated Portfolio Section */}
-            <section className="py-12 sm:py-16 px-4 sm:px-6">
+            {/* Simulated Portfolio Section - Hidden until we have data */}
+            {/* <section className="py-12 sm:py-16 px-4 sm:px-6">
                 <div className="max-w-5xl mx-auto">
                     <SimulatedPortfolio />
                     <div className="text-center mt-6 text-xs text-[var(--text-muted)]">
@@ -492,7 +492,7 @@ export default function NewLanding() {
                             : '* Simulated trades based on algorithm recommendations. Past performance does not guarantee future results.'}
                     </div>
                 </div>
-            </section>
+            </section> */}
 
             {/* Philosophy Section */}
             <section className="py-12 sm:py-16 px-4 sm:px-6 bg-[var(--bg-secondary)]">
