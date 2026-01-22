@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import MainLayout from '@/components/layouts/MainLayout';
 import Home from '@/pages/Home';
 import Options from '@/pages/Options';
@@ -12,6 +13,7 @@ import Landing from '@/pages/Landing';
 
 function App() {
   return (
+    <HelmetProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -27,6 +29,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </HelmetProvider>
   );
 }
 

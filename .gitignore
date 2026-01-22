@@ -74,6 +74,7 @@ htmlcov/
 !*.md
 !options_module/requirements.txt
 !options_module/env_template.txt
+!frontend/public/robots.txt
 
 # Database
 data/

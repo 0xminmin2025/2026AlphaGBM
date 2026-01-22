@@ -43,7 +43,7 @@ export function useTaskPolling(options: UseTaskPollingOptions = {}) {
 
   // Refs for tracking state across poll cycles
   const startTimeRef = useRef<number | null>(null);
-  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef<number>(0);
   const isPollingRef = useRef<boolean>(false);
 

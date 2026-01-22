@@ -1,0 +1,37 @@
+# AlphaGBM Robots.txt
+# https://alphagbm.com
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://alphagbm.com/sitemap.xml
+
+# 禁止爬取的路径
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /static/
+
+# 允许搜索引擎访问的静态资源
+Allow: /og-image.png
+Allow: /favicon.ico
+Allow: /*.js$
+Allow: /*.css$
+
+# 常见爬虫特殊规则
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+# 禁止恶意爬虫
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /

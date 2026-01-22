@@ -9,6 +9,7 @@ import StockSearchInput from '@/components/ui/StockSearchInput';
 import { NarrativeRadar } from '@/components/NarrativeRadar';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 import { useTranslation } from 'react-i18next';
+import { Helmet } from 'react-helmet-async';
 import i18n from '@/lib/i18n';
 
 // Declare global types for Chart.js and marked
@@ -712,8 +713,20 @@ export default function Home() {
         );
     }
 
+    const isZh = i18n.language.startsWith('zh');
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ color: 'var(--foreground)' }}>
+            <Helmet>
+                <title>{isZh ? '股票分析 - AlphaGBM | AI智能选股工具' : 'Stock Analysis - AlphaGBM | AI Smart Stock Picker'}</title>
+                <meta name="description" content={isZh
+                    ? '使用 AlphaGBM AI 智能股票分析工具，获取基本面评分、情绪分析、目标价格预测。支持多种投资风格，帮助您做出明智的投资决策。'
+                    : 'Use AlphaGBM AI stock analysis tool to get fundamental scoring, sentiment analysis, and price target predictions. Supports multiple investment styles.'}
+                />
+                <link rel="canonical" href="https://alphagbm.com/stock" />
+                <meta property="og:url" content="https://alphagbm.com/stock" />
+                <meta property="og:title" content={isZh ? '股票分析 - AlphaGBM' : 'Stock Analysis - AlphaGBM'} />
+            </Helmet>
             <style>{styles}</style>
 
             {/* Custom Tabs */}

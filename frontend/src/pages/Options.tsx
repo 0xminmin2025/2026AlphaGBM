@@ -9,6 +9,7 @@ import { useTaskPolling } from '@/hooks/useTaskPolling';
 import MultiStockInput from '@/components/ui/MultiStockInput';
 import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
 import { useTranslation } from 'react-i18next';
+import { Helmet } from 'react-helmet-async';
 
 // Declare global types for Chart.js
 declare global {
@@ -672,7 +673,8 @@ type Strategy = 'sell_put' | 'buy_put' | 'sell_call' | 'buy_call';
 export default function Options() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    const isZh = i18n.language.startsWith('zh');
 
     // Strategy labels with translations
     const strategyLabels: Record<Strategy, string> = {
@@ -1442,6 +1444,16 @@ export default function Options() {
 
     return (
         <div className="animate-in fade-in" style={{ color: 'var(--foreground)' }}>
+            <Helmet>
+                <title>{isZh ? '期权研究 - AlphaGBM | 智能期权链分析' : 'Options Research - AlphaGBM | Smart Options Chain Analysis'}</title>
+                <meta name="description" content={isZh
+                    ? '使用 AlphaGBM 智能期权分析工具，获取实时期权评分、策略推荐。支持多股票对比，快速找到最佳期权交易机会。'
+                    : 'Use AlphaGBM smart options analysis tool to get real-time option scoring and strategy recommendations. Compare multiple stocks and find the best options trading opportunities.'}
+                />
+                <link rel="canonical" href="https://alphagbm.com/options" />
+                <meta property="og:url" content="https://alphagbm.com/options" />
+                <meta property="og:title" content={isZh ? '期权研究 - AlphaGBM' : 'Options Research - AlphaGBM'} />
+            </Helmet>
             <style>{styles}</style>
 
             {/* Custom Tabs */}
@@ -2609,8 +2621,8 @@ function OptionDetailModal({
     onClose: () => void;
 }) {
     const { t } = useTranslation();
-    // Chart type state for tab switching
-    const [chartType, setChartType] = useState<'kline' | 'line'>('kline');
+    // Chart type - fixed to kline (line chart removed)
+    const chartType = 'kline' as 'kline' | 'line';
     // Create refs inside the modal component
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);

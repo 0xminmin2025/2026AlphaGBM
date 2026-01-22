@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Helmet } from 'react-helmet-async';
 import { Menu, X, TrendingUp, Calculator, BarChart3, ArrowRight, Sparkles, Target, Shield, Zap } from 'lucide-react';
 import FeedbackButton from '@/components/FeedbackButton';
 import PrivacyPolicy from '@/components/PrivacyPolicy';
@@ -304,6 +305,16 @@ export default function NewLanding() {
 
     return (
         <>
+            <Helmet>
+                <title>{isZh ? 'AlphaGBM - 智能期权分析平台 | AI驱动的股票期权研究工具' : 'AlphaGBM - AI Options Analysis Platform | Smart Options Research Tool'}</title>
+                <meta name="description" content={isZh
+                    ? 'AlphaGBM 是一款 AI 驱动的智能期权分析平台，提供实时期权评分、策略推荐、风险分析。支持美股期权研究，帮助投资者做出更明智的交易决策。'
+                    : 'AlphaGBM is an AI-powered options analysis platform offering real-time scoring, strategy recommendations, and risk analysis for US stock options trading.'}
+                />
+                <link rel="canonical" href="https://alphagbm.com/" />
+                <meta property="og:url" content="https://alphagbm.com/" />
+                <meta property="og:title" content={isZh ? 'AlphaGBM - 智能期权分析平台' : 'AlphaGBM - AI Options Analysis Platform'} />
+            </Helmet>
             <style>{styles}</style>
 
             {/* 导航栏 */}
