@@ -303,6 +303,11 @@ const styles = `
         to { transform: rotate(360deg); }
     }
 
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
     .form-select, .form-control {
         background: var(--muted);
         border: 1px solid var(--border);
@@ -435,58 +440,73 @@ function generateTakeProfitStrategy(
     }
 }
 
-// Investment Philosophy Component (constant)
+// Investment Philosophy Component (collapsible, default collapsed)
 function InvestmentPhilosophy() {
     const { t } = useTranslation();
-    const [expanded, setExpanded] = useState(true);
+    // 默认收起，从 localStorage 读取用户偏好
+    const [expanded, setExpanded] = useState(() => {
+        return localStorage.getItem('stockPhilosophyExpanded') === 'true';
+    });
+
+    const handleToggle = () => {
+        const newState = !expanded;
+        setExpanded(newState);
+        localStorage.setItem('stockPhilosophyExpanded', String(newState));
+    };
 
     return (
-        <div className="philosophy-card shadow-md mb-4">
+        <div className="philosophy-card shadow-md mb-4 overflow-hidden">
             <div
-                className="cursor-pointer"
-                style={{ padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: expanded ? '1px solid var(--border)' : 'none' }}
-                onClick={() => setExpanded(!expanded)}
+                className="cursor-pointer transition-colors hover:bg-[rgba(13,155,151,0.05)]"
+                style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                onClick={handleToggle}
             >
-                <div className="flex items-center gap-2" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
+                <div className="flex items-center gap-2" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.95rem' }}>
                     <i className="bi bi-lightbulb-fill"></i>
                     <span>{t('stock.philosophy.title')}</span>
                 </div>
-                <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.8rem' }}>
+                <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.75rem' }}>
                     <span>{expanded ? t('stock.philosophy.collapse') : t('stock.philosophy.expand')}</span>
-                    <i className={`bi bi-chevron-${expanded ? 'up' : 'down'}`}></i>
+                    <i className={`bi bi-chevron-${expanded ? 'up' : 'down'} transition-transform duration-200`}></i>
                 </div>
             </div>
             {expanded && (
-                <div style={{ padding: '1rem' }}>
-                    {/* Core Model */}
-                    <div style={{ marginBottom: '1.2rem' }}>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('stock.philosophy.coreModel') }}>
+                <div
+                    style={{
+                        padding: '0.75rem 1rem',
+                        borderTop: '1px solid var(--border)',
+                        animation: 'slideDown 0.2s ease-out'
+                    }}
+                >
+                    {/* Core Model - 更紧凑 */}
+                    <div style={{ marginBottom: '0.8rem' }}>
+                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', lineHeight: 1.4 }} dangerouslySetInnerHTML={{ __html: t('stock.philosophy.coreModel') }}>
                         </div>
                     </div>
 
-                    {/* Five Pillars */}
-                    <div style={{ marginBottom: '1.2rem' }}>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>{t('stock.philosophy.fivePillars')}</strong>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 mt-2">
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar1.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar1.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar2.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar2.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar3.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar3.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar4.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar4.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar5.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar5.desc')}</div></div>
+                    {/* Five Pillars - 更紧凑的网格 */}
+                    <div style={{ marginBottom: '0.8rem' }}>
+                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.fivePillars')}</strong>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2 mt-1">
+                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar1.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar1.desc')}</div></div>
+                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar2.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar2.desc')}</div></div>
+                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar3.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar3.desc')}</div></div>
+                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar4.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar4.desc')}</div></div>
+                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar5.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar5.desc')}</div></div>
                         </div>
                     </div>
 
-                    {/* Investment Styles */}
+                    {/* Investment Styles - 更紧凑 */}
                     <div>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>{t('stock.philosophy.styles')}</strong>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', marginBottom: '0.5rem', lineHeight: 1.4 }}>
+                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.styles')}</strong>
+                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', marginBottom: '0.4rem', lineHeight: 1.3 }}>
                             {t('stock.philosophy.stylesDesc')}
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Quality</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.quality')}</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Value</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.value')}</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Growth</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.growth')}</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Momentum</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.momentum')}</span></div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Quality</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.quality')}</span></div>
+                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Value</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.value')}</span></div>
+                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Growth</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.growth')}</span></div>
+                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Momentum</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.momentum')}</span></div>
                         </div>
                     </div>
                 </div>
@@ -809,52 +829,52 @@ export default function Home() {
 
                     {/* 自选股票模式 - 现在是唯一模式 */}
                     <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
-                                <div>
-                                    <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
-                                    <CustomSelect
-                                        options={[
-                                            {
-                                                value: 'quality',
-                                                label: i18n.language === 'zh' ? 'Quality (质量)' : 'Quality'
-                                            },
-                                            {
-                                                value: 'value',
-                                                label: i18n.language === 'zh' ? 'Value (价值)' : 'Value'
-                                            },
-                                            {
-                                                value: 'growth',
-                                                label: i18n.language === 'zh' ? 'Growth (成长)' : 'Growth'
-                                            },
-                                            {
-                                                value: 'momentum',
-                                                label: i18n.language === 'zh' ? 'Momentum (趋势)' : 'Momentum'
-                                            }
-                                        ]}
-                                        value={style}
-                                        onChange={setStyle}
-                                        placeholder={t('stock.form.stylePlaceholder')}
-                                        className="w-full"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.ticker')}</label>
-                                    <StockSearchInput
-                                        placeholder={t('stock.form.tickerPlaceholder')}
-                                        value={ticker}
-                                        onChange={setTicker}
-                                    />
-                                </div>
-                                <div className="flex items-end">
-                                    <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
-                                        <i className="bi bi-graph-up mr-2"></i>
-                                        {loading ? t('stock.form.analyzing') : t('stock.form.analyze')}
-                                    </Button>
-                                </div>
-                            </form>
+                        <div>
+                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
+                            <CustomSelect
+                                options={[
+                                    {
+                                        value: 'quality',
+                                        label: i18n.language === 'zh' ? 'Quality (质量)' : 'Quality'
+                                    },
+                                    {
+                                        value: 'value',
+                                        label: i18n.language === 'zh' ? 'Value (价值)' : 'Value'
+                                    },
+                                    {
+                                        value: 'growth',
+                                        label: i18n.language === 'zh' ? 'Growth (成长)' : 'Growth'
+                                    },
+                                    {
+                                        value: 'momentum',
+                                        label: i18n.language === 'zh' ? 'Momentum (趋势)' : 'Momentum'
+                                    }
+                                ]}
+                                value={style}
+                                onChange={setStyle}
+                                placeholder={t('stock.form.stylePlaceholder')}
+                                className="w-full"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.ticker')}</label>
+                            <StockSearchInput
+                                placeholder={t('stock.form.tickerPlaceholder')}
+                                value={ticker}
+                                onChange={setTicker}
+                            />
+                        </div>
+                        <div className="flex items-end">
+                            <Button type="submit" disabled={loading} className="btn-primary h-11 px-6">
+                                <i className="bi bi-graph-up mr-2"></i>
+                                {loading ? t('stock.form.analyzing') : t('stock.form.analyze')}
+                            </Button>
+                        </div>
+                    </form>
 
-                            <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
-                                {t(`stock.style.${style}.desc`)}
-                            </div>
+                    <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
+                        {t(`stock.style.${style}.desc`)}
+                    </div>
 
                     {/* 叙事雷达模式 - 暂时隐藏 */}
                     {/* {stockMode === 'narrative' && (
@@ -893,8 +913,8 @@ export default function Home() {
                     <MarketWarnings warnings={result.data.market_warnings} />
                 )}
 
-                {/* Investment Philosophy - 仅在手动模式显示 */}
-                {stockMode === 'manual' && <InvestmentPhilosophy />}
+                {/* Investment Philosophy */}
+                <InvestmentPhilosophy />
 
                 {/* Loading with Progress */}
                 {loading && (
