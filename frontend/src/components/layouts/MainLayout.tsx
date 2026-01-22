@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import LoadingScreen from '../ui/LoadingScreen';
@@ -14,7 +14,21 @@ export default function MainLayout() {
     const { user, signOut } = useAuth();
     const { isInitialLoading } = useUserData();
     const navigate = useNavigate();
+    const location = useLocation();
     const { t } = useTranslation();
+
+    // 处理股票分析导航 - 无论当前在哪个页面，点击都重置为新分析
+    const handleStockNavigation = (e: React.MouseEvent) => {
+        e.preventDefault();
+        // 如果已经在 /stock 页面，使用 replace 强制刷新
+        if (location.pathname === '/stock') {
+            // 先导航到临时路径再导航回来，触发 location.key 变化
+            navigate('/stock', { replace: true, state: { reset: Date.now() } });
+        } else {
+            navigate('/stock');
+        }
+        setIsMobileMenuOpen(false);
+    };
 
     const handleLogout = async () => {
         await signOut();
@@ -60,7 +74,7 @@ export default function MainLayout() {
                         <nav className="flex items-center space-x-6 text-sm font-medium">
                             <Link to="/options" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.options')}</Link>
                             <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
-                            <Link to="/stock" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.stock')}</Link>
+                            <a href="/stock" onClick={handleStockNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.stock')}</a>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>
                         </nav>
 
@@ -112,13 +126,13 @@ export default function MainLayout() {
                             >
                                 {t('nav.reverseScore')}
                             </Link>
-                            <Link
-                                to="/stock"
-                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
-                                onClick={closeMobileMenu}
+                            <a
+                                href="/stock"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors cursor-pointer"
+                                onClick={handleStockNavigation}
                             >
                                 {t('nav.stock')}
-                            </Link>
+                            </a>
                             <Link
                                 to="/pricing"
                                 className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"

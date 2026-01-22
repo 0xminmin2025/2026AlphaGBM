@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
 import StockSearchInput from '@/components/ui/StockSearchInput';
@@ -575,6 +575,7 @@ function MarketWarnings({ warnings }: { warnings?: any[] }) {
 export default function Home() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const { t } = useTranslation();
 
     const [ticker, setTicker] = useState('');
@@ -583,12 +584,24 @@ export default function Home() {
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('analysis');
-    // URL 参数支持
-    const [searchParams] = useSearchParams();
     // 叙事雷达功能暂时隐藏
+    // const [searchParams] = useSearchParams();
     // const initialMode = searchParams.get('mode') === 'narrative' ? 'narrative' : 'manual';
     // const [stockMode, setStockMode] = useState<'manual' | 'narrative'>(initialMode);
-    void searchParams; // 保留 searchParams 以备后用
+
+    // 监听路由变化：当导航到 /stock（无参数）时，重置分析状态
+    // 使用 location.state.reset 来检测导航栏点击事件（即使已经在 /stock 页面）
+    useEffect(() => {
+        // 如果是纯净的 /stock 路径（没有查询参数），重置状态开始新分析
+        if (location.pathname === '/stock' && !location.search) {
+            setTicker('');
+            setResult(null);
+            setError('');
+            setActiveTab('analysis');
+            setTaskProgress(0);
+            setTaskStep('');
+        }
+    }, [location.pathname, location.search, (location.state as any)?.reset]); // 监听 state.reset 变化
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
