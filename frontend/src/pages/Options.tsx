@@ -422,12 +422,18 @@ const styles = `
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 10px;
-        max-width: 480px;
+        max-width: 900px;
         width: 100%;
         max-height: 85vh;
         overflow-y: auto;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
         position: relative;
+    }
+
+    @media (max-width: 768px) {
+        .option-modal {
+            max-width: 95vw;
+        }
     }
 
     .option-modal-header {
@@ -475,30 +481,84 @@ const styles = `
 
     .option-info-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(7, 1fr);
         gap: 0.5rem;
         margin-bottom: 0.75rem;
     }
 
+    @media (max-width: 768px) {
+        .option-info-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+
+    @media (max-width: 480px) {
+        .option-info-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
     .option-info-item {
         background: var(--muted);
-        padding: 0.5rem;
+        padding: 0.5rem 0.625rem;
         border-radius: 6px;
         border-left: 2px solid var(--primary);
+        min-width: 0;
     }
 
     .option-info-label {
         font-size: 0.65rem;
         color: var(--muted-foreground);
         margin-bottom: 0.125rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .option-info-value {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
+        color: var(--foreground);
+        white-space: nowrap;
+    }
+
+    .option-risk-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .option-risk-item {
+        flex: 1;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .option-risk-item.loss {
+        background: var(--bear);
+        color: white;
+    }
+
+    .option-risk-item.margin {
+        background: var(--muted);
+        border: 1px solid var(--border);
         color: var(--foreground);
     }
 
+    .option-risk-label {
+        font-size: 0.75rem;
+        opacity: 0.9;
+    }
+
+    .option-risk-value {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    /* Keep backward compatibility */
     .option-max-loss {
         background: var(--bear);
         color: white;
@@ -2560,19 +2620,57 @@ function OptionDetailModal({
     };
 
     const maxLoss = calculateMaxLoss();
-    
+
+    // Calculate minimum margin requirement
+    const calculateMargin = (): number => {
+        // 如果后端返回了保证金数据，优先使用
+        if (option.scores?.margin_requirement) {
+            return option.scores.margin_requirement;
+        }
+
+        // 否则使用简化公式估算
+        if (strategy === 'sell_put') {
+            // Sell Put: 保证金 ≈ max(20% × 现价, 10% × 行权价) × 100 - 权利金收入
+            const margin1 = stockPrice * 0.20 * 100;
+            const margin2 = option.strike * 0.10 * 100;
+            return Math.max(margin1, margin2) - (premium * 100);
+        } else if (strategy === 'sell_call') {
+            // Sell Call (无担保): 保证金 ≈ max(20% × 现价 + (现价-行权价), 10% × 行权价) × 100
+            const itm = Math.max(0, stockPrice - option.strike);
+            const margin1 = (stockPrice * 0.20 + itm) * 100;
+            const margin2 = option.strike * 0.10 * 100;
+            return Math.max(margin1, margin2);
+        } else {
+            // Buy Call/Put: 无保证金要求，只需付权利金
+            return premium * 100;
+        }
+    };
+
+    const minMargin = calculateMargin();
+
     // Calculate stop loss price
+    // 止损价代表当股价达到此价格时，应该考虑止损
     const calculateStopLoss = (): number => {
         if (strategy === 'sell_put') {
-            // Sell Put: Stop loss when stock price drops below strike - premium * 2
+            // Sell Put: 卖出看跌期权
+            // 当股价下跌低于 (行权价 - 2倍权利金) 时止损
+            // 止损价在行权价下方
             return Math.max(0, option.strike - (premium * 2));
         } else if (strategy === 'sell_call') {
-            // Sell Call: Stop loss when stock price rises above strike + premium * 2
+            // Sell Call: 卖出看涨期权
+            // 当股价上涨超过 (行权价 + 2倍权利金) 时止损
+            // 止损价在行权价上方
             return option.strike + (premium * 2);
-        } else if (strategy === 'buy_call' || strategy === 'buy_put') {
-            // Buy Call/Put: Stop loss is based on option price (50% loss)
-            // For display purposes, show stock price where option would be worthless
-            return stockPrice;
+        } else if (strategy === 'buy_call') {
+            // Buy Call: 买入看涨期权
+            // 当股价下跌到行权价以下一定距离时止损（期权可能变得毫无价值）
+            // 止损价在行权价下方
+            return Math.max(0, option.strike - (option.strike * 0.05));
+        } else if (strategy === 'buy_put') {
+            // Buy Put: 买入看跌期权
+            // 当股价上涨超过行权价一定距离时止损（期权可能变得毫无价值）
+            // 止损价在行权价上方
+            return option.strike + (option.strike * 0.05);
         }
         return stockPrice;
     };
@@ -2631,10 +2729,30 @@ function OptionDetailModal({
             const allPrices = [...prices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
             if (allPrices.length === 0) return;
 
-            const minPrice = Math.min(...allPrices);
-            const maxPrice = Math.max(...allPrices);
-            const priceRange = maxPrice - minPrice;
-            const padding = priceRange > 0 ? priceRange * 0.1 : maxPrice * 0.05;
+            // 以现价为绝对中心计算Y轴范围
+            // 只考虑行权价和止损价，忽略历史价格的极端值
+            const keyPrices = [option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
+
+            // 计算行权价和止损价到现价的最大距离
+            const maxKeyDistance = keyPrices.length > 0
+                ? Math.max(...keyPrices.map(p => Math.abs(p - stockPrice)))
+                : stockPrice * 0.1; // 默认10%范围
+
+            // 使用较大的padding确保关键价格线清晰可见
+            // 最小范围为现价的8%，确保视图不会太窄
+            const minRange = stockPrice * 0.08;
+            const chartPadding = Math.max(maxKeyDistance * 1.3, minRange);
+
+            // Y轴严格以现价为中心
+            const yAxisMin = stockPrice - chartPadding;
+            const yAxisMax = stockPrice + chartPadding;
+
+            // 确保最小值不为负
+            const adjustedMinPrice = Math.max(0, yAxisMin);
+            // 如果调整了最小值，相应增加最大值保持现价居中
+            const adjustedMaxPrice = adjustedMinPrice === 0
+                ? stockPrice + (stockPrice - 0) // 镜像到上方
+                : yAxisMax;
 
             try {
                 chartInstance.current = new window.Chart(ctx, {
@@ -2646,42 +2764,47 @@ function OptionDetailModal({
                                 label: t('options.modal.chartStockPrice'),
                                 data: prices,
                                 borderColor: 'hsl(178, 78%, 32%)',
-                                backgroundColor: 'rgba(13, 155, 151, 0.1)',
+                                backgroundColor: 'rgba(13, 155, 151, 0.08)',
                                 fill: true,
                                 tension: 0.4,
                                 pointRadius: 0,
                                 borderWidth: 1.5,
-                                spanGaps: false
+                                spanGaps: false,
+                                order: 4
                             },
                             {
-                                label: t('options.modal.chartStrikePrice'),
-                                data: Array(dates.length).fill(option.strike),
-                                borderColor: 'hsl(38, 92%, 50%)',
-                                borderDash: [5, 5],
-                                borderWidth: 1.5,
-                                pointRadius: 0,
-                                fill: false,
-                                spanGaps: false
-                            },
-                            {
-                                label: t('options.modal.chartCurrentPrice'),
+                                label: `★ ${t('options.modal.chartCurrentPrice')} $${stockPrice.toFixed(2)}`,
                                 data: Array(dates.length).fill(stockPrice),
-                                borderColor: 'hsl(142, 76%, 36%)',
-                                borderDash: [5, 5],
-                                borderWidth: 1.5,
+                                borderColor: '#4ade80',
+                                backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                                borderDash: [],
+                                borderWidth: 3,
                                 pointRadius: 0,
                                 fill: false,
-                                spanGaps: false
+                                spanGaps: false,
+                                order: 1
                             },
                             {
-                                label: t('options.modal.chartStopLoss'),
-                                data: Array(dates.length).fill(stopLossPrice),
-                                borderColor: 'hsl(0, 72%, 51%)',
-                                borderDash: [5, 5],
-                                borderWidth: 1.5,
+                                label: t('options.modal.chartStrikePrice') + ` ($${option.strike.toFixed(2)})`,
+                                data: Array(dates.length).fill(option.strike),
+                                borderColor: '#f59e0b',
+                                borderDash: [8, 4],
+                                borderWidth: 2,
                                 pointRadius: 0,
                                 fill: false,
-                                spanGaps: false
+                                spanGaps: false,
+                                order: 2
+                            },
+                            {
+                                label: t('options.modal.chartStopLoss') + ` ($${stopLossPrice.toFixed(2)})`,
+                                data: Array(dates.length).fill(stopLossPrice),
+                                borderColor: '#ef4444',
+                                borderDash: [4, 4],
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false,
+                                order: 3
                             }
                         ]
                     },
@@ -2729,8 +2852,8 @@ function OptionDetailModal({
                                 }
                             },
                             y: {
-                                min: Math.max(0, minPrice - padding),
-                                max: maxPrice + padding,
+                                min: adjustedMinPrice,
+                                max: adjustedMaxPrice,
                                 ticks: {
                                     color: 'hsl(240, 5%, 64.9%)',
                                     font: { size: 8 },
@@ -2804,57 +2927,28 @@ function OptionDetailModal({
                         </div>
                     </div>
 
-                    {/* Max Loss */}
-                    <div className="option-max-loss">
-                        <span className="option-max-loss-label">{t('options.modal.maxLoss')}</span>
-                        <span className="option-max-loss-value">${maxLoss.toFixed(0)}</span>
+                    {/* Max Loss & Min Margin */}
+                    <div className="option-risk-row">
+                        <div className="option-risk-item loss">
+                            <span className="option-risk-label">{t('options.modal.maxLoss')}</span>
+                            <span className="option-risk-value">${maxLoss.toFixed(0)}</span>
+                        </div>
+                        <div className="option-risk-item margin">
+                            <span className="option-risk-label">{t('options.modal.minMargin')}</span>
+                            <span className="option-risk-value">${minMargin.toFixed(0)}</span>
+                        </div>
                     </div>
 
-                    {/* Chart */}
+                    {/* K-Line Chart Only */}
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted-foreground)' }}>
-                                {t('options.modal.chartTitle')}
-                            </div>
-                            {/* Chart Type Toggle */}
-                            <div style={{ display: 'flex', gap: '4px', background: 'var(--muted)', borderRadius: '6px', padding: '2px' }}>
-                                <button
-                                    onClick={() => setChartType('kline')}
-                                    style={{
-                                        padding: '4px 10px',
-                                        fontSize: '11px',
-                                        border: 'none',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        background: chartType === 'kline' ? 'var(--primary)' : 'transparent',
-                                        color: chartType === 'kline' ? 'white' : 'var(--muted-foreground)',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    {t('options.modal.klineChart')}
-                                </button>
-                                <button
-                                    onClick={() => setChartType('line')}
-                                    style={{
-                                        padding: '4px 10px',
-                                        fontSize: '11px',
-                                        border: 'none',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        background: chartType === 'line' ? 'var(--primary)' : 'transparent',
-                                        color: chartType === 'line' ? 'white' : 'var(--muted-foreground)',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    {t('options.modal.lineChart')}
-                                </button>
-                            </div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted-foreground)', marginBottom: '0.5rem' }}>
+                            {t('options.modal.chartTitle')}
                         </div>
                         {loadingHistory ? (
                             <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <div className="spinner" style={{ width: '24px', height: '24px' }}></div>
                             </div>
-                        ) : chartType === 'kline' && stockHistoryOHLC && stockHistoryOHLC.length > 0 ? (
+                        ) : stockHistoryOHLC && stockHistoryOHLC.length > 0 ? (
                             <KlineChart
                                 data={stockHistoryOHLC}
                                 currentPrice={stockPrice}
@@ -2862,25 +2956,6 @@ function OptionDetailModal({
                                 stopLossPrice={stopLossPrice}
                                 height={200}
                             />
-                        ) : chartType === 'line' && stockHistory ? (
-                            <div className="option-chart-container">
-                                <canvas ref={chartRef}></canvas>
-                            </div>
-                        ) : (stockHistory || stockHistoryOHLC) ? (
-                            // Fallback: show whichever chart has data
-                            stockHistoryOHLC && stockHistoryOHLC.length > 0 ? (
-                                <KlineChart
-                                    data={stockHistoryOHLC}
-                                    currentPrice={stockPrice}
-                                    strikePrice={option.strike}
-                                    stopLossPrice={stopLossPrice}
-                                    height={200}
-                                />
-                            ) : stockHistory ? (
-                                <div className="option-chart-container">
-                                    <canvas ref={chartRef}></canvas>
-                                </div>
-                            ) : null
                         ) : (
                             <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>
                                 {t('options.modal.noHistory')}

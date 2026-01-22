@@ -5,11 +5,11 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
@@ -18,12 +18,33 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // 策略选择按钮（未选中状态）
+        strategy:
+          "border border-border bg-muted text-foreground hover:bg-primary hover:text-white hover:border-primary hover:-translate-y-0.5",
+        // 策略选择按钮（选中状态）
+        "strategy-active":
+          "bg-primary text-white border-primary shadow-md",
+        // 品牌按钮（统一品牌色 #0D9B97）
+        brand:
+          "bg-[#0D9B97] text-white hover:bg-[#10B5B0] shadow-[0_2px_4px_rgba(13,155,151,0.3)] hover:shadow-[0_4px_8px_rgba(13,155,151,0.4)]",
+        // 品牌按钮轮廓版
+        "brand-outline":
+          "border-2 border-[#0D9B97] text-[#0D9B97] bg-transparent hover:bg-[#0D9B97] hover:text-white",
+        // 成功按钮
+        success:
+          "bg-green-600 text-white hover:bg-green-700",
+        // 警告按钮
+        warning:
+          "bg-amber-500 text-white hover:bg-amber-600",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
+        xl: "h-12 rounded-lg px-10 text-base",
         icon: "h-10 w-10",
+        // 策略按钮尺寸
+        strategy: "h-10 px-4 py-2 min-w-[100px]",
       },
     },
     defaultVariants: {

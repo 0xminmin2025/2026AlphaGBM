@@ -151,11 +151,11 @@ export default function MultiStockInput({
 
     return (
         <div ref={containerRef} className={`relative ${className}`}>
-            {/* Input container with tags */}
+            {/* Input container with tags - 移动端优化 */}
             <div
                 className={`
-                    flex flex-wrap items-center gap-2
-                    px-3 py-2 min-h-[42px]
+                    flex flex-wrap items-center gap-1.5 sm:gap-2
+                    px-2 sm:px-3 py-2 min-h-[42px]
                     bg-[#27272a] border border-white/20 rounded-md
                     focus-within:border-[#0D9B97] focus-within:ring-2 focus-within:ring-[#0D9B97]/20
                     transition-colors
@@ -163,15 +163,15 @@ export default function MultiStockInput({
                 `}
                 onClick={() => !disabled && inputRef.current?.focus()}
             >
-                {/* Stock tags */}
+                {/* Stock tags - 移动端更紧凑 */}
                 {values.map((ticker) => (
                     <div
                         key={ticker}
                         className="
-                            flex items-center gap-1.5
-                            px-2 py-1
+                            flex items-center gap-1 sm:gap-1.5
+                            px-1.5 sm:px-2 py-0.5 sm:py-1
                             bg-[#0D9B97]/20 border border-[#0D9B97]/30
-                            rounded-md text-sm font-mono
+                            rounded text-xs sm:text-sm font-mono
                         "
                     >
                         <span className="text-[#0D9B97] font-semibold">{ticker}</span>
@@ -183,20 +183,20 @@ export default function MultiStockInput({
                                     handleRemoveStock(ticker);
                                 }}
                                 className="
-                                    w-4 h-4 flex items-center justify-center
+                                    w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center
                                     rounded-full hover:bg-[#0D9B97]/30
                                     text-[#0D9B97] hover:text-white
                                     transition-colors
                                 "
                                 aria-label={`Remove ${ticker}`}
                             >
-                                <X size={12} />
+                                <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                             </button>
                         )}
                     </div>
                 ))}
 
-                {/* Input field */}
+                {/* Input field - 移动端最小宽度更小 */}
                 {!isMaxReached && (
                     <input
                         ref={inputRef}
@@ -205,32 +205,46 @@ export default function MultiStockInput({
                         onChange={handleInputChange}
                         onFocus={() => inputValue.trim().length > 0 && setShowSuggestions(true)}
                         onKeyDown={handleKeyDown}
-                        placeholder={values.length === 0 ? (placeholder || defaultPlaceholder) : (isZh ? '继续添加...' : 'Add more...')}
+                        placeholder={values.length === 0 ? (placeholder || defaultPlaceholder) : ''}
                         disabled={disabled}
                         className="
-                            flex-1 min-w-[120px]
+                            flex-1 min-w-[80px] sm:min-w-[120px]
                             bg-transparent border-none outline-none
                             text-white placeholder:text-slate-500
+                            text-sm sm:text-base
                         "
                         autoComplete="off"
                     />
                 )}
 
-                {/* Max reached indicator */}
-                {isMaxReached && values.length > 0 && (
-                    <span className="text-xs text-slate-500 ml-auto">
-                        {isZh ? `已选 ${values.length}/${maxCount}` : `${values.length}/${maxCount} selected`}
-                    </span>
+                {/* Max reached indicator / Progress indicator */}
+                {values.length > 0 && (
+                    <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                        {/* 进度指示器 */}
+                        <div className="flex gap-0.5">
+                            {Array.from({ length: maxCount }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-colors ${
+                                        i < values.length ? 'bg-[#0D9B97]' : 'bg-slate-600'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                        <span className="text-[10px] sm:text-xs text-slate-500 hidden sm:inline">
+                            {values.length}/{maxCount}
+                        </span>
+                    </div>
                 )}
             </div>
 
-            {/* Suggestions dropdown */}
+            {/* Suggestions dropdown - 移动端优化高度和字体 */}
             {showSuggestions && suggestions.length > 0 && !isMaxReached && (
-                <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl overflow-hidden max-h-[320px] overflow-y-auto">
+                <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl overflow-hidden max-h-[240px] sm:max-h-[320px] overflow-y-auto">
                     {suggestions.map((stock, index) => (
                         <div
                             key={stock.ticker}
-                            className={`px-3 py-2.5 cursor-pointer transition-colors flex items-center justify-between gap-2 ${
+                            className={`px-2.5 sm:px-3 py-2 sm:py-2.5 cursor-pointer transition-colors flex items-center justify-between gap-2 ${
                                 index === selectedIndex
                                     ? 'bg-[#0D9B97]/20 border-l-2 border-[#0D9B97]'
                                     : 'hover:bg-white/5 border-l-2 border-transparent'
@@ -239,22 +253,22 @@ export default function MultiStockInput({
                             onMouseEnter={() => setSelectedIndex(index)}
                         >
                             <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-mono font-semibold text-[#0D9B97]">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <span className="font-mono font-semibold text-[#0D9B97] text-sm sm:text-base">
                                         {stock.ticker}
                                     </span>
                                     {getMarketBadge(stock.market)}
                                 </div>
-                                <div className="text-sm text-slate-400 truncate">
+                                <div className="text-xs sm:text-sm text-slate-400 truncate">
                                     {stock.nameCn}
                                     {stock.nameEn && (
-                                        <span className="text-slate-500 ml-1">
+                                        <span className="text-slate-500 ml-1 hidden sm:inline">
                                             ({stock.nameEn})
                                         </span>
                                     )}
                                 </div>
                             </div>
-                            <div className="text-xs text-slate-600 font-mono">
+                            <div className="text-[10px] sm:text-xs text-slate-600 font-mono hidden sm:block">
                                 {stock.pinyin}
                             </div>
                         </div>
@@ -266,15 +280,15 @@ export default function MultiStockInput({
             {showSuggestions && inputValue.trim().length > 0 && suggestions.length === 0 && !isMaxReached && (
                 <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
                     <div
-                        className="px-3 py-3 cursor-pointer hover:bg-white/5 transition-colors"
+                        className="px-2.5 sm:px-3 py-2.5 sm:py-3 cursor-pointer hover:bg-white/5 transition-colors"
                         onClick={() => handleAddStock(inputValue)}
                     >
-                        <div className="text-slate-400 text-sm">
+                        <div className="text-slate-400 text-xs sm:text-sm">
                             {isZh
                                 ? '未找到匹配的股票，点击直接添加：'
                                 : 'No match found, click to add:'}
                         </div>
-                        <div className="text-[#0D9B97] font-mono font-semibold mt-1">{inputValue}</div>
+                        <div className="text-[#0D9B97] font-mono font-semibold mt-1 text-sm sm:text-base">{inputValue}</div>
                     </div>
                 </div>
             )}
