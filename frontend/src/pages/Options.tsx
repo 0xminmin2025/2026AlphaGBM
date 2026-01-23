@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
@@ -708,6 +708,7 @@ type Strategy = 'sell_put' | 'buy_put' | 'sell_call' | 'buy_call';
 export default function Options() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const { t, i18n } = useTranslation();
     const isZh = i18n.language.startsWith('zh');
 
@@ -764,6 +765,43 @@ export default function Options() {
     const [filterExpanded, setFilterExpanded] = useState(() => {
         return localStorage.getItem('optionsFilterExpanded') === 'true';
     });
+
+    // 监听导航栏点击重置状态
+    useEffect(() => {
+        const resetState = (location.state as { reset?: number })?.reset;
+        if (resetState) {
+            // 重置所有状态到初始值
+            setTickers([]);
+            setExpirations([]);
+            setSelectedExpiry('');
+            setChain(null);
+            setLoading(false);
+            setError('');
+            setStrategy('sell_put');
+            setStockPrice(null);
+            setActiveTab('analysis');
+            setHistoricalChain(null);
+            setIsHistoricalView(false);
+            setSortColumn('score');
+            setSortDirection('desc');
+            setStrikeRange([0, 0]);
+            setReturnRange([0, 0]);
+            setSelectedRiskStyle(null);
+            setTickerFilter([]);
+            setViewMode('analysis');
+            setTaskProgress(0);
+            setTaskStep('');
+            setSelectedOption(null);
+            setStockHistory(null);
+            setStockHistoryOHLC(null);
+            // 清除 refs
+            pendingTasksRef.current.clear();
+            completedResultsRef.current.clear();
+            expectedTickersRef.current = [];
+            // 清除导航状态，防止刷新页面时再次触发重置
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [(location.state as { reset?: number })?.reset]);
 
     // Multi-stock task tracking
     const pendingTasksRef = useRef<Map<string, { symbol: string; taskId: string }>>(new Map());

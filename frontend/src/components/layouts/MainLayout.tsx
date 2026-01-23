@@ -30,6 +30,18 @@ export default function MainLayout() {
         setIsMobileMenuOpen(false);
     };
 
+    // 处理期权研究导航 - 无论当前在哪个页面，点击都重置为新分析
+    const handleOptionsNavigation = (e: React.MouseEvent) => {
+        e.preventDefault();
+        // 如果已经在 /options 页面，使用 replace 强制刷新
+        if (location.pathname === '/options') {
+            navigate('/options', { replace: true, state: { reset: Date.now() } });
+        } else {
+            navigate('/options');
+        }
+        setIsMobileMenuOpen(false);
+    };
+
     const handleLogout = async () => {
         await signOut();
         navigate('/login');
@@ -72,7 +84,7 @@ export default function MainLayout() {
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center space-x-8">
                         <nav className="flex items-center space-x-6 text-sm font-medium">
-                            <Link to="/options" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.options')}</Link>
+                            <a href="/options" onClick={handleOptionsNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.options')}</a>
                             <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
                             <a href="/stock" onClick={handleStockNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.stock')}</a>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>
@@ -112,13 +124,13 @@ export default function MainLayout() {
                 {isMobileMenuOpen && (
                     <div className="md:hidden bg-[#09090B]/95 backdrop-blur-md border-t border-white/10">
                         <nav className="flex flex-col px-4 py-4 space-y-4">
-                            <Link
-                                to="/options"
-                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
-                                onClick={closeMobileMenu}
+                            <a
+                                href="/options"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors cursor-pointer"
+                                onClick={handleOptionsNavigation}
                             >
                                 {t('nav.options')}
-                            </Link>
+                            </a>
                             <Link
                                 to="/options/reverse"
                                 className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
