@@ -36,11 +36,32 @@ risk_adjuster = RiskAdjuster() if PHASE1_AVAILABLE else None
 class MockDataGenerator:
     """Generates mock option data for testing"""
 
+    # 支持日权（0DTE / Daily Options）的标的
+    # SPY, QQQ, IWM 等主流 ETF 和指数期权有每日到期
+    DAILY_EXPIRY_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'SPX', 'XSP']
+
     @staticmethod
     def generate_expirations(symbol: str) -> List[ExpirationDate]:
-        """Generate mock expiration dates"""
+        """Generate mock expiration dates - 生成到期日列表"""
         expirations = []
         base_date = datetime.now()
+        seen_dates = set()
+
+        # 日权：为 SPY, QQQ, IWM 等添加每日到期（周一至周五）
+        if symbol.upper() in MockDataGenerator.DAILY_EXPIRY_SYMBOLS:
+            for day_offset in range(0, 14):  # 未来14天
+                exp_date = base_date + timedelta(days=day_offset)
+                # 只包含工作日（周一至周五）
+                if exp_date.weekday() < 5:
+                    date_str = exp_date.strftime("%Y-%m-%d")
+                    if date_str not in seen_dates:
+                        seen_dates.add(date_str)
+                        # period_tag: d=日权, w=周权, m=月权
+                        expirations.append(ExpirationDate(
+                            date=date_str,
+                            timestamp=int(exp_date.timestamp() * 1000),
+                            period_tag="d"  # 日权
+                        ))
 
         # Generate weekly and monthly expirations for next 3 months
         for week in range(1, 13):  # 12 weeks
@@ -51,15 +72,18 @@ class MockDataGenerator:
                 days_until_friday = 7
             exp_date += timedelta(days=days_until_friday)
 
-            # Monthly options on 3rd Friday
-            is_monthly = exp_date.day >= 15 and exp_date.day <= 21
-            period_tag = "m" if is_monthly else "w"
+            date_str = exp_date.strftime("%Y-%m-%d")
+            if date_str not in seen_dates:
+                seen_dates.add(date_str)
+                # Monthly options on 3rd Friday
+                is_monthly = exp_date.day >= 15 and exp_date.day <= 21
+                period_tag = "m" if is_monthly else "w"
 
-            expirations.append(ExpirationDate(
-                date=exp_date.strftime("%Y-%m-%d"),
-                timestamp=int(exp_date.timestamp() * 1000),
-                period_tag=period_tag
-            ))
+                expirations.append(ExpirationDate(
+                    date=date_str,
+                    timestamp=int(exp_date.timestamp() * 1000),
+                    period_tag=period_tag
+                ))
 
         return sorted(expirations, key=lambda x: x.timestamp)
 

@@ -348,11 +348,11 @@ const styles = `
         background-color: hsl(240, 5%, 10%);
     }
 
-    /* Image Upload Area */
+    /* Image Upload Area - Compact version */
     .image-upload-area {
-        border: 2px dashed hsl(240, 3.7%, 25%);
-        border-radius: 0.75rem;
-        padding: 2rem;
+        border: 1px dashed hsl(240, 3.7%, 25%);
+        border-radius: 0.5rem;
+        padding: 1rem;
         text-align: center;
         cursor: pointer;
         transition: all 0.2s;
@@ -375,21 +375,32 @@ const styles = `
     }
 
     .upload-icon {
-        width: 48px;
-        height: 48px;
-        margin: 0 auto 1rem;
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 0.5rem;
         color: hsl(240, 5%, 50%);
     }
 
     .upload-text {
-        font-size: 0.875rem;
+        font-size: 0.8rem;
         color: hsl(240, 5%, 64.9%);
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
     }
 
     .upload-hint {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         color: hsl(240, 5%, 50%);
+    }
+
+    /* Secondary tab style for upload */
+    .input-mode-tab.secondary {
+        font-size: 0.8rem;
+        padding: 0.625rem 0.75rem;
+    }
+
+    .input-mode-tab.secondary svg {
+        width: 14px;
+        height: 14px;
     }
 
     /* Image Preview */
@@ -513,8 +524,8 @@ export default function ReverseScore() {
     const { i18n } = useTranslation();
     const isZh = i18n.language.startsWith('zh');
 
-    // Input mode: 'upload' or 'manual'
-    const [inputMode, setInputMode] = useState<'upload' | 'manual'>('upload');
+    // Input mode: 'upload' or 'manual' - default to manual (primary action)
+    const [inputMode, setInputMode] = useState<'upload' | 'manual'>('manual');
 
     // Image upload state
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -748,22 +759,22 @@ export default function ReverseScore() {
                     </p>
                 </div>
 
-                {/* Input Mode Tabs */}
+                {/* Input Mode Tabs - Manual input first (primary action) */}
                 <div className="form-card">
                     <div className="input-mode-tabs">
-                        <button
-                            className={`input-mode-tab ${inputMode === 'upload' ? 'active' : ''}`}
-                            onClick={() => setInputMode('upload')}
-                        >
-                            <Camera size={18} />
-                            {isZh ? '截图上传' : 'Upload Screenshot'}
-                        </button>
                         <button
                             className={`input-mode-tab ${inputMode === 'manual' ? 'active' : ''}`}
                             onClick={() => setInputMode('manual')}
                         >
                             <FileText size={18} />
                             {isZh ? '手动录入' : 'Manual Input'}
+                        </button>
+                        <button
+                            className={`input-mode-tab secondary ${inputMode === 'upload' ? 'active' : ''}`}
+                            onClick={() => setInputMode('upload')}
+                        >
+                            <Camera size={14} />
+                            {isZh ? '截图识别' : 'Screenshot'}
                         </button>
                     </div>
 
@@ -1212,6 +1223,37 @@ export default function ReverseScore() {
                         </div>
                     </>
                 )}
+
+                {/* Marketing Section */}
+                <div className="form-card mt-8 border-t border-slate-700 pt-6">
+                    <div className="text-center">
+                        <h3 className="text-lg font-semibold mb-2">
+                            {isZh ? '探索更多期权机会' : 'Explore More Options Opportunities'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4 max-w-lg mx-auto">
+                            {isZh
+                                ? '使用我们的AI期权研究工具，发现市场上最优质的期权交易机会'
+                                : 'Use our AI options research tool to discover the best options trading opportunities'}
+                        </p>
+                        <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground mb-4">
+                            <span className="px-2 py-1 bg-slate-800 rounded">
+                                {isZh ? '智能期权链分析' : 'Smart Options Chain'}
+                            </span>
+                            <span className="px-2 py-1 bg-slate-800 rounded">
+                                {isZh ? '每日热门推荐' : 'Daily Hot Picks'}
+                            </span>
+                            <span className="px-2 py-1 bg-slate-800 rounded">
+                                {isZh ? '风险评估' : 'Risk Assessment'}
+                            </span>
+                        </div>
+                        <Button
+                            onClick={() => navigate('/options')}
+                            className="bg-[#0D9B97] hover:bg-[#10B5B0] text-white"
+                        >
+                            {isZh ? '立即体验期权研究' : 'Try Options Research Now'}
+                        </Button>
+                    </div>
+                </div>
             </div>
         </>
     );

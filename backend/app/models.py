@@ -368,3 +368,24 @@ class DailyRecommendation(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class AnalyticsEvent(db.Model):
+    """用户行为分析事件"""
+    __tablename__ = 'analytics_events'
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    event_type = db.Column(db.String(100), nullable=False, index=True)
+    session_id = db.Column(db.String(50), nullable=False, index=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=True, index=True)
+    user_tier = db.Column(db.String(20), nullable=True)  # guest, free, plus, pro
+    properties = db.Column(db.JSON, nullable=True)  # 事件属性
+    url = db.Column(db.String(500), nullable=True)
+    referrer = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    # 添加索引以优化常见查询
+    __table_args__ = (
+        db.Index('idx_analytics_type_date', 'event_type', 'created_at'),
+        db.Index('idx_analytics_user_date', 'user_id', 'created_at'),
+    )
