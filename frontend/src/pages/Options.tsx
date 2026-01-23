@@ -2564,16 +2564,14 @@ export default function Options() {
                                             <div>{t('options.table.score')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Score{getSortIndicator('score')}</div>
                                         </th>
-                                        {/* Show symbol column only in multi-stock mode */}
-                                        {tickers.length > 1 && (
-                                            <th
-                                                onClick={() => handleSort('symbol')}
-                                                style={{ cursor: 'pointer', userSelect: 'none' }}
-                                            >
-                                                <div>{t('options.table.symbol')}</div>
-                                                <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Symbol{getSortIndicator('symbol')}</div>
-                                            </th>
-                                        )}
+                                        {/* 股票代码 - 始终显示 */}
+                                        <th
+                                            onClick={() => handleSort('symbol')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.symbol')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Symbol{getSortIndicator('symbol')}</div>
+                                        </th>
                                         <th
                                             onClick={() => handleSort('strike')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -2595,7 +2593,34 @@ export default function Options() {
                                             <div>{t('options.table.annualized')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized{getSortIndicator('annualized_return')}</div>
                                         </th>
-                                        {/* 高级列 - 默认隐藏，可展开 */}
+                                        {/* 默认显示的重要列 */}
+                                        <th
+                                            onClick={() => handleSort('latest')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.latest')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
+                                        </th>
+                                        <th
+                                            onClick={() => handleSort('volume')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.volOI')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
+                                        </th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.exerciseProb')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
+                                        </th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.priceDiff')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
+                                        </th>
+                                        {/* 高级列 - 默认隐藏，可展开：Delta、IV、买/卖价 */}
                                         {showAdvancedColumns && (
                                             <>
                                                 <th
@@ -2613,37 +2638,11 @@ export default function Options() {
                                                     <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
                                                 </th>
                                                 <th
-                                                    onClick={() => handleSort('latest')}
-                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                                                >
-                                                    <div>{t('options.table.latest')}</div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
-                                                </th>
-                                                <th
                                                     onClick={() => handleSort('bid')}
                                                     style={{ cursor: 'pointer', userSelect: 'none' }}
                                                 >
                                                     <div>{t('options.table.bidAsk')}</div>
                                                     <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
-                                                </th>
-                                                <th
-                                                    onClick={() => handleSort('volume')}
-                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                                                >
-                                                    <div>{t('options.table.volOI')}</div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
-                                                </th>
-                                                <th
-                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                                                >
-                                                    <div>{t('options.table.exerciseProb')}</div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
-                                                </th>
-                                                <th
-                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                                                >
-                                                    <div>{t('options.table.priceDiff')}</div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
                                                 </th>
                                             </>
                                         )}
@@ -2652,7 +2651,7 @@ export default function Options() {
                                 <tbody>
                                     {filteredOptions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={showAdvancedColumns ? (tickers.length > 1 ? 12 : 11) : (tickers.length > 1 ? 5 : 4)} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
+                                            <td colSpan={showAdvancedColumns ? 12 : 9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
                                                 {t('options.table.noData')}
                                             </td>
                                         </tr>
@@ -2693,12 +2692,10 @@ export default function Options() {
                                                             {totalScore.toFixed(1)}
                                                         </span>
                                                     </td>
-                                                    {/* Show symbol cell only in multi-stock mode */}
-                                                    {tickers.length > 1 && (
-                                                        <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                                                            {opt.symbol || displayChain?.symbol}
-                                                        </td>
-                                                    )}
+                                                    {/* 股票代码 - 始终显示 */}
+                                                    <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                                                        {opt.symbol || displayChain?.symbol}
+                                                    </td>
                                                     <td style={{ fontWeight: 600 }}>
                                                         ${opt.strike}
                                                     </td>
@@ -2709,20 +2706,21 @@ export default function Options() {
                                                     <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
                                                         {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
                                                     </td>
-                                                    {/* 高级列 - 根据状态显示/隐藏 */}
+                                                    {/* 默认显示的重要列 */}
+                                                    <td>${formatNumber(opt.latest_price)}</td>
+                                                    <td><small>{opt.volume} / {opt.open_interest}</small></td>
+                                                    <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
+                                                        {exerciseProb.toFixed(1)}%
+                                                    </td>
+                                                    <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
+                                                    </td>
+                                                    {/* 高级列 - 根据状态显示/隐藏：Delta、IV、买/卖价 */}
                                                     {showAdvancedColumns && (
                                                         <>
                                                             <td>{formatNumber(opt.delta, 3)}</td>
                                                             <td>{formatPercent(opt.implied_vol)}</td>
-                                                            <td>${formatNumber(opt.latest_price)}</td>
                                                             <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
-                                                            <td><small>{opt.volume} / {opt.open_interest}</small></td>
-                                                            <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
-                                                                {exerciseProb.toFixed(1)}%
-                                                            </td>
-                                                            <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
-                                                                {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
-                                                            </td>
                                                         </>
                                                     )}
                                                 </tr>
