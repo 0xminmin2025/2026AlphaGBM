@@ -766,6 +766,11 @@ export default function Options() {
         return localStorage.getItem('optionsFilterExpanded') === 'true';
     });
 
+    // 表格次要列展开状态 - 默认收起（Delta, IV, Bid/Ask 等）
+    const [showAdvancedColumns, setShowAdvancedColumns] = useState(() => {
+        return localStorage.getItem('optionsShowAdvancedColumns') === 'true';
+    });
+
     // 监听导航栏点击重置状态
     useEffect(() => {
         const resetState = (location.state as { reset?: number })?.reset;
@@ -2515,6 +2520,38 @@ export default function Options() {
                         })()}
 
                         <div style={{ overflowX: 'auto' }}>
+                            {/* 展开/收起高级列按钮 */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'flex-end',
+                                padding: '0.5rem 0.75rem',
+                                borderBottom: '1px solid var(--border)'
+                            }}>
+                                <button
+                                    onClick={() => {
+                                        const newState = !showAdvancedColumns;
+                                        setShowAdvancedColumns(newState);
+                                        localStorage.setItem('optionsShowAdvancedColumns', String(newState));
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.4rem',
+                                        padding: '0.35rem 0.75rem',
+                                        fontSize: '0.75rem',
+                                        background: showAdvancedColumns ? 'rgba(13, 155, 151, 0.15)' : 'transparent',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '0.375rem',
+                                        color: showAdvancedColumns ? 'var(--primary)' : 'var(--muted-foreground)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                    className="hover:bg-[var(--muted)]"
+                                >
+                                    <i className={`bi bi-${showAdvancedColumns ? 'eye-slash' : 'eye'}`}></i>
+                                    {showAdvancedColumns ? t('options.table.hideAdvanced') : t('options.table.showAdvanced')}
+                                </button>
+                            </div>
                             <div className="table-container">
                                 <table className="option-table">
                                 <thead>
@@ -2558,65 +2595,64 @@ export default function Options() {
                                             <div>{t('options.table.annualized')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized{getSortIndicator('annualized_return')}</div>
                                         </th>
-                                        <th
-                                            onClick={() => handleSort('delta')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.delta')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('iv')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.iv')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
-                                        </th>
-                                        {/* 次要信息 - 移动端可隐藏 */}
-                                        <th
-                                            onClick={() => handleSort('latest')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                            className="hidden-mobile"
-                                        >
-                                            <div>{t('options.table.latest')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('bid')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                            className="hidden-mobile"
-                                        >
-                                            <div>{t('options.table.bidAsk')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('volume')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                            className="hidden-mobile"
-                                        >
-                                            <div>{t('options.table.volOI')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
-                                        </th>
-                                        <th
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                            className="hidden-mobile"
-                                        >
-                                            <div>{t('options.table.exerciseProb')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
-                                        </th>
-                                        <th
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                            className="hidden-mobile"
-                                        >
-                                            <div>{t('options.table.priceDiff')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
-                                        </th>
+                                        {/* 高级列 - 默认隐藏，可展开 */}
+                                        {showAdvancedColumns && (
+                                            <>
+                                                <th
+                                                    onClick={() => handleSort('delta')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.delta')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
+                                                </th>
+                                                <th
+                                                    onClick={() => handleSort('iv')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.iv')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
+                                                </th>
+                                                <th
+                                                    onClick={() => handleSort('latest')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.latest')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
+                                                </th>
+                                                <th
+                                                    onClick={() => handleSort('bid')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.bidAsk')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
+                                                </th>
+                                                <th
+                                                    onClick={() => handleSort('volume')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.volOI')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
+                                                </th>
+                                                <th
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.exerciseProb')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
+                                                </th>
+                                                <th
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.priceDiff')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
+                                                </th>
+                                            </>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredOptions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={tickers.length > 1 ? 12 : 11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
+                                            <td colSpan={showAdvancedColumns ? (tickers.length > 1 ? 12 : 11) : (tickers.length > 1 ? 5 : 4)} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
                                                 {t('options.table.noData')}
                                             </td>
                                         </tr>
@@ -2673,18 +2709,22 @@ export default function Options() {
                                                     <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
                                                         {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
                                                     </td>
-                                                    <td>{formatNumber(opt.delta, 3)}</td>
-                                                    <td>{formatPercent(opt.implied_vol)}</td>
-                                                    {/* 次要信息 - 移动端隐藏 */}
-                                                    <td className="hidden-mobile">${formatNumber(opt.latest_price)}</td>
-                                                    <td className="hidden-mobile"><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
-                                                    <td className="hidden-mobile"><small>{opt.volume} / {opt.open_interest}</small></td>
-                                                    <td className="hidden-mobile" style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
-                                                        {exerciseProb.toFixed(1)}%
-                                                    </td>
-                                                    <td className="hidden-mobile" style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
-                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
-                                                    </td>
+                                                    {/* 高级列 - 根据状态显示/隐藏 */}
+                                                    {showAdvancedColumns && (
+                                                        <>
+                                                            <td>{formatNumber(opt.delta, 3)}</td>
+                                                            <td>{formatPercent(opt.implied_vol)}</td>
+                                                            <td>${formatNumber(opt.latest_price)}</td>
+                                                            <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
+                                                            <td><small>{opt.volume} / {opt.open_interest}</small></td>
+                                                            <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
+                                                                {exerciseProb.toFixed(1)}%
+                                                            </td>
+                                                            <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                                {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
+                                                            </td>
+                                                        </>
+                                                    )}
                                                 </tr>
                                             );
                                         })
