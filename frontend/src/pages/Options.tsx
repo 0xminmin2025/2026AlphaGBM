@@ -109,18 +109,23 @@ const styles = `
 
     @media (max-width: 640px) {
         .option-table {
-            font-size: 0.7rem;
+            font-size: 0.75rem;
         }
 
         .option-table th {
-            font-size: 0.65rem;
+            font-size: 0.7rem;
             padding: 0.4rem 0.2rem;
         }
 
         .option-table th,
         .option-table td {
             padding: 0.5rem 0.25rem;
-            min-width: 60px;
+            min-width: 50px;
+        }
+
+        /* 移动端隐藏次要列 */
+        .hidden-mobile {
+            display: none !important;
         }
     }
 
@@ -299,6 +304,36 @@ const styles = `
         background: var(--card-hover);
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* 单行图标版五支柱 */
+    .pillar-icon {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        background: rgba(13, 155, 151, 0.15);
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--primary);
+        cursor: help;
+        transition: all 0.2s;
+    }
+
+    .pillar-icon:hover {
+        background: rgba(13, 155, 151, 0.25);
+    }
+
+    .pillar-icon-text {
+        font-size: 0.7rem;
+    }
+
+    @media (max-width: 640px) {
+        .pillar-icon-text {
+            display: none;
+        }
+        .pillar-icon {
+            padding: 0.35rem;
+        }
     }
 
     .style-badge {
@@ -723,6 +758,11 @@ export default function Options() {
     // Risk warning collapse state - default collapsed, persisted in localStorage
     const [riskExpanded, setRiskExpanded] = useState(() => {
         return localStorage.getItem('optionsRiskExpanded') === 'true';
+    });
+
+    // Filter panel collapse state - default collapsed, persisted in localStorage
+    const [filterExpanded, setFilterExpanded] = useState(() => {
+        return localStorage.getItem('optionsFilterExpanded') === 'true';
     });
 
     // Multi-stock task tracking
@@ -1603,17 +1643,40 @@ export default function Options() {
                 </div>
             </div>
 
-            {/* Header */}
-            <div className="header-section" style={{ marginTop: '1.5rem', marginBottom: '1rem', padding: '1rem' }}>
-                {/* Five Pillars of Options Analysis */}
-                <div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-2">
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.liquidity')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.liquidityDesc')}</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.iv')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.ivDesc')}</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.risk')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.riskDesc')}</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.strategy')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.strategyDesc')}</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>{t('options.pillar.realtime')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('options.pillar.realtimeDesc')}</div></div>
-                    </div>
+            {/* 分析依据 - 单行图标版 */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.5rem 1rem',
+                marginTop: '1rem',
+                marginBottom: '0.5rem',
+                background: 'rgba(13, 155, 151, 0.05)',
+                borderRadius: '0.5rem',
+                flexWrap: 'wrap'
+            }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>{t('options.pillars.label')}:</span>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span className="pillar-icon" title={t('options.pillar.liquidityDesc')}>
+                        <i className="bi bi-droplet" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.liquidity')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.ivDesc')}>
+                        <i className="bi bi-graph-up" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.iv')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.riskDesc')}>
+                        <i className="bi bi-shield-check" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.risk')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.strategyDesc')}>
+                        <i className="bi bi-bullseye" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.strategy')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.realtimeDesc')}>
+                        <i className="bi bi-clock" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.realtime')}</span>
+                    </span>
                 </div>
             </div>
 
@@ -2045,15 +2108,20 @@ export default function Options() {
                         </div>
                     )}
 
-                    {/* Risk Warning - Collapsible */}
+                    {/* 风险提示 - 精简单行版 */}
                     <div style={{
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        border: '1px solid var(--warning)',
-                        borderRadius: '0.5rem',
-                        marginBottom: '1rem',
-                        overflow: 'hidden'
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '0.375rem',
+                        marginBottom: '0.75rem',
+                        fontSize: '0.8rem'
                     }}>
-                        {/* Collapsible Header */}
+                        <i className="bi bi-exclamation-triangle-fill" style={{ color: 'var(--warning)', fontSize: '0.9rem' }}></i>
+                        <span style={{ color: 'var(--muted-foreground)', flex: 1 }}>{t('options.risk.compact')}</span>
                         <button
                             onClick={() => {
                                 const newState = !riskExpanded;
@@ -2061,55 +2129,56 @@ export default function Options() {
                                 localStorage.setItem('optionsRiskExpanded', String(newState));
                             }}
                             style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                width: '100%',
-                                padding: '0.75rem 1rem',
                                 background: 'transparent',
                                 border: 'none',
-                                cursor: 'pointer',
                                 color: 'var(--warning)',
-                                fontWeight: 600,
-                                fontSize: '0.95rem',
-                                textAlign: 'left'
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '0.25rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
                             }}
                             className="hover:bg-[rgba(245,158,11,0.15)] transition-colors"
                         >
-                            <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: '1.1rem' }}></i>
-                            <span style={{ flex: 1 }}>{t('options.risk.title')}</span>
-                            <i className={`bi bi-chevron-${riskExpanded ? 'up' : 'down'}`} style={{ fontSize: '0.9rem' }}></i>
+                            {riskExpanded ? t('options.risk.collapse') : t('options.risk.expand')}
+                            <i className={`bi bi-chevron-${riskExpanded ? 'up' : 'down'}`}></i>
                         </button>
+                    </div>
 
-                        {/* Collapsible Content */}
-                        {riskExpanded && (
-                            <div style={{
-                                padding: '0 1rem 1rem 1rem',
-                                borderTop: '1px solid rgba(245, 158, 11, 0.2)',
-                                color: 'var(--foreground)',
-                                lineHeight: 1.7,
-                                fontSize: '0.9rem',
-                                animation: 'slideDown 0.2s ease-out'
-                            }}>
-                                <p style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+                    {/* 风险提示详情 - 展开内容 */}
+                    {riskExpanded && (
+                        <div style={{
+                            padding: '0.75rem 1rem',
+                            marginBottom: '0.75rem',
+                            backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                            border: '1px solid rgba(245, 158, 11, 0.2)',
+                            borderRadius: '0.375rem',
+                            fontSize: '0.8rem',
+                            lineHeight: 1.6,
+                            animation: 'slideDown 0.2s ease-out'
+                        }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
+                                <p style={{ margin: 0 }}>
                                     <strong style={{ color: 'var(--warning)' }}>{t('options.risk.highRisk')}</strong>
                                     <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.highRiskDesc')}</span>
                                 </p>
-                                <p style={{ marginBottom: '0.5rem' }}>
+                                <p style={{ margin: 0 }}>
                                     <strong style={{ color: 'var(--warning)' }}>{t('options.risk.earnings')}</strong>
                                     <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.earningsDesc')}</span>
                                 </p>
-                                <p style={{ marginBottom: '0.5rem' }}>
+                                <p style={{ margin: 0 }}>
                                     <strong style={{ color: 'var(--warning)' }}>{t('options.risk.dataNote')}</strong>
                                     <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.dataDesc')}</span>
                                 </p>
-                                <p style={{ marginBottom: 0 }}>
+                                <p style={{ margin: 0 }}>
                                     <strong style={{ color: 'var(--warning)' }}>{t('options.risk.liveAdvice')}</strong>
                                     <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.liveAdviceDesc')}</span>
                                 </p>
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     {/* Options Table */}
                     <div className="option-col-section">
@@ -2162,158 +2231,243 @@ export default function Options() {
                                 ];
 
                                 return (
-                                    <div className="p-4" style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
-                                        {/* Stock Filter (Multi-stock mode only) */}
-                                        {tickers.length > 1 && (
-                                            <div className="mb-4">
-                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    {t('options.filter.byStock')}
-                                                </label>
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button
-                                                        onClick={() => setTickerFilter([])}
-                                                        className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
-                                                        style={{
-                                                            backgroundColor: tickerFilter.length === 0 ? 'var(--primary)' : 'transparent',
-                                                            color: tickerFilter.length === 0 ? 'white' : 'var(--muted-foreground)',
-                                                            borderColor: tickerFilter.length === 0 ? 'var(--primary)' : 'var(--border)',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        {t('options.filter.allStocks')}
-                                                    </button>
-                                                    {tickers.map(ticker => (
+                                    <div style={{ borderBottom: '1px solid var(--border)' }}>
+                                        {/* 筛选面板 - 可折叠标题栏 */}
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                padding: '0.5rem 1rem',
+                                                background: 'var(--muted)',
+                                                cursor: 'pointer'
+                                            }}
+                                            onClick={() => {
+                                                const newState = !filterExpanded;
+                                                setFilterExpanded(newState);
+                                                localStorage.setItem('optionsFilterExpanded', String(newState));
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <i className="bi bi-funnel" style={{ color: 'var(--primary)', fontSize: '0.9rem' }}></i>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{t('options.filter.title')}</span>
+                                                {/* 显示当前筛选条件摘要 */}
+                                                {(selectedRiskStyle || tickerFilter.length > 0) && (
+                                                    <span style={{
+                                                        fontSize: '0.7rem',
+                                                        padding: '0.15rem 0.4rem',
+                                                        background: 'rgba(13, 155, 151, 0.2)',
+                                                        borderRadius: '0.25rem',
+                                                        color: 'var(--primary)'
+                                                    }}>
+                                                        {t('options.filter.active')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                {/* 快速风格筛选按钮（始终可见） */}
+                                                <div className="hidden sm:flex gap-1">
+                                                    {riskStyles.slice(0, 3).map(s => (
                                                         <button
-                                                            key={ticker}
-                                                            onClick={() => {
-                                                                if (tickerFilter.includes(ticker)) {
-                                                                    setTickerFilter(tickerFilter.filter(t => t !== ticker));
-                                                                } else {
-                                                                    setTickerFilter([...tickerFilter, ticker]);
-                                                                }
+                                                            key={s.id}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedRiskStyle(selectedRiskStyle === s.id ? null : s.id);
                                                             }}
-                                                            className={`px-3 py-1.5 rounded-full text-sm transition-all border font-mono font-semibold`}
                                                             style={{
-                                                                backgroundColor: tickerFilter.includes(ticker) ? 'rgba(13, 155, 151, 0.2)' : 'transparent',
-                                                                color: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--muted-foreground)',
-                                                                borderColor: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--border)',
+                                                                padding: '0.2rem 0.5rem',
+                                                                fontSize: '0.7rem',
+                                                                borderRadius: '0.25rem',
+                                                                border: `1px solid ${selectedRiskStyle === s.id ? s.color : 'var(--border)'}`,
+                                                                background: selectedRiskStyle === s.id ? `${s.color}20` : 'transparent',
+                                                                color: selectedRiskStyle === s.id ? s.color : 'var(--muted-foreground)',
                                                                 cursor: 'pointer'
                                                             }}
                                                         >
-                                                            {ticker}
+                                                            {t(`options.style.${s.id}`)}
                                                         </button>
                                                     ))}
                                                 </div>
-                                            </div>
-                                        )}
-
-                                        {/* Risk Style Filter */}
-                                        <div className="mb-4">
-                                            <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                {t('options.filter.riskStyle')}
-                                            </label>
-                                            <div className="flex flex-wrap gap-2">
                                                 <button
-                                                    onClick={() => setSelectedRiskStyle(null)}
-                                                    className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedRiskStyle(null);
+                                                        setTickerFilter([]);
+                                                        setStrikeRange([strikeMin, strikeMax]);
+                                                        setReturnRange([returnMin, returnMax]);
+                                                    }}
                                                     style={{
-                                                        backgroundColor: !selectedRiskStyle ? 'var(--primary)' : 'transparent',
-                                                        color: !selectedRiskStyle ? 'white' : 'var(--muted-foreground)',
-                                                        borderColor: !selectedRiskStyle ? 'var(--primary)' : 'var(--border)',
+                                                        padding: '0.2rem 0.5rem',
+                                                        fontSize: '0.7rem',
+                                                        borderRadius: '0.25rem',
+                                                        border: '1px solid var(--border)',
+                                                        background: 'transparent',
+                                                        color: 'var(--muted-foreground)',
                                                         cursor: 'pointer'
                                                     }}
                                                 >
-                                                    {t('options.filter.allStyles')}
+                                                    {t('options.filter.reset')}
                                                 </button>
-                                                {riskStyles.map(s => (
-                                                    <button
-                                                        key={s.id}
-                                                        onClick={() => setSelectedRiskStyle(selectedRiskStyle === s.id ? null : s.id)}
-                                                        className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
-                                                        style={{
-                                                            backgroundColor: selectedRiskStyle === s.id ? `${s.color}20` : 'transparent',
-                                                            color: selectedRiskStyle === s.id ? s.color : 'var(--muted-foreground)',
-                                                            borderColor: selectedRiskStyle === s.id ? s.color : 'var(--border)',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        {t(`options.style.${s.id}`)}
-                                                    </button>
-                                                ))}
+                                                <i className={`bi bi-chevron-${filterExpanded ? 'up' : 'down'}`} style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}></i>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {/* Strike Price Filter */}
-                                            <div>
-                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    {t('options.filter.strikeRange')}: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
-                                                </label>
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="range"
-                                                        min={strikeMin}
-                                                        max={strikeMax}
-                                                        step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
-                                                        value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[0]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setStrikeRange([val, Math.max(val, strikeRange[1])]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
-                                                    <input
-                                                        type="range"
-                                                        min={strikeMin}
-                                                        max={strikeMax}
-                                                        step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
-                                                        value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[1]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setStrikeRange([Math.min(val, strikeRange[0]), val]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
-                                                </div>
-                                            </div>
+                                        {/* 筛选面板 - 展开内容 */}
+                                        {filterExpanded && (
+                                            <div className="p-4" style={{ background: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
+                                                {/* Stock Filter (Multi-stock mode only) */}
+                                                {tickers.length > 1 && (
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.byStock')}
+                                                        </label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                onClick={() => setTickerFilter([])}
+                                                                className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                style={{
+                                                                    backgroundColor: tickerFilter.length === 0 ? 'var(--primary)' : 'transparent',
+                                                                    color: tickerFilter.length === 0 ? 'white' : 'var(--muted-foreground)',
+                                                                    borderColor: tickerFilter.length === 0 ? 'var(--primary)' : 'var(--border)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                {t('options.filter.allStocks')}
+                                                            </button>
+                                                            {tickers.map(ticker => (
+                                                                <button
+                                                                    key={ticker}
+                                                                    onClick={() => {
+                                                                        if (tickerFilter.includes(ticker)) {
+                                                                            setTickerFilter(tickerFilter.filter(t => t !== ticker));
+                                                                        } else {
+                                                                            setTickerFilter([...tickerFilter, ticker]);
+                                                                        }
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-full text-sm transition-all border font-mono font-semibold`}
+                                                                    style={{
+                                                                        backgroundColor: tickerFilter.includes(ticker) ? 'rgba(13, 155, 151, 0.2)' : 'transparent',
+                                                                        color: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--muted-foreground)',
+                                                                        borderColor: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--border)',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {ticker}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                            {/* Annualized Return Filter */}
-                                            <div>
-                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    {t('options.filter.annualizedRange')}: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
-                                                </label>
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="range"
-                                                        min={returnMin}
-                                                        max={returnMax}
-                                                        step={Math.max(0.1, (returnMax - returnMin) / 100)}
-                                                        value={Math.max(returnMin, Math.min(returnMax, returnRange[0]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setReturnRange([val, Math.max(val, returnRange[1])]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
-                                                    <input
-                                                        type="range"
-                                                        min={returnMin}
-                                                        max={returnMax}
-                                                        step={Math.max(0.1, (returnMax - returnMin) / 100)}
-                                                        value={Math.max(returnMin, Math.min(returnMax, returnRange[1]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setReturnRange([Math.min(val, returnRange[0]), val]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
+                                                {/* Risk Style Filter */}
+                                                <div className="mb-4">
+                                                    <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                        {t('options.filter.riskStyle')}
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            onClick={() => setSelectedRiskStyle(null)}
+                                                            className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                            style={{
+                                                                backgroundColor: !selectedRiskStyle ? 'var(--primary)' : 'transparent',
+                                                                color: !selectedRiskStyle ? 'white' : 'var(--muted-foreground)',
+                                                                borderColor: !selectedRiskStyle ? 'var(--primary)' : 'var(--border)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {t('options.filter.allStyles')}
+                                                        </button>
+                                                        {riskStyles.map(s => (
+                                                            <button
+                                                                key={s.id}
+                                                                onClick={() => setSelectedRiskStyle(selectedRiskStyle === s.id ? null : s.id)}
+                                                                className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                style={{
+                                                                    backgroundColor: selectedRiskStyle === s.id ? `${s.color}20` : 'transparent',
+                                                                    color: selectedRiskStyle === s.id ? s.color : 'var(--muted-foreground)',
+                                                                    borderColor: selectedRiskStyle === s.id ? s.color : 'var(--border)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                {t(`options.style.${s.id}`)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {/* Strike Price Filter */}
+                                                    <div>
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.strikeRange')}: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
+                                                        </label>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="range"
+                                                                min={strikeMin}
+                                                                max={strikeMax}
+                                                                step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
+                                                                value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[0]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setStrikeRange([val, Math.max(val, strikeRange[1])]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                            <input
+                                                                type="range"
+                                                                min={strikeMin}
+                                                                max={strikeMax}
+                                                                step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
+                                                                value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[1]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setStrikeRange([Math.min(val, strikeRange[0]), val]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Annualized Return Filter */}
+                                                    <div>
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.annualizedRange')}: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
+                                                        </label>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="range"
+                                                                min={returnMin}
+                                                                max={returnMax}
+                                                                step={Math.max(0.1, (returnMax - returnMin) / 100)}
+                                                                value={Math.max(returnMin, Math.min(returnMax, returnRange[0]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setReturnRange([val, Math.max(val, returnRange[1])]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                            <input
+                                                                type="range"
+                                                                min={returnMin}
+                                                                max={returnMax}
+                                                                step={Math.max(0.1, (returnMax - returnMin) / 100)}
+                                                                value={Math.max(returnMin, Math.min(returnMax, returnRange[1]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setReturnRange([Math.min(val, returnRange[0]), val]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 );
                             } catch (error) {
@@ -2327,6 +2481,14 @@ export default function Options() {
                                 <table className="option-table">
                                 <thead>
                                     <tr>
+                                        {/* 评分放第一位 - 用户最关注 */}
+                                        <th
+                                            onClick={() => handleSort('score')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.score')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Score{getSortIndicator('score')}</div>
+                                        </th>
                                         {/* Show symbol column only in multi-stock mode */}
                                         {tickers.length > 1 && (
                                             <th
@@ -2344,53 +2506,7 @@ export default function Options() {
                                             <div>{t('options.table.strike')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Strike{getSortIndicator('strike')}</div>
                                         </th>
-                                        <th
-                                            onClick={() => handleSort('latest')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.latest')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('bid')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.bidAsk')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('volume')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.volOI')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('iv')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.iv')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
-                                        </th>
-                                        <th
-                                            onClick={() => handleSort('delta')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.delta')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
-                                        </th>
-                                        <th
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.exerciseProb')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
-                                        </th>
-                                        <th
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>{t('options.table.priceDiff')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
-                                        </th>
+                                        {/* 权利金和年化 - 核心收益信息 */}
                                         <th
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
@@ -2405,11 +2521,57 @@ export default function Options() {
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized{getSortIndicator('annualized_return')}</div>
                                         </th>
                                         <th
-                                            onClick={() => handleSort('score')}
+                                            onClick={() => handleSort('delta')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>{t('options.table.score')}</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Score{getSortIndicator('score')}</div>
+                                            <div>{t('options.table.delta')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
+                                        </th>
+                                        <th
+                                            onClick={() => handleSort('iv')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.iv')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
+                                        </th>
+                                        {/* 次要信息 - 移动端可隐藏 */}
+                                        <th
+                                            onClick={() => handleSort('latest')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            className="hidden-mobile"
+                                        >
+                                            <div>{t('options.table.latest')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
+                                        </th>
+                                        <th
+                                            onClick={() => handleSort('bid')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            className="hidden-mobile"
+                                        >
+                                            <div>{t('options.table.bidAsk')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
+                                        </th>
+                                        <th
+                                            onClick={() => handleSort('volume')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            className="hidden-mobile"
+                                        >
+                                            <div>{t('options.table.volOI')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
+                                        </th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            className="hidden-mobile"
+                                        >
+                                            <div>{t('options.table.exerciseProb')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
+                                        </th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            className="hidden-mobile"
+                                        >
+                                            <div>{t('options.table.priceDiff')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
                                         </th>
                                     </tr>
                                 </thead>
@@ -2451,6 +2613,12 @@ export default function Options() {
                                                     onClick={() => handleOptionClick(opt)}
                                                     style={{ cursor: 'pointer' }}
                                                 >
+                                                    {/* 评分放第一位 */}
+                                                    <td>
+                                                        <span className={`score-badge ${getScoreClass(totalScore)}`}>
+                                                            {totalScore.toFixed(1)}
+                                                        </span>
+                                                    </td>
                                                     {/* Show symbol cell only in multi-stock mode */}
                                                     {tickers.length > 1 && (
                                                         <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
@@ -2460,27 +2628,24 @@ export default function Options() {
                                                     <td style={{ fontWeight: 600 }}>
                                                         ${opt.strike}
                                                     </td>
-                                                    <td>${formatNumber(opt.latest_price)}</td>
-                                                    <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
-                                                    <td><small>{opt.volume} / {opt.open_interest}</small></td>
-                                                    <td>{formatPercent(opt.implied_vol)}</td>
-                                                    <td>{formatNumber(opt.delta, 3)}</td>
-                                                    <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
-                                                        {exerciseProb.toFixed(1)}%
-                                                    </td>
-                                                    <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
-                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
-                                                    </td>
+                                                    {/* 权利金和年化 */}
                                                     <td style={{ fontWeight: 500, color: 'var(--primary)' }}>
                                                         ${formatNumber(premium * 100, 0)}
                                                     </td>
                                                     <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
                                                         {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
                                                     </td>
-                                                    <td>
-                                                        <span className={`score-badge ${getScoreClass(totalScore)}`}>
-                                                            {totalScore.toFixed(1)}
-                                                        </span>
+                                                    <td>{formatNumber(opt.delta, 3)}</td>
+                                                    <td>{formatPercent(opt.implied_vol)}</td>
+                                                    {/* 次要信息 - 移动端隐藏 */}
+                                                    <td className="hidden-mobile">${formatNumber(opt.latest_price)}</td>
+                                                    <td className="hidden-mobile"><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
+                                                    <td className="hidden-mobile"><small>{opt.volume} / {opt.open_interest}</small></td>
+                                                    <td className="hidden-mobile" style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
+                                                        {exerciseProb.toFixed(1)}%
+                                                    </td>
+                                                    <td className="hidden-mobile" style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
                                                     </td>
                                                 </tr>
                                             );
