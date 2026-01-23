@@ -682,7 +682,10 @@ type OptionData = {
         iv_rank?: number;
         days_to_expiry?: number;
         margin_requirement?: number;
-        risk_return_profile?: RiskReturnProfile;  // 新增：风险收益风格标签
+        risk_return_profile?: RiskReturnProfile;  // 风险收益风格标签
+        // 临期风险警告（新增）
+        is_daily_option?: boolean;      // 是否为日权(0DTE/1DTE)
+        expiry_warning?: string;        // 临期风险警告标签
     };
 };
 
@@ -761,9 +764,11 @@ export default function Options() {
         return localStorage.getItem('optionsRiskExpanded') === 'true';
     });
 
-    // Filter panel collapse state - default collapsed, persisted in localStorage
+    // Filter panel collapse state - default expanded, persisted in localStorage
     const [filterExpanded, setFilterExpanded] = useState(() => {
-        return localStorage.getItem('optionsFilterExpanded') === 'true';
+        const stored = localStorage.getItem('optionsFilterExpanded');
+        // Default to true (expanded) if not set
+        return stored === null ? true : stored === 'true';
     });
 
     // 表格次要列展开状态 - 默认收起（Delta, IV, Bid/Ask 等）
@@ -2142,6 +2147,47 @@ export default function Options() {
                                                     <span className="win-prob">
                                                         {(profile.win_probability * 100).toFixed(0)}%
                                                     </span>
+                                                </div>
+                                            )}
+
+                                            {/* 临期警告（新增） */}
+                                            {opt.scores?.expiry_warning && (
+                                                <div style={{
+                                                    marginTop: '0.5rem',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.7rem',
+                                                    backgroundColor: opt.scores.expiry_warning.includes('⚠️') || opt.scores.expiry_warning.includes('⛔')
+                                                        ? 'rgba(239, 68, 68, 0.2)'
+                                                        : opt.scores.expiry_warning.includes('⚡')
+                                                        ? 'rgba(245, 158, 11, 0.2)'
+                                                        : 'rgba(59, 130, 246, 0.2)',
+                                                    color: opt.scores.expiry_warning.includes('⚠️') || opt.scores.expiry_warning.includes('⛔')
+                                                        ? '#F87171'
+                                                        : opt.scores.expiry_warning.includes('⚡')
+                                                        ? '#FBBF24'
+                                                        : '#93C5FD',
+                                                    border: `1px solid ${
+                                                        opt.scores.expiry_warning.includes('⚠️') || opt.scores.expiry_warning.includes('⛔')
+                                                            ? 'rgba(239, 68, 68, 0.3)'
+                                                            : opt.scores.expiry_warning.includes('⚡')
+                                                            ? 'rgba(245, 158, 11, 0.3)'
+                                                            : 'rgba(59, 130, 246, 0.3)'
+                                                    }`
+                                                }}>
+                                                    {opt.scores.expiry_warning}
+                                                </div>
+                                            )}
+
+                                            {/* 日权标识（新增） */}
+                                            {opt.scores?.is_daily_option && (
+                                                <div style={{
+                                                    marginTop: '0.25rem',
+                                                    fontSize: '0.65rem',
+                                                    color: '#EF4444',
+                                                    fontWeight: 600
+                                                }}>
+                                                    ⚠️ {t('options.dailyOption', '日权 - 不建议卖方策略')}
                                                 </div>
                                             )}
                                         </div>

@@ -133,6 +133,23 @@ const resources = {
             "common.success": "Success",
             "common.warning": "Warning",
 
+            // Blur Overlay (premium content)
+            "blur.ctaGuest": "Sign up to unlock",
+            "blur.ctaFree": "Upgrade to unlock",
+            "blur.ctaPlus": "Upgrade to Pro",
+            "blur.ctaDefault": "Unlock",
+            "blur.signUpPrompt": "Sign up for free to see full details",
+            "blur.upgradePrompt": "Upgrade your plan to see full details",
+
+            // Homepage Recommendations
+            "landing.recommendations.title": "Today's Hot Options",
+            "landing.recommendations.viewMore": "View More",
+            "landing.recommendations.sampleData": "(Sample data - refresh for live)",
+            "landing.recommendations.signUpCta": "Sign up free to unlock full recommendations",
+            "landing.recommendations.upgradeCta": "Upgrade to see all details",
+            "landing.stock.title": "Featured Stock Analysis",
+            "landing.stock.viewMore": "View Stock Analysis",
+
             // Stock Analysis Page (Home.tsx)
             "stock.pageTitle": "AlphaGBM Stock Analysis",
             "stock.loginRequired": "Please login to access stock analysis",
@@ -546,6 +563,8 @@ const resources = {
             "options.card.premiumPerContract": "Premium/Contract",
             "options.card.annualizedReturn": "Annualized Return",
             "options.card.winRate": "Win Rate",
+            "options.dailyOption": "Daily Option - Not recommended for selling",
+            "options.expiryWarning": "Expiry Warning",
             "options.risk.title": "Options Trading Risk Warning",
             "options.risk.compact": "Options trading carries high risk. Trade with caution.",
             "options.risk.expand": "Details",
@@ -853,6 +872,23 @@ const resources = {
             "common.error": "错误",
             "common.success": "成功",
             "common.warning": "警告",
+
+            // 模糊遮罩（付费内容）
+            "blur.ctaGuest": "注册解锁",
+            "blur.ctaFree": "升级解锁",
+            "blur.ctaPlus": "升级到Pro",
+            "blur.ctaDefault": "解锁",
+            "blur.signUpPrompt": "免费注册查看完整信息",
+            "blur.upgradePrompt": "升级套餐查看完整信息",
+
+            // 首页推荐
+            "landing.recommendations.title": "今日热门期权",
+            "landing.recommendations.viewMore": "查看更多",
+            "landing.recommendations.sampleData": "（示例数据 - 刷新获取实时）",
+            "landing.recommendations.signUpCta": "免费注册解锁完整推荐",
+            "landing.recommendations.upgradeCta": "升级查看完整信息",
+            "landing.stock.title": "精选股票分析",
+            "landing.stock.viewMore": "查看股票分析",
 
             // 股票分析页面 (Home.tsx)
             "stock.pageTitle": "AlphaGBM 股票分析",
@@ -1267,6 +1303,8 @@ const resources = {
             "options.card.premiumPerContract": "权利金/手",
             "options.card.annualizedReturn": "年化收益",
             "options.card.winRate": "胜率",
+            "options.dailyOption": "日权 - 不建议卖方策略",
+            "options.expiryWarning": "临期警告",
             "options.risk.title": "期权交易风险提示",
             "options.risk.compact": "期权交易有风险，请谨慎操作",
             "options.risk.expand": "详情",

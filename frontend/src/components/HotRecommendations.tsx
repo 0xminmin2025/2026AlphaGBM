@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from 'react-i18next';
+import { useUserTier, useHasAccess, BlurText } from '@/components/BlurOverlay';
+import { useAnalytics } from '@/hooks/useAnalytics';
+import { Button } from '@/components/ui/button';
+import { Lock, ArrowRight } from 'lucide-react';
 
 // Types
 interface Recommendation {
@@ -16,6 +20,16 @@ interface Recommendation {
     premium_yield: string;
     reason: string;
     risk_color?: string;
+    // 新增字段 - 期权评分系统优化
+    symbol_quality?: number;       // 标的质量评分 (0-100)
+    symbol_tier?: number;          // 标的等级 (1-5)
+    symbol_description?: string;   // 标的描述
+    price_trend?: string;          // 价格趋势 (up/down/sideways)
+    trend_change_pct?: number;     // 趋势变化百分比
+    timing_bonus?: number;         // 时机加分
+    expiry_warning?: string;       // 临期风险警告
+    is_daily_option?: boolean;     // 是否为日权
+    days_to_expiry?: number;       // 距到期天数
 }
 
 interface MarketSummary {
@@ -293,6 +307,76 @@ const styles = `
         padding: 3rem;
         color: hsl(240, 5%, 50%);
     }
+
+    /* 临期警告样式 */
+    .expiry-warning {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        margin-top: 0.5rem;
+    }
+
+    .expiry-warning-high {
+        background-color: rgba(239, 68, 68, 0.2);
+        color: #F87171;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .expiry-warning-medium {
+        background-color: rgba(245, 158, 11, 0.2);
+        color: #FBBF24;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .expiry-warning-low {
+        background-color: rgba(59, 130, 246, 0.2);
+        color: #93C5FD;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    /* 标的质量等级徽章 */
+    .quality-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.65rem;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        margin-left: 0.5rem;
+    }
+
+    .quality-tier-1 {
+        background-color: rgba(16, 185, 129, 0.2);
+        color: #34D399;
+    }
+
+    .quality-tier-2 {
+        background-color: rgba(59, 130, 246, 0.2);
+        color: #93C5FD;
+    }
+
+    .quality-tier-3 {
+        background-color: rgba(245, 158, 11, 0.2);
+        color: #FBBF24;
+    }
+
+    .quality-tier-4,
+    .quality-tier-5 {
+        background-color: rgba(239, 68, 68, 0.2);
+        color: #F87171;
+    }
+
+    /* 时机加分徽章 */
+    .timing-bonus-badge {
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.65rem;
+        color: #10B981;
+        margin-left: 0.25rem;
+    }
 `;
 
 // Strategy name mapping
@@ -396,8 +480,13 @@ export default function HotRecommendations({
     showMarketSummary = true
 }: HotRecommendationsProps) {
     const navigate = useNavigate();
-    const { i18n } = useTranslation();
+    const { i18n, t } = useTranslation();
     const isZh = i18n.language.startsWith('zh');
+
+    // User tier for tiered display
+    const userTier = useUserTier();
+    const hasFullAccess = useHasAccess('plus');  // Plus+ users see all details
+    const { trackRecommendationView, trackRecommendationClick, trackCtaClick } = useAnalytics();
 
     const [data, setData] = useState<RecommendationsResponse | null>(null);
     const [loading, setLoading] = useState(true);
@@ -497,8 +586,26 @@ export default function HotRecommendations({
     };
 
     // Handle card click
-    const handleCardClick = (rec: Recommendation) => {
-        navigate(`/options?ticker=${rec.symbol}`);
+    const handleCardClick = (rec: Recommendation, index: number) => {
+        trackRecommendationClick(rec.symbol, rec.strategy, 'option');
+
+        // If user is guest, redirect to login
+        if (userTier === 'guest') {
+            trackCtaClick('recommendation_click', 'hot_recommendations');
+            navigate('/login');
+        } else {
+            navigate(`/options?ticker=${rec.symbol}`);
+        }
+    };
+
+    // Handle CTA click for non-authenticated users
+    const handleCtaClick = () => {
+        trackCtaClick('unlock_recommendations', 'hot_recommendations');
+        if (userTier === 'guest') {
+            navigate('/login');
+        } else {
+            navigate('/pricing');
+        }
     };
 
     if (loading) {
@@ -601,70 +708,149 @@ export default function HotRecommendations({
 
                 {/* Recommendations Grid */}
                 <div className="recommendations-grid">
-                    {data.recommendations.map((rec, index) => (
-                        <div
-                            key={`${rec.symbol}-${rec.strategy}-${index}`}
-                            className="recommendation-card"
-                            onClick={() => handleCardClick(rec)}
-                        >
-                            {/* Header */}
-                            <div className="card-header">
-                                <div className="symbol-info">
-                                    <span className="symbol">{rec.symbol}</span>
-                                    <span className="current-price">${rec.current_price?.toFixed(2)}</span>
-                                </div>
-                                <div className={`score-circle ${getScoreClass(rec.score)}`}>
-                                    {rec.score.toFixed(0)}
-                                </div>
-                            </div>
+                    {data.recommendations.map((rec, index) => {
+                        // Track view when card is rendered (first 3 visible)
+                        if (index < 3) {
+                            trackRecommendationView(rec.symbol, index, 'option');
+                        }
 
-                            {/* Strategy Badge */}
-                            <span className={`strategy-badge ${getStrategyClass(rec.strategy)}`}>
-                                {strategyNames[rec.strategy]?.[isZh ? 'zh' : 'en'] || rec.strategy}
-                            </span>
+                        // Determine if this card should show blurred info
+                        // Guest: show first 2 cards with score only
+                        // Free: show all cards but blur strike/expiry/yield
+                        // Plus+: show everything
+                        const showScore = true; // Everyone sees score
+                        const showDetails = hasFullAccess || (userTier === 'free' && index < 3);
 
-                            {/* Option Details */}
-                            <div className="option-details">
-                                <div className="detail-item">
-                                    <span className="detail-label">{isZh ? '执行价' : 'Strike'}</span>
-                                    <span className="detail-value">${rec.strike}</span>
+                        return (
+                            <div
+                                key={`${rec.symbol}-${rec.strategy}-${index}`}
+                                className="recommendation-card"
+                                onClick={() => handleCardClick(rec, index)}
+                            >
+                                {/* Header */}
+                                <div className="card-header">
+                                    <div className="symbol-info">
+                                        <span className="symbol">
+                                            {rec.symbol}
+                                            {/* 标的质量等级徽章 */}
+                                            {rec.symbol_tier && rec.symbol_tier <= 2 && (
+                                                <span className={`quality-badge quality-tier-${rec.symbol_tier}`}>
+                                                    {rec.symbol_tier === 1 ? '优质' : '稳健'}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="current-price">${rec.current_price?.toFixed(2)}</span>
+                                    </div>
+                                    <div className={`score-circle ${getScoreClass(rec.score)}`}>
+                                        {showScore ? (
+                                            <>
+                                                {rec.score.toFixed(0)}
+                                                {/* 时机加分 */}
+                                                {rec.timing_bonus && rec.timing_bonus > 0 && (
+                                                    <span className="timing-bonus-badge">+{rec.timing_bonus}</span>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <Lock size={16} />
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="detail-item">
-                                    <span className="detail-label">{isZh ? '到期日' : 'Expiry'}</span>
-                                    <span className="detail-value">{rec.expiry}</span>
-                                </div>
-                            </div>
 
-                            {/* Trend */}
-                            <div className={`trend-indicator ${getTrendClass(rec.trend)}`}>
-                                <span>{getTrendArrow(rec.trend)}</span>
-                                <span>
-                                    {trendNames[rec.trend]?.[isZh ? 'zh' : 'en'] || rec.trend}
+                                {/* Strategy Badge */}
+                                <span className={`strategy-badge ${getStrategyClass(rec.strategy)}`}>
+                                    {strategyNames[rec.strategy]?.[isZh ? 'zh' : 'en'] || rec.strategy}
                                 </span>
-                                {rec.premium_yield && (
-                                    <span className="yield-badge">{rec.premium_yield}</span>
+
+                                {/* Option Details - Blur for non-Plus users */}
+                                <div className="option-details">
+                                    <div className="detail-item">
+                                        <span className="detail-label">{isZh ? '执行价' : 'Strike'}</span>
+                                        <span className="detail-value">
+                                            {showDetails ? `$${rec.strike}` : (
+                                                <BlurText text={`$${rec.strike}`} placeholder="$???" requiredTier="plus" />
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="detail-item">
+                                        <span className="detail-label">{isZh ? '到期日' : 'Expiry'}</span>
+                                        <span className="detail-value">
+                                            {showDetails ? rec.expiry : (
+                                                <BlurText text={rec.expiry} placeholder="????-??-??" requiredTier="plus" />
+                                            )}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Trend */}
+                                <div className={`trend-indicator ${getTrendClass(rec.trend)}`}>
+                                    <span>{getTrendArrow(rec.trend)}</span>
+                                    <span>
+                                        {trendNames[rec.trend]?.[isZh ? 'zh' : 'en'] || rec.trend}
+                                    </span>
+                                    {rec.premium_yield && (
+                                        <span className="yield-badge">
+                                            {showDetails ? rec.premium_yield : '??.?%'}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Style Label */}
+                                {rec.style_label && (
+                                    <div
+                                        className="text-xs mt-2"
+                                        style={{ color: rec.risk_color || '#9CA3AF' }}
+                                    >
+                                        {rec.style_label}
+                                    </div>
+                                )}
+
+                                {/* 临期警告 */}
+                                {rec.expiry_warning && (
+                                    <div className={`expiry-warning ${
+                                        rec.expiry_warning.includes('⚠️') || rec.expiry_warning.includes('⛔')
+                                            ? 'expiry-warning-high'
+                                            : rec.expiry_warning.includes('⚡')
+                                            ? 'expiry-warning-medium'
+                                            : 'expiry-warning-low'
+                                    }`}>
+                                        {rec.expiry_warning}
+                                    </div>
+                                )}
+
+                                {/* Reason - Only for Plus+ users */}
+                                {rec.reason && showDetails && (
+                                    <div className="reason-text">
+                                        {rec.reason}
+                                    </div>
+                                )}
+
+                                {/* Lock overlay for non-Plus users */}
+                                {!showDetails && (
+                                    <div className="reason-text flex items-center gap-2 text-slate-500">
+                                        <Lock size={12} />
+                                        <span>{t('blur.upgradePrompt')}</span>
+                                    </div>
                                 )}
                             </div>
-
-                            {/* Style Label */}
-                            {rec.style_label && (
-                                <div
-                                    className="text-xs mt-2"
-                                    style={{ color: rec.risk_color || '#9CA3AF' }}
-                                >
-                                    {rec.style_label}
-                                </div>
-                            )}
-
-                            {/* Reason */}
-                            {rec.reason && (
-                                <div className="reason-text">
-                                    {rec.reason}
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
+
+                {/* CTA for non-authenticated or free users */}
+                {!hasFullAccess && (
+                    <div className="mt-6 text-center">
+                        <Button
+                            onClick={handleCtaClick}
+                            className="bg-[#0D9B97] hover:bg-[#10B5B0] text-white gap-2"
+                        >
+                            {userTier === 'guest'
+                                ? t('landing.recommendations.signUpCta')
+                                : t('landing.recommendations.upgradeCta')
+                            }
+                            <ArrowRight size={16} />
+                        </Button>
+                    </div>
+                )}
             </div>
         </>
     );
