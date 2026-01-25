@@ -24,6 +24,7 @@ type CreditsData = {
         has_subscription: boolean;
         plan_tier: string;
         status: string;
+        billing_cycle?: string;
     };
     daily_free: {
         remaining: number;

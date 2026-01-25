@@ -586,7 +586,7 @@ export default function HotRecommendations({
     };
 
     // Handle card click
-    const handleCardClick = (rec: Recommendation, index: number) => {
+    const handleCardClick = (rec: Recommendation, _index: number) => {
         trackRecommendationClick(rec.symbol, rec.strategy, 'option');
 
         // If user is guest, redirect to login
