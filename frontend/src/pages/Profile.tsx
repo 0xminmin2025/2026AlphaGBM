@@ -5,14 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings, ArrowUpRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '@/lib/api';
 import i18n from '@/lib/i18n';
+import { useNavigate } from 'react-router-dom';
+import { useToastHelpers } from '@/components/ui/toast';
 
 export default function Profile() {
+    const navigate = useNavigate();
     const { user } = useAuth();
     const { t } = useTranslation();
+    const toast = useToastHelpers();
 
     // Helper function to translate service type
     const translateServiceType = (serviceType: string): string => {
@@ -64,8 +68,8 @@ export default function Profile() {
             }
         } catch (error: any) {
             console.error('打开客户门户失败:', error);
-            const errorMessage = error.response?.data?.error || '打开客户门户失败，请稍后再试';
-            alert(errorMessage);
+            const errorMessage = error.response?.data?.error || t('profile.portalError');
+            toast.error(t('profile.portalFailed'), errorMessage);
         } finally {
             setManageSubscriptionLoading(false);
         }
@@ -149,14 +153,27 @@ export default function Profile() {
                                         {t('profile.refreshCredits')}
                                     </Button>
 
-                                    {/* 订阅管理按钮 - 只对已订阅用户显示 */}
-                                    {credits.subscription.has_subscription && (
+                                    {/* 升级套餐按钮 - 显示给非 Pro 用户 */}
+                                    {credits.subscription.plan_tier !== 'pro' && (
                                         <Button
                                             variant="default"
                                             size="sm"
+                                            onClick={() => navigate('/pricing')}
+                                            className="w-full bg-amber-500 hover:bg-amber-500/80 text-white"
+                                        >
+                                            <ArrowUpRight className="w-4 h-4 mr-2" />
+                                            {t('profile.upgradePlan')}
+                                        </Button>
+                                    )}
+
+                                    {/* 订阅管理按钮 - 只对已订阅用户显示 */}
+                                    {credits.subscription.has_subscription && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
                                             onClick={handleManageSubscription}
                                             disabled={manageSubscriptionLoading}
-                                            className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white"
+                                            className="w-full"
                                         >
                                             <Settings className={`w-4 h-4 mr-2 ${manageSubscriptionLoading ? 'animate-spin' : ''}`} />
                                             {manageSubscriptionLoading ? t('profile.opening') : t('profile.manageSubscription')}

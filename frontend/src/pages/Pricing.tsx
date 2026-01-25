@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Check, Loader2, Sparkles, Zap, Crown, Building2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import i18n from '@/lib/i18n';
+import { useToastHelpers } from '@/components/ui/toast';
+
+type BillingPeriod = 'monthly' | 'yearly';
 
 // Modern pricing page styles
 const styles = `
@@ -17,6 +19,9 @@ const styles = `
         padding: 1.5rem;
         position: relative;
         transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
     }
 
     @media (min-width: 640px) {
@@ -24,20 +29,35 @@ const styles = `
             padding: 2rem;
         }
     }
-    
+
     .pricing-card:hover {
         transform: translateY(-4px);
         border-color: rgba(13, 155, 151, 0.5);
         box-shadow: 0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(13, 155, 151, 0.1);
     }
-    
+
     .pricing-card.featured {
         background: linear-gradient(145deg, rgba(13, 155, 151, 0.15) 0%, rgba(13, 155, 151, 0.05) 100%);
         border-color: rgba(13, 155, 151, 0.5);
     }
-    
+
     .pricing-card.current {
         border: 2px solid #0D9B97;
+    }
+
+    .pricing-card .card-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .pricing-card .features-list {
+        flex: 1;
+    }
+
+    .pricing-card .card-footer {
+        margin-top: auto;
+        padding-top: 1.5rem;
     }
     
     .featured-badge {
@@ -136,7 +156,54 @@ const styles = `
         cursor: not-allowed;
         transform: none;
     }
-    
+
+    .billing-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        padding: 0.5rem;
+        background: rgba(255,255,255,0.05);
+        border-radius: 1rem;
+        width: fit-content;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .billing-option {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: #94a3b8;
+        position: relative;
+    }
+
+    .billing-option.active {
+        background: linear-gradient(135deg, #0D9B97 0%, #0a7a77 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(13, 155, 151, 0.3);
+    }
+
+    .billing-option:hover:not(.active) {
+        color: #e2e8f0;
+    }
+
+    .yearly-badge {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+        color: white;
+        padding: 0.15rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.65rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
     .topup-card {
         background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
         border: 1px solid rgba(255,255,255,0.1);
@@ -179,6 +246,7 @@ export default function Pricing() {
     const { pricing, credits, pricingLoading, creditsLoading } = useUserData();
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [currentPlan, setCurrentPlan] = useState<string>('free');
+    const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
 
     // Helper function to translate plan name
     const translatePlanName = (planKey: string, backendName: string): string => {
@@ -249,16 +317,6 @@ export default function Pricing() {
         return feature;
     };
 
-    // Helper function to get currency symbol and convert price
-    const getCurrencyAndPrice = (price: number, currency: string = 'cny'): { symbol: string, price: number } => {
-        const isEnglish = i18n.language === 'en';
-        if (isEnglish && currency === 'cny') {
-            // Convert CNY to USD (approximate rate: 7 CNY = 1 USD)
-            return { symbol: t('pricing.currencyUSD'), price: Math.round(price / 7) };
-        }
-        return { symbol: currency === 'cny' ? t('pricing.currencyCNY') : t('pricing.currencyUSD'), price };
-    };
-
     const success = searchParams.get('success');
 
     // Update current plan based on credits data
@@ -275,6 +333,9 @@ export default function Pricing() {
         }
     }, [credits, creditsLoading, user]);
 
+    const toast = useToastHelpers();
+    const [showUpgradeConfirm, setShowUpgradeConfirm] = useState<string | null>(null);
+
     const handleSubscribe = async (priceKey: string) => {
         if (!user) {
             navigate('/login');
@@ -289,11 +350,76 @@ export default function Pricing() {
                 cancel_url: window.location.origin + '/pricing?canceled=true'
             });
             window.location.href = response.data.checkout_url;
-        } catch (err) {
+        } catch (err: unknown) {
             console.error(err);
-            alert(t('pricing.checkoutFailed'));
+            const errorMessage = err instanceof Error && 'response' in err
+                ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+                : null;
+            // If user already has subscription, show more helpful message
+            if (errorMessage?.includes('已有活跃订阅')) {
+                toast.error(t('pricing.alreadySubscribed'), errorMessage);
+            } else {
+                toast.error(t('pricing.checkoutFailed'), errorMessage || undefined);
+            }
             setCheckoutLoading(null);
         }
+    };
+
+    // Handle subscription upgrade
+    const handleUpgrade = async (priceKey: string) => {
+        if (!user) {
+            navigate('/login');
+            return;
+        }
+
+        // Show confirmation dialog
+        setShowUpgradeConfirm(priceKey);
+    };
+
+    const confirmUpgrade = async () => {
+        if (!showUpgradeConfirm) return;
+
+        const priceKey = showUpgradeConfirm;
+        setShowUpgradeConfirm(null);
+        setCheckoutLoading(priceKey);
+
+        try {
+            const response = await api.post('/payment/upgrade', {
+                price_key: priceKey
+            });
+            if (response.data.success) {
+                toast.success(t('pricing.upgradeSuccess'), t('pricing.upgradeSuccessDesc'));
+                setTimeout(() => window.location.reload(), 1500);
+            }
+        } catch (err: unknown) {
+            console.error(err);
+            const errorMessage = err instanceof Error && 'response' in err
+                ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+                : t('pricing.upgradeFailed');
+            toast.error(t('pricing.upgradeFailed'), errorMessage || undefined);
+        } finally {
+            setCheckoutLoading(null);
+        }
+    };
+
+    // Determine if user can upgrade to a specific plan
+    const canUpgradeTo = (targetPlan: string): boolean => {
+        if (!credits?.subscription?.has_subscription) {
+            return false; // Not subscribed yet, use subscribe flow
+        }
+        const tierOrder: Record<string, number> = {
+            'plus_monthly': 1,
+            'plus_yearly': 2,
+            'pro_monthly': 3,
+            'pro_yearly': 4,
+        };
+        // Get current tier based on plan and billing_cycle from API
+        const currentPlanTier = credits.subscription.plan_tier;
+        const currentBillingCycle = credits.subscription.billing_cycle || 'monthly';
+        const currentKey = `${currentPlanTier}_${currentBillingCycle}`;
+        const currentOrder = tierOrder[currentKey] || 0;
+        const targetOrder = tierOrder[targetPlan] || 0;
+        return targetOrder > currentOrder;
     };
 
     if (pricingLoading || !pricing) {
@@ -313,13 +439,30 @@ export default function Pricing() {
             <style>{styles}</style>
 
             {/* Header */}
-            <div className="text-center mb-8 sm:mb-16 px-4">
+            <div className="text-center mb-8 sm:mb-12 px-4">
                 <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4">
                     {t('pricing.title')}
                 </h1>
                 <p className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto">
                     {t('pricing.subtitle')}
                 </p>
+            </div>
+
+            {/* Billing Period Toggle */}
+            <div className="billing-toggle">
+                <div
+                    className={`billing-option ${billingPeriod === 'monthly' ? 'active' : ''}`}
+                    onClick={() => setBillingPeriod('monthly')}
+                >
+                    {t('pricing.billingMonthly')}
+                </div>
+                <div
+                    className={`billing-option ${billingPeriod === 'yearly' ? 'active' : ''}`}
+                    onClick={() => setBillingPeriod('yearly')}
+                >
+                    {t('pricing.billingYearly')}
+                    <span className="yearly-badge">{t('pricing.save17')}</span>
+                </div>
             </div>
 
             {/* Success Message */}
@@ -340,35 +483,39 @@ export default function Pricing() {
                 {/* Free Plan */}
                 <div className={`pricing-card ${currentPlan === 'free' ? 'current' : ''}`}>
                     {currentPlan === 'free' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
-                    <div className="flex items-center gap-3 mb-6 mt-2">
-                        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center">
-                            <Sparkles className="w-6 h-6 text-slate-400" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold">{translatePlanName('free', pricing.plans.free.name)}</h3>
-                            <p className="text-sm text-slate-500">{t('pricing.free.desc')}</p>
-                        </div>
-                    </div>
-
-                    <div className="mb-6">
-                        <span className="price-tag">{getCurrencyAndPrice(0).symbol}0</span>
-                        <span className="text-slate-500 ml-2">{t('pricing.permanentFree')}</span>
-                    </div>
-
-                    <div className="space-y-1 mb-8">
-                        {pricing.plans.free.features.map((f: string) => (
-                            <div key={f} className="feature-item">
-                                <div className="feature-icon">
-                                    <Check className="w-3 h-3 text-green-500" />
-                                </div>
-                                <span>{translateFeature(f)}</span>
+                    <div className="card-content">
+                        <div className="flex items-center gap-3 mb-6 mt-2">
+                            <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center">
+                                <Sparkles className="w-6 h-6 text-slate-400" />
                             </div>
-                        ))}
+                            <div>
+                                <h3 className="text-xl font-bold">{translatePlanName('free', pricing.plans.free.name)}</h3>
+                                <p className="text-sm text-slate-500">{t('pricing.free.desc')}</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-6">
+                            <span className="price-tag">$0</span>
+                            <span className="text-slate-500 ml-2">{t('pricing.permanentFree')}</span>
+                        </div>
+
+                        <div className="features-list space-y-1">
+                            {pricing.plans.free.features.map((f: string) => (
+                                <div key={f} className="feature-item">
+                                    <div className="feature-icon">
+                                        <Check className="w-3 h-3 text-green-500" />
+                                    </div>
+                                    <span>{translateFeature(f)}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
-                    <button className="subscribe-btn outline" disabled>
-                        {currentPlan === 'free' ? t('pricing.currentPlan') : t('pricing.free.name')}
-                    </button>
+                    <div className="card-footer">
+                        <button className="subscribe-btn outline" disabled>
+                            {currentPlan === 'free' ? t('pricing.currentPlan') : t('pricing.free.name')}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Plus Plan - Featured */}
@@ -378,154 +525,39 @@ export default function Pricing() {
                     ) : (
                         <div className="featured-badge">{t('pricing.mostPopular')}</div>
                     )}
-                    <div className="flex items-center gap-3 mb-6 mt-2">
-                        <div className="w-12 h-12 rounded-xl bg-[#0D9B97]/20 flex items-center justify-center">
-                            <Zap className="w-6 h-6 text-[#0D9B97]" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold">{translatePlanName('plus', pricing.plans.plus.name)}</h3>
-                            <p className="text-sm text-slate-500">{t('pricing.plus.desc')}</p>
-                        </div>
-                    </div>
-
-                    <div className="mb-6">
-                        {(() => {
-                            const plusMonthly = getCurrencyAndPrice(pricing.plans.plus.monthly.price, pricing.plans.plus.monthly.currency);
-                            return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="price-tag">{plusMonthly.symbol}{plusMonthly.price}</span>
-                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
-                                </div>
-                            );
-                        })()}
-                        {pricing.plans.plus.yearly && (
-                            <div className="text-sm text-slate-400 mt-2">
-                                {(() => {
-                                    const plusYearly = getCurrencyAndPrice(pricing.plans.plus.yearly.price, pricing.plans.plus.yearly.currency);
-                                    return (
-                                        <>
-                                            <span>{t('pricing.yearly', { price: plusYearly.price }).replace(/¥|\$/, plusYearly.symbol)}</span>
-                                            {pricing.plans.plus.yearly.savings && (
-                                                <span className="text-green-500 ml-2">（{pricing.plans.plus.yearly.savings.match(/\d+/)?.[0] ? t('pricing.savings', { percent: pricing.plans.plus.yearly.savings.match(/\d+/)?.[0] || '17' }) : pricing.plans.plus.yearly.savings}）</span>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="space-y-1 mb-8">
-                        {pricing.plans.plus.features.map((f: string) => (
-                            <div key={f} className="feature-item">
-                                <div className="feature-icon">
-                                    <Check className="w-3 h-3 text-green-500" />
-                                </div>
-                                <span>{translateFeature(f)}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {currentPlan === 'plus' ? (
-                        <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
-                    ) : (
-                        <Button
-                            className="subscribe-btn primary"
-                            onClick={() => handleSubscribe('plus_monthly')}
-                            disabled={!!checkoutLoading}
-                        >
-                            {checkoutLoading === 'plus_monthly' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {t('pricing.subscribe')}
-                        </Button>
-                    )}
-                </div>
-
-                {/* Pro Plan */}
-                <div className={`pricing-card ${currentPlan === 'pro' ? 'current' : ''}`}>
-                    {currentPlan === 'pro' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
-                    <div className="flex items-center gap-3 mb-6 mt-2">
-                        <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                            <Crown className="w-6 h-6 text-amber-500" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold">{translatePlanName('pro', pricing.plans.pro.name)}</h3>
-                            <p className="text-sm text-slate-500">{t('pricing.pro.desc')}</p>
-                        </div>
-                    </div>
-
-                    <div className="mb-6">
-                        {(() => {
-                            const proMonthly = getCurrencyAndPrice(pricing.plans.pro.monthly.price, pricing.plans.pro.monthly.currency);
-                            return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="price-tag">{proMonthly.symbol}{proMonthly.price}</span>
-                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
-                                </div>
-                            );
-                        })()}
-                        {pricing.plans.pro.yearly && (
-                            <div className="text-sm text-slate-400 mt-2">
-                                {(() => {
-                                    const proYearly = getCurrencyAndPrice(pricing.plans.pro.yearly.price, pricing.plans.pro.yearly.currency);
-                                    return (
-                                        <>
-                                            <span>{t('pricing.yearly', { price: proYearly.price }).replace(/¥|\$/, proYearly.symbol)}</span>
-                                            {pricing.plans.pro.yearly.savings && (
-                                                <span className="text-green-500 ml-2">（{pricing.plans.pro.yearly.savings.match(/\d+/)?.[0] ? t('pricing.savings', { percent: pricing.plans.pro.yearly.savings.match(/\d+/)?.[0] || '17' }) : pricing.plans.pro.yearly.savings}）</span>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="space-y-1 mb-8">
-                        {pricing.plans.pro.features.map((f: string) => (
-                            <div key={f} className="feature-item">
-                                <div className="feature-icon">
-                                    <Check className="w-3 h-3 text-green-500" />
-                                </div>
-                                <span>{translateFeature(f)}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {currentPlan === 'pro' ? (
-                        <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
-                    ) : (
-                        <Button
-                            className="subscribe-btn primary"
-                            onClick={() => handleSubscribe('pro_monthly')}
-                            disabled={!!checkoutLoading}
-                        >
-                            {checkoutLoading === 'pro_monthly' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {t('pricing.subscribe')}
-                        </Button>
-                    )}
-                </div>
-
-                {/* Enterprise Plan */}
-                {pricing.plans.enterprise && (
-                    <div className={`pricing-card ${currentPlan === 'enterprise' ? 'current' : ''}`}>
-                        {currentPlan === 'enterprise' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
+                    <div className="card-content">
                         <div className="flex items-center gap-3 mb-6 mt-2">
-                            <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                                <Building2 className="w-6 h-6 text-purple-500" />
+                            <div className="w-12 h-12 rounded-xl bg-[#0D9B97]/20 flex items-center justify-center">
+                                <Zap className="w-6 h-6 text-[#0D9B97]" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold">{translatePlanName('enterprise', pricing.plans.enterprise.name)}</h3>
-                                <p className="text-sm text-slate-500">{t('pricing.enterprise.customSolution')}</p>
+                                <h3 className="text-xl font-bold">{translatePlanName('plus', pricing.plans.plus.name)}</h3>
+                                <p className="text-sm text-slate-500">{t('pricing.plus.desc')}</p>
                             </div>
                         </div>
 
                         <div className="mb-6">
-                            <span className="text-2xl font-bold text-slate-300">{t('pricing.enterprise.customPricing')}</span>
-                            <span className="text-slate-500 ml-2 text-sm">{t('pricing.enterprise.contactConsult')}</span>
+                            {billingPeriod === 'monthly' ? (
+                                <div className="flex items-baseline gap-2">
+                                    <span className="price-tag">$58.80</span>
+                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="price-tag">$49</span>
+                                        <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                    </div>
+                                    <div className="text-sm text-slate-400 mt-2">
+                                        <span>{t('pricing.billedYearly', { price: 588 })}</span>
+                                        <span className="text-green-500 ml-2">（{t('pricing.savings', { percent: '17' })}）</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
-                        <div className="space-y-1 mb-8">
-                            {pricing.plans.enterprise.features.map((f: string) => (
+                        <div className="features-list space-y-1">
+                            {pricing.plans.plus.features.map((f: string) => (
                                 <div key={f} className="feature-item">
                                     <div className="feature-icon">
                                         <Check className="w-3 h-3 text-green-500" />
@@ -534,16 +566,147 @@ export default function Pricing() {
                                 </div>
                             ))}
                         </div>
+                    </div>
 
-                        <Button
-                            className="subscribe-btn outline"
-                            onClick={() => {
-                                // 滚动到页面底部，让用户看到右下角的反馈按钮
-                                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-                            }}
-                        >
-                            {t('pricing.enterprise.contactService')}
-                        </Button>
+                    <div className="card-footer">
+                        {currentPlan === 'plus' ? (
+                            <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
+                        ) : canUpgradeTo(billingPeriod === 'yearly' ? 'plus_yearly' : 'plus_monthly') ? (
+                            <Button
+                                className="subscribe-btn primary"
+                                onClick={() => handleUpgrade(billingPeriod === 'yearly' ? 'plus_yearly' : 'plus_monthly')}
+                                disabled={!!checkoutLoading}
+                            >
+                                {(checkoutLoading === 'plus_monthly' || checkoutLoading === 'plus_yearly') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t('pricing.upgrade')}
+                            </Button>
+                        ) : (
+                            <Button
+                                className="subscribe-btn primary"
+                                onClick={() => handleSubscribe(billingPeriod === 'yearly' ? 'plus_yearly' : 'plus_monthly')}
+                                disabled={!!checkoutLoading}
+                            >
+                                {(checkoutLoading === 'plus_monthly' || checkoutLoading === 'plus_yearly') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t('pricing.subscribe')}
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Pro Plan */}
+                <div className={`pricing-card ${currentPlan === 'pro' ? 'current' : ''}`}>
+                    {currentPlan === 'pro' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
+                    <div className="card-content">
+                        <div className="flex items-center gap-3 mb-6 mt-2">
+                            <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                                <Crown className="w-6 h-6 text-amber-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold">{translatePlanName('pro', pricing.plans.pro.name)}</h3>
+                                <p className="text-sm text-slate-500">{t('pricing.pro.desc')}</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-6">
+                            {billingPeriod === 'monthly' ? (
+                                <div className="flex items-baseline gap-2">
+                                    <span className="price-tag">$99.80</span>
+                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="price-tag">$83</span>
+                                        <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                    </div>
+                                    <div className="text-sm text-slate-400 mt-2">
+                                        <span>{t('pricing.billedYearly', { price: 998 })}</span>
+                                        <span className="text-green-500 ml-2">（{t('pricing.savings', { percent: '17' })}）</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="features-list space-y-1">
+                            {pricing.plans.pro.features.map((f: string) => (
+                                <div key={f} className="feature-item">
+                                    <div className="feature-icon">
+                                        <Check className="w-3 h-3 text-green-500" />
+                                    </div>
+                                    <span>{translateFeature(f)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="card-footer">
+                        {currentPlan === 'pro' ? (
+                            <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
+                        ) : canUpgradeTo(billingPeriod === 'yearly' ? 'pro_yearly' : 'pro_monthly') ? (
+                            <Button
+                                className="subscribe-btn primary"
+                                onClick={() => handleUpgrade(billingPeriod === 'yearly' ? 'pro_yearly' : 'pro_monthly')}
+                                disabled={!!checkoutLoading}
+                            >
+                                {(checkoutLoading === 'pro_monthly' || checkoutLoading === 'pro_yearly') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t('pricing.upgrade')}
+                            </Button>
+                        ) : (
+                            <Button
+                                className="subscribe-btn primary"
+                                onClick={() => handleSubscribe(billingPeriod === 'yearly' ? 'pro_yearly' : 'pro_monthly')}
+                                disabled={!!checkoutLoading}
+                            >
+                                {(checkoutLoading === 'pro_monthly' || checkoutLoading === 'pro_yearly') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t('pricing.subscribe')}
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Enterprise Plan */}
+                {pricing.plans.enterprise && (
+                    <div className={`pricing-card ${currentPlan === 'enterprise' ? 'current' : ''}`}>
+                        {currentPlan === 'enterprise' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
+                        <div className="card-content">
+                            <div className="flex items-center gap-3 mb-6 mt-2">
+                                <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                                    <Building2 className="w-6 h-6 text-purple-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold">{translatePlanName('enterprise', pricing.plans.enterprise.name)}</h3>
+                                    <p className="text-sm text-slate-500">{t('pricing.enterprise.customSolution')}</p>
+                                </div>
+                            </div>
+
+                            <div className="mb-6">
+                                <span className="text-2xl font-bold text-slate-300">{t('pricing.enterprise.customPricing')}</span>
+                                <span className="text-slate-500 ml-2 text-sm">{t('pricing.enterprise.contactConsult')}</span>
+                            </div>
+
+                            <div className="features-list space-y-1">
+                                {pricing.plans.enterprise.features.map((f: string) => (
+                                    <div key={f} className="feature-item">
+                                        <div className="feature-icon">
+                                            <Check className="w-3 h-3 text-green-500" />
+                                        </div>
+                                        <span>{translateFeature(f)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="card-footer">
+                            <Button
+                                className="subscribe-btn outline"
+                                onClick={() => {
+                                    // 滚动到页面底部，让用户看到右下角的反馈按钮
+                                    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+                                }}
+                            >
+                                {t('pricing.enterprise.contactService')}
+                            </Button>
+                        </div>
                     </div>
                 )}
             </div>
@@ -553,14 +716,11 @@ export default function Pricing() {
                 <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6">{t('pricing.topUpTitle')}</h2>
                 <div className="topup-card flex-col sm:flex-row gap-4 sm:gap-6">
                     <div className="flex-1">
-                        <div className="font-semibold text-lg">{translateFeature(pricing.topups['100'].name) || t('pricing.topup.name')}</div>
-                        <div className="text-sm text-slate-500">{pricing.topups['100'].validity && pricing.topups['100'].validity.includes('3个月') ? t('pricing.topup.validity') : (pricing.topups['100'].validity || t('pricing.topup.validity'))}</div>
+                        <div className="font-semibold text-lg">{t('pricing.topup.name')}</div>
+                        <div className="text-sm text-slate-500">{t('pricing.topup.validity')}</div>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-6 justify-between sm:justify-end">
-                        {(() => {
-                            const topupPrice = getCurrencyAndPrice(pricing.topups['100'].price, pricing.topups['100'].currency);
-                            return <div className="text-xl sm:text-2xl font-bold">{topupPrice.symbol}{topupPrice.price}</div>;
-                        })()}
+                        <div className="text-xl sm:text-2xl font-bold">$4.99</div>
                         <Button
                             variant="outline"
                             onClick={() => handleSubscribe('topup_100')}
@@ -573,6 +733,35 @@ export default function Pricing() {
                     </div>
                 </div>
             </div>
+
+            {/* Upgrade Confirmation Dialog */}
+            {showUpgradeConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        onClick={() => setShowUpgradeConfirm(null)}
+                    />
+                    <div className="relative bg-[#1a1a1d] border border-white/10 rounded-2xl p-6 max-w-md mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className="text-xl font-bold mb-3">{t('pricing.upgradeConfirmTitle')}</h3>
+                        <p className="text-slate-400 mb-6">{t('pricing.upgradeConfirm')}</p>
+                        <div className="flex gap-3 justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowUpgradeConfirm(null)}
+                                className="border-white/20"
+                            >
+                                {t('common.cancel')}
+                            </Button>
+                            <Button
+                                onClick={confirmUpgrade}
+                                className="bg-[#0D9B97] hover:bg-[#0D9B97]/80"
+                            >
+                                {t('pricing.confirmUpgrade')}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

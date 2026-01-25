@@ -10,6 +10,7 @@ import MultiStockInput from '@/components/ui/MultiStockInput';
 import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
 import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
+import { useToastHelpers } from '@/components/ui/toast';
 
 // Declare global types for Chart.js
 declare global {
@@ -764,6 +765,20 @@ export default function Options() {
         return localStorage.getItem('optionsRiskExpanded') === 'true';
     });
 
+    // Quota confirmation dialog state
+    const [showQuotaConfirm, setShowQuotaConfirm] = useState(false);
+    const [quotaInfo, setQuotaInfo] = useState<{
+        hasEnough: boolean;
+        willUseFree: boolean;
+        freeRemaining: number;
+        freeQuota: number;
+        paidCredits: number;
+        amountNeeded: number;
+    } | null>(null);
+    const [pendingExpiry, setPendingExpiry] = useState<string | null>(null);
+
+    const toast = useToastHelpers();
+
     // Filter panel collapse state - default expanded, persisted in localStorage
     const [filterExpanded, setFilterExpanded] = useState(() => {
         const stored = localStorage.getItem('optionsFilterExpanded');
@@ -1125,12 +1140,76 @@ export default function Options() {
         }
     };
 
-    // When expiry selected, fetch chain
+    // Check quota before analysis
+    const checkQuotaAndConfirm = async (expiry: string) => {
+        if (!user) {
+            navigate('/login');
+            return;
+        }
+
+        const symbolCount = tickers.length;
+
+        try {
+            const response = await api.post('/payment/check-quota', {
+                service_type: 'option_analysis',
+                amount: symbolCount
+            });
+
+            const data = response.data;
+
+            // 如果额度不足，显示警告
+            if (!data.has_enough) {
+                toast.error(
+                    t('options.quota.insufficient'),
+                    t('options.quota.insufficientDesc', { needed: symbolCount, remaining: data.free_remaining })
+                );
+                navigate('/pricing');
+                return;
+            }
+
+            // 设置额度信息并显示确认弹窗
+            setQuotaInfo({
+                hasEnough: data.has_enough,
+                willUseFree: data.will_use_free,
+                freeRemaining: data.free_remaining,
+                freeQuota: data.free_quota,
+                paidCredits: data.paid_credits,
+                amountNeeded: symbolCount
+            });
+            setPendingExpiry(expiry);
+            setShowQuotaConfirm(true);
+
+        } catch (err) {
+            console.error('Quota check failed:', err);
+            // 如果检查失败，仍然允许继续（后端会做最终检查）
+            fetchChain(expiry);
+        }
+    };
+
+    // Confirm and proceed with analysis
+    const confirmAndAnalyze = () => {
+        setShowQuotaConfirm(false);
+        if (pendingExpiry) {
+            fetchChain(pendingExpiry);
+            // 分析完成后显示剩余额度的 toast
+            if (quotaInfo?.willUseFree) {
+                const newRemaining = quotaInfo.freeRemaining - quotaInfo.amountNeeded;
+                toast.info(
+                    t('options.quota.used'),
+                    t('options.quota.remaining', { remaining: newRemaining, quota: quotaInfo.freeQuota })
+                );
+            }
+        }
+        setPendingExpiry(null);
+        setQuotaInfo(null);
+    };
+
+    // When expiry selected, check quota first
     const handleExpirySelect = (expiry: string) => {
         setSelectedExpiry(expiry);
-        // 选择到期日后立即运行分析（此时策略和股票代码都已选择）
+        // 选择到期日后先检查额度
         if (expiry && strategy && tickers.length > 0) {
-            fetchChain(expiry);
+            checkQuotaAndConfirm(expiry);
         }
     };
 
@@ -2884,6 +2963,57 @@ export default function Options() {
                     loadingHistory={loadingHistory}
                     onClose={closeModal}
                 />
+            )}
+
+            {/* Quota Confirmation Dialog */}
+            {showQuotaConfirm && quotaInfo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        onClick={() => {
+                            setShowQuotaConfirm(false);
+                            setPendingExpiry(null);
+                            setQuotaInfo(null);
+                        }}
+                    />
+                    <div className="relative bg-[#1a1a1d] border border-white/10 rounded-2xl p-6 max-w-md mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className="text-xl font-bold mb-3">{t('options.quota.confirmTitle')}</h3>
+                        <div className="text-slate-400 mb-4 space-y-2">
+                            <p>{t('options.quota.analyzeCount', { count: quotaInfo.amountNeeded })}</p>
+                            {quotaInfo.willUseFree ? (
+                                <p className="text-green-400">
+                                    {t('options.quota.usingFree', {
+                                        remaining: quotaInfo.freeRemaining,
+                                        quota: quotaInfo.freeQuota
+                                    })}
+                                </p>
+                            ) : (
+                                <p className="text-amber-400">
+                                    {t('options.quota.usingPaid', { credits: quotaInfo.paidCredits })}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setShowQuotaConfirm(false);
+                                    setPendingExpiry(null);
+                                    setQuotaInfo(null);
+                                }}
+                                className="border-white/20"
+                            >
+                                {t('common.cancel')}
+                            </Button>
+                            <Button
+                                onClick={confirmAndAnalyze}
+                                className="bg-[#0D9B97] hover:bg-[#0D9B97]/80"
+                            >
+                                {t('options.quota.confirmAnalyze')}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from 'react-i18next';
+import { useToastHelpers } from '@/components/ui/toast';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -16,6 +17,7 @@ export default function Login() {
     const [resetEmailSent, setResetEmailSent] = useState(false);
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const toast = useToastHelpers();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,7 +29,7 @@ export default function Login() {
                     password,
                 });
                 if (error) throw error;
-                alert('Check your email for the confirmation link!');
+                toast.success(t('auth.signupSuccess'), t('auth.checkEmailConfirm'));
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
@@ -38,7 +40,7 @@ export default function Login() {
                 navigate('/');
             }
         } catch (error: any) {
-            alert(error.message);
+            toast.error(t('auth.authFailed'), error.message);
         } finally {
             setLoading(false);
         }
@@ -54,14 +56,14 @@ export default function Login() {
             });
             if (error) throw error;
         } catch (error: any) {
-            alert(error.message);
+            toast.error(t('auth.authFailed'), error.message);
         }
     };
 
     const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email) {
-            alert('Please enter your email address');
+            toast.error(t('auth.emailRequired'), t('auth.pleaseEnterEmail'));
             return;
         }
 
@@ -79,7 +81,7 @@ export default function Login() {
             setResetEmailSent(true);
         } catch (error: any) {
             console.error('Password reset error:', error);
-            alert(`Reset failed: ${error.message}`);
+            toast.error(t('auth.resetFailed'), error.message);
         } finally {
             setLoading(false);
         }

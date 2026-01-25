@@ -83,13 +83,20 @@ class Feedback(db.Model):
     ip_address = db.Column(db.String(50), nullable=True)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+def default_reset_time():
+    """默认重置时间为第二天零点"""
+    from datetime import timedelta
+    today = datetime.utcnow().date()
+    tomorrow = datetime.combine(today + timedelta(days=1), datetime.min.time())
+    return tomorrow
+
 class DailyQueryCount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False)
     query_count = db.Column(db.Integer, default=0)
     max_queries = db.Column(db.Integer, default=5)
-    reset_time = db.Column(db.DateTime, nullable=False)
+    reset_time = db.Column(db.DateTime, nullable=False, default=default_reset_time)
 
 class PortfolioHolding(db.Model):
     __tablename__ = 'portfolio_holdings'
@@ -178,11 +185,12 @@ class Subscription(db.Model):
 
 class Transaction(db.Model):
     __tablename__ = 'transactions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
     stripe_payment_intent_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_checkout_session_id = db.Column(db.String(255), unique=True, nullable=True)
+    stripe_invoice_id = db.Column(db.String(255), unique=True, nullable=True, index=True)  # 用于幂等性检查
     amount = db.Column(db.Integer, nullable=False) # In cents
     currency = db.Column(db.String(10), nullable=False, default='cny')
     status = db.Column(db.String(50), nullable=False) # succeeded, pending, failed

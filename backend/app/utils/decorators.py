@@ -17,7 +17,7 @@ def check_and_deduct_quota(user_id: str, service_type: str, amount: int = 1, tic
     Args:
         user_id: 用户ID
         service_type: 服务类型
-        amount: 扣减数量
+        amount: 扣减数量（期权分析时为symbol数量）
         ticker: 股票代码（可选，用于日志记录）
 
     Returns:
@@ -25,47 +25,26 @@ def check_and_deduct_quota(user_id: str, service_type: str, amount: int = 1, tic
             'success': bool,
             'message': str,
             'remaining': int,
-            'is_free': bool
+            'is_free': bool,
+            'free_remaining': int,
+            'free_quota': int
         }
     """
-    success, message, remaining = PaymentService.check_and_deduct_credits(
+    success, message, remaining, extra_info = PaymentService.check_and_deduct_credits(
         user_id=user_id,
         service_type=service_type,
         amount=amount,
         ticker=ticker
     )
 
-    is_free = '免费' in message or 'free' in message.lower()
-
-    # 如果使用免费额度，更新 DailyQueryCount
-    if success and is_free:
-        from datetime import datetime, timedelta
-        from ..models import db, DailyQueryCount
-        today = datetime.now().date()
-        daily_count = DailyQueryCount.query.filter_by(
-            user_id=user_id,
-            date=today
-        ).first()
-
-        if not daily_count:
-            tomorrow = datetime.combine(today + timedelta(days=1), datetime.min.time())
-            daily_count = DailyQueryCount(
-                user_id=user_id,
-                date=today,
-                query_count=1,
-                max_queries=PaymentService.DAILY_FREE_QUOTA.get(service_type, 0),
-                reset_time=tomorrow
-            )
-            db.session.add(daily_count)
-        else:
-            daily_count.query_count += 1
-        db.session.commit()
-
     return {
         'success': success,
         'message': message,
         'remaining': remaining,
-        'is_free': is_free
+        'is_free': extra_info.get('is_free', False),
+        'free_remaining': extra_info.get('free_remaining', 0),
+        'free_quota': extra_info.get('free_quota', 0),
+        'free_used': extra_info.get('free_used', 0)
     }
 
 
@@ -217,67 +196,30 @@ def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
             except Exception:
                 pass  # 如果提取失败，忽略错误，ticker保持为None
 
-            # 检查并扣减额度
-            success, message, remaining = PaymentService.check_and_deduct_credits(
+            # 检查并扣减额度（PaymentService 已统一处理 DailyQueryCount 更新）
+            success, message, remaining, extra_info = PaymentService.check_and_deduct_credits(
                 user_id=user_id,
                 service_type=service_type,
                 amount=amount,
                 ticker=ticker
             )
-            
+
             if not success:
                 return jsonify({
                     'error': message,
                     'remaining_credits': remaining,
+                    'free_remaining': extra_info.get('free_remaining', 0),
+                    'free_quota': extra_info.get('free_quota', 0),
                     'code': 'INSUFFICIENT_CREDITS'
                 }), 402
-            
-            # 如果使用免费额度，需要更新DailyQueryCount
-            # 这里逻辑稍微有点重复，PaymentService内部已经判断了。
-            # 但是decorators.py原逻辑有更新daily_count的操作。
-            # Wait, PaymentService.check_and_deduct_credits ALREADY updates UsageLog/DailyQueryCount?
-            # Looking at my PaymentService code:
-            # 1. Checks check_daily_free_quota
-            # 2. If true, logs UsageLog. But DOES IT UPDATE DailyQueryCount? 
-            # In `check_daily_free_quota` it just checks.
-            # In `check_and_deduct_credits`:
-            #   if self.check_daily_free_quota(...):
-            #       usage_log = ...
-            #       return True ...
-            # It seems the legacy `payment_service.py` DID NOT update `DailyQueryCount` inside `check_and_deduct_credits`?
-            # Let's check the legacy decorators.py.
-            # Legacy decorators.py updates DailyQueryCount IF '免费' is in message.
-            # My `PaymentService` code (generated above) DOES NOT update `DailyQueryCount` inside `check_and_deduct_credits`.
-            # So I MUST do it here OR update PaymentService to do it.
-            # Updating PaymentService is better encapsulation.
-            
-            # I will implement the update logic here for now to match legacy behavior, 
-            # OR I should have put it in PaymentService.
-            # Let's put it here to be safe, filtering by message content is hacky but matches legacy.
-            
-            if '免费' in message or 'free' in message.lower():
-                 from datetime import datetime, timedelta
-                 from ..models import db, DailyQueryCount
-                 today = datetime.now().date()
-                 daily_count = DailyQueryCount.query.filter_by(
-                     user_id=user_id,
-                     date=today
-                 ).first()
-                 
-                 if not daily_count:
-                     # Calculate reset time (next day midnight)
-                     tomorrow = datetime.combine(today + timedelta(days=1), datetime.min.time())
-                     daily_count = DailyQueryCount(
-                         user_id=user_id,
-                         date=today,
-                         query_count=1,
-                         max_queries=PaymentService.DAILY_FREE_QUOTA.get(service_type, 0),
-                         reset_time=tomorrow
-                     )
-                     db.session.add(daily_count)
-                 else:
-                     daily_count.query_count += 1
-                 db.session.commit()
+
+            # 将额度信息存储在 g 对象中，供视图函数使用
+            g.quota_info = {
+                'is_free': extra_info.get('is_free', False),
+                'free_remaining': extra_info.get('free_remaining', 0),
+                'free_quota': extra_info.get('free_quota', 0),
+                'remaining_credits': remaining
+            }
 
             response = f(*args, **kwargs)
             

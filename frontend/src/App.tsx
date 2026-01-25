@@ -11,13 +11,15 @@ import ResetPassword from '@/pages/ResetPassword';
 import NewLanding from '@/pages/NewLanding';
 import Landing from '@/pages/Landing';
 import { AnalyticsProvider } from '@/components/analytics/AnalyticsProvider';
+import { ToastProvider } from '@/components/ui/toast';
 
 function App() {
   return (
     <HelmetProvider>
-      <BrowserRouter>
-        <AnalyticsProvider>
-          <Routes>
+      <ToastProvider>
+        <BrowserRouter>
+          <AnalyticsProvider>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/" element={<NewLanding />} />
@@ -30,8 +32,9 @@ function App() {
               <Route path="/profile" element={<Profile />} />
             </Route>
           </Routes>
-        </AnalyticsProvider>
-      </BrowserRouter>
+          </AnalyticsProvider>
+        </BrowserRouter>
+      </ToastProvider>
     </HelmetProvider>
   );
 }
