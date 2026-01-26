@@ -443,37 +443,69 @@ class OptionsService:
             symbol = symbol.upper()
             option_type = option_type.upper()
 
-            # 1. 获取股票当前价格和数据
+            # 1. 获取股票当前价格和数据（多重容错）
             ticker = yf.Ticker(symbol)
-            info = ticker.info
-            current_price = info.get('regularMarketPrice') or info.get('currentPrice')
+            current_price = None
+
+            # 方法1: 从 info 获取
+            try:
+                info = ticker.info
+                current_price = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose')
+                if current_price:
+                    current_price = float(current_price)
+            except Exception as e:
+                print(f"从 ticker.info 获取 {symbol} 价格失败: {e}")
+                info = {}
+
+            # 方法2: 从最近历史数据获取
+            if not current_price:
+                try:
+                    hist = ticker.history(period="5d")
+                    if not hist.empty:
+                        current_price = float(hist['Close'].iloc[-1])
+                except Exception as e:
+                    print(f"从 ticker.history 获取 {symbol} 价格失败: {e}")
+
+            # 方法3: 从 fast_info 获取
+            if not current_price:
+                try:
+                    fast_info = ticker.fast_info
+                    current_price = float(fast_info.get('lastPrice', 0) or fast_info.get('previousClose', 0))
+                    if current_price <= 0:
+                        current_price = None
+                except Exception as e:
+                    print(f"从 ticker.fast_info 获取 {symbol} 价格失败: {e}")
 
             if not current_price:
-                # 尝试从历史数据获取
-                hist = ticker.history(period="1d")
-                if not hist.empty:
-                    current_price = float(hist['Close'].iloc[-1])
-                else:
-                    return {
-                        'success': False,
-                        'error': f'无法获取 {symbol} 的当前股价'
-                    }
+                return {
+                    'success': False,
+                    'error': f'无法获取 {symbol} 的当前股价，请检查股票代码是否正确'
+                }
 
             # 2. 获取股票历史数据用于趋势分析
-            hist_3mo = ticker.history(period="3mo")
-            price_history = hist_3mo['Close'].tolist() if not hist_3mo.empty else []
+            try:
+                hist_3mo = ticker.history(period="3mo")
+                price_history = hist_3mo['Close'].tolist() if not hist_3mo.empty else []
+            except Exception as e:
+                print(f"获取 {symbol} 历史数据失败: {e}")
+                hist_3mo = None
+                price_history = []
 
             # 计算ATR
             atr_14 = 0
-            if not hist_3mo.empty and len(hist_3mo) >= 15:
-                high = hist_3mo['High'].values
-                low = hist_3mo['Low'].values
-                close = hist_3mo['Close'].values
-                tr1 = high[1:] - low[1:]
-                tr2 = np.abs(high[1:] - close[:-1])
-                tr3 = np.abs(low[1:] - close[:-1])
-                tr = np.maximum(np.maximum(tr1, tr2), tr3)
-                atr_14 = float(np.mean(tr[-14:]))
+            if hist_3mo is not None and not hist_3mo.empty and len(hist_3mo) >= 15:
+                try:
+                    high = hist_3mo['High'].values
+                    low = hist_3mo['Low'].values
+                    close = hist_3mo['Close'].values
+                    tr1 = high[1:] - low[1:]
+                    tr2 = np.abs(high[1:] - close[:-1])
+                    tr3 = np.abs(low[1:] - close[:-1])
+                    tr = np.maximum(np.maximum(tr1, tr2), tr3)
+                    atr_14 = float(np.mean(tr[-14:]))
+                except Exception as e:
+                    print(f"计算 {symbol} ATR 失败: {e}")
+                    atr_14 = 0
 
             # 3. 如果没有提供隐含波动率，自动估算
             if implied_volatility is None or implied_volatility <= 0:
@@ -580,20 +612,23 @@ class OptionsService:
 
             # 9. 计算支撑阻力位
             support_resistance = {}
-            if not hist_3mo.empty:
-                high_52w = float(hist_3mo['High'].max())
-                low_52w = float(hist_3mo['Low'].min())
-                ma_20 = float(hist_3mo['Close'].rolling(20).mean().iloc[-1]) if len(hist_3mo) >= 20 else current_price
-                ma_50 = float(hist_3mo['Close'].rolling(50).mean().iloc[-1]) if len(hist_3mo) >= 50 else current_price
+            if hist_3mo is not None and not hist_3mo.empty:
+                try:
+                    high_52w = float(hist_3mo['High'].max())
+                    low_52w = float(hist_3mo['Low'].min())
+                    ma_20 = float(hist_3mo['Close'].rolling(20).mean().iloc[-1]) if len(hist_3mo) >= 20 else current_price
+                    ma_50 = float(hist_3mo['Close'].rolling(50).mean().iloc[-1]) if len(hist_3mo) >= 50 else current_price
 
-                support_resistance = {
-                    'high_52w': high_52w,
-                    'low_52w': low_52w,
-                    'ma_20': ma_20,
-                    'ma_50': ma_50,
-                    'support_1': current_price * 0.95,
-                    'resistance_1': current_price * 1.05,
-                }
+                    support_resistance = {
+                        'high_52w': high_52w,
+                        'low_52w': low_52w,
+                        'ma_20': ma_20,
+                        'ma_50': ma_50,
+                        'support_1': current_price * 0.95,
+                        'resistance_1': current_price * 1.05,
+                    }
+                except Exception as e:
+                    print(f"计算 {symbol} 支撑阻力位失败: {e}")
 
             # 10. 构建返回结果
             result = {

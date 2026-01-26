@@ -759,16 +759,17 @@ export default function ReverseScore() {
                     </p>
                 </div>
 
-                {/* Input Mode Tabs - Manual input first (primary action) */}
+                {/* Input Mode - Manual input only (OCR hidden for now) */}
                 <div className="form-card">
                     <div className="input-mode-tabs">
                         <button
-                            className={`input-mode-tab ${inputMode === 'manual' ? 'active' : ''}`}
+                            className={`input-mode-tab active`}
                             onClick={() => setInputMode('manual')}
                         >
                             <FileText size={18} />
                             {isZh ? '手动录入' : 'Manual Input'}
                         </button>
+                        {/* OCR截图识别功能暂时隐藏
                         <button
                             className={`input-mode-tab secondary ${inputMode === 'upload' ? 'active' : ''}`}
                             onClick={() => setInputMode('upload')}
@@ -776,6 +777,7 @@ export default function ReverseScore() {
                             <Camera size={14} />
                             {isZh ? '截图识别' : 'Screenshot'}
                         </button>
+                        */}
                     </div>
 
                     {/* Image Upload Mode */}
