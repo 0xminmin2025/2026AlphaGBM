@@ -217,7 +217,20 @@ class OptionsService:
                     if client.quote_client:
                         market = Market.US if not symbol.endswith('.HK') else Market.HK
                         option_chain_df = client.get_option_chain(symbol, expiry_date, market)
-                        
+
+                        # Debug: log DataFrame columns and sample data
+                        import logging
+                        _logger = logging.getLogger(__name__)
+                        _logger.info(f"[OptionChain] Tiger API returned {len(option_chain_df)} rows for {symbol} {expiry_date}")
+                        _logger.info(f"[OptionChain] Columns: {list(option_chain_df.columns)}")
+                        if len(option_chain_df) > 0:
+                            sample = option_chain_df.iloc[0]
+                            _logger.info(f"[OptionChain] Sample row greeks - delta: {sample.get('delta', 'MISSING')}, "
+                                        f"gamma: {sample.get('gamma', 'MISSING')}, "
+                                        f"theta: {sample.get('theta', 'MISSING')}, "
+                                        f"vega: {sample.get('vega', 'MISSING')}, "
+                                        f"latest_price: {sample.get('latest_price', 'MISSING')}")
+
                         calls = []
                         puts = []
                         real_stock_price = 150.0  # Default price

@@ -44,6 +44,10 @@ def create_app(config_class=Config):
     from .models import db
     db.init_app(app)
 
+    # Create all tables if they don't exist (safe for new databases)
+    with app.app_context():
+        db.create_all()
+
     # Initialize Task Queue (always needed for API endpoints)
     from .services.task_queue import init_task_queue, shutdown_task_queue
     with app.app_context():

@@ -203,7 +203,7 @@ class OptionScorer:
         - 日权（0DTE/1DTE）评分封顶30分，不推荐卖Put
         - 临期（DTE<=3）接近平值时降低评分
         """
-        if (not option.latest_price or not option.delta or not option.strike or
+        if (option.latest_price is None or option.delta is None or option.strike is None or
             option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0
 
@@ -293,8 +293,8 @@ class OptionScorer:
         - 日权（0DTE/1DTE）评分封顶30分
         - 临期（DTE<=3）接近平值时降低评分
         """
-        if (not option.latest_price or not option.delta or not option.theta or
-            not option.strike or option.put_call != "CALL" or
+        if (option.latest_price is None or option.delta is None or option.theta is None or
+            option.strike is None or option.put_call != "CALL" or
             option.delta <= 0 or stock_price <= 0):
             return 0.0
 
@@ -378,9 +378,9 @@ class OptionScorer:
         Calculate Buy Call Recommendation Value (BCRV)
         归一化到 0-100 分，包含 Theta 权重和 Gamma 优势
         """
-        if (not option.latest_price or not option.delta or not option.gamma or
-            not option.theta or option.put_call != "CALL" or
-            abs(option.theta) <= 0 or stock_price <= 0):
+        if (option.latest_price is None or option.delta is None or option.gamma is None or
+            option.theta is None or option.put_call != "CALL" or
+            abs(option.theta or 0) <= 0 or stock_price <= 0):
             return 0.0
 
         # ========== 合理性检查：深度实值期权成本太高 ==========
@@ -430,7 +430,7 @@ class OptionScorer:
         Calculate Buy Put Recommendation Value (BPRV)
         归一化到 0-100 分，包含 Theta 权重和 Gamma 优势
         """
-        if (not option.latest_price or not option.delta or
+        if (option.latest_price is None or option.delta is None or
             option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0
 
@@ -534,6 +534,18 @@ class OptionScorer:
         if option.put_call == "CALL":
             scores.scrv = self.calculate_scrv(option, stock_price)
             scores.bcrv = self.calculate_bcrv(option, stock_price)
+
+        # Debug logging for first few options to diagnose zero scores
+        import logging
+        _scorer_logger = logging.getLogger(__name__)
+        if option.put_call == "PUT":
+            _scorer_logger.debug(f"[Scorer] {option.symbol} {option.strike}P: "
+                               f"delta={option.delta}, theta={option.theta}, latest_price={option.latest_price}, "
+                               f"stock_price={stock_price}, SPRV={scores.sprv}, BPRV={scores.bprv}")
+        else:
+            _scorer_logger.debug(f"[Scorer] {option.symbol} {option.strike}C: "
+                               f"delta={option.delta}, theta={option.theta}, latest_price={option.latest_price}, "
+                               f"stock_price={stock_price}, SCRV={scores.scrv}, BCRV={scores.bcrv}")
 
         premium_income, margin_req, annual_return = self.calculate_premium_and_margin(
             option, stock_price, margin_rate
