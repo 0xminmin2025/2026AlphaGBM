@@ -631,40 +631,18 @@ class OptionsService:
                     print(f"计算 {symbol} 支撑阻力位失败: {e}")
 
             # 10. 构建返回结果
-            result = {
-                'success': True,
-                'symbol': symbol,
-                'option_type': option_type,
-                'strike': strike,
-                'expiry_date': expiry_date,
-                'days_to_expiry': days_to_expiry,
-                'option_price': option_price,
-                'implied_volatility': round(implied_volatility * 100, 2),  # 转为百分比
-                'stock_data': {
-                    'current_price': round(current_price, 2),
-                    'atr_14': round(atr_14, 4),
-                    'trend': trend_info.get('trend', 'unknown'),
-                    'trend_strength': round(trend_info.get('trend_strength', 0.5), 2),
-                    'support_resistance': support_resistance,
-                },
-                'estimated_greeks': {
-                    'delta': round(delta, 4),
-                    'gamma': round(gamma, 4),
-                    'theta': round(theta, 4),
-                },
-                'scores': {},
-                'trend_info': trend_info,
-            }
-
-            # 根据期权类型返回相关评分
+            # 根据期权类型计算评分
             if option_type == 'CALL':
                 sell_score = scores.scrv or 0
                 buy_score = scores.bcrv or 0
+                total_score = max(sell_score, buy_score)
 
-                result['scores'] = {
+                scores_dict = {
                     'sell_call': {
                         'score': sell_score,
                         'style_label': '稳健收益' if sell_score >= 60 else '风险较高',
+                        'risk_level': 'low' if sell_score >= 70 else ('medium' if sell_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if sell_score >= 70 else ('#F59E0B' if sell_score >= 50 else '#EF4444'),
                         'trend_warning': trend_info.get('display_info', {}).get('warning') if not trend_info.get('display_info', {}).get('is_ideal_trend') else None,
                         'breakdown': {
                             'iv_rank': scores.iv_rank,
@@ -676,6 +654,8 @@ class OptionsService:
                     'buy_call': {
                         'score': buy_score,
                         'style_label': '激进策略' if buy_score >= 60 else '投机性强',
+                        'risk_level': 'low' if buy_score >= 70 else ('medium' if buy_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if buy_score >= 70 else ('#F59E0B' if buy_score >= 50 else '#EF4444'),
                         'trend_warning': None if trend_info.get('trend') == 'uptrend' else '当前非上涨趋势，买入风险较高',
                         'breakdown': {
                             'iv_rank': scores.iv_rank,
@@ -686,11 +666,14 @@ class OptionsService:
             else:  # PUT
                 sell_score = scores.sprv or 0
                 buy_score = scores.bprv or 0
+                total_score = max(sell_score, buy_score)
 
-                result['scores'] = {
+                scores_dict = {
                     'sell_put': {
                         'score': sell_score,
                         'style_label': '稳健收益' if sell_score >= 60 else '风险较高',
+                        'risk_level': 'low' if sell_score >= 70 else ('medium' if sell_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if sell_score >= 70 else ('#F59E0B' if sell_score >= 50 else '#EF4444'),
                         'trend_warning': trend_info.get('display_info', {}).get('warning') if not trend_info.get('display_info', {}).get('is_ideal_trend') else None,
                         'breakdown': {
                             'iv_rank': scores.iv_rank,
@@ -703,6 +686,8 @@ class OptionsService:
                     'buy_put': {
                         'score': buy_score,
                         'style_label': '对冲策略' if buy_score >= 60 else '保险性质',
+                        'risk_level': 'low' if buy_score >= 70 else ('medium' if buy_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if buy_score >= 70 else ('#F59E0B' if buy_score >= 50 else '#EF4444'),
                         'trend_warning': None if trend_info.get('trend') == 'downtrend' else '当前非下跌趋势，对冲需求可能不高',
                         'breakdown': {
                             'iv_rank': scores.iv_rank,
@@ -710,6 +695,33 @@ class OptionsService:
                         }
                     }
                 }
+
+            result = {
+                'success': True,
+                'symbol': symbol,
+                'option_type': option_type,
+                'strike': strike,
+                'expiry_date': expiry_date,
+                'days_to_expiry': days_to_expiry,
+                'option_price': option_price,
+                'implied_volatility': round(implied_volatility * 100, 2),  # 转为百分比
+                'current_price': round(current_price, 2),  # 顶层返回当前股价
+                'total_score': round(total_score, 1),       # 总评分（取最高策略分）
+                'stock_data': {
+                    'current_price': round(current_price, 2),
+                    'atr_14': round(atr_14, 4),
+                    'trend': trend_info.get('trend', 'unknown'),
+                    'trend_strength': round(trend_info.get('trend_strength', 0.5), 2),
+                    'support_resistance': support_resistance,
+                },
+                'estimated_greeks': {
+                    'delta': round(delta, 4),
+                    'gamma': round(gamma, 4),
+                    'theta': round(theta, 4),
+                },
+                'scores': scores_dict,
+                'trend_info': trend_info,
+            }
 
             return result
 

@@ -38,6 +38,15 @@ interface ReverseScoreResponse {
     strike: number;
     expiry_date: string;
     current_price: number;
+    total_score: number;
+    days_to_expiry?: number;
+    implied_volatility?: number;
+    stock_data?: {
+        current_price: number;
+        atr_14: number;
+        trend: string;
+        trend_strength: number;
+    };
     scores: {
         sell_call?: ScoreResult;
         buy_call?: ScoreResult;
@@ -752,11 +761,6 @@ export default function ReverseScore() {
                     <h1 className="text-2xl font-bold mb-2">
                         {isZh ? '期权反向查分' : 'Option Reverse Score'}
                     </h1>
-                    <p className="text-muted-foreground">
-                        {isZh
-                            ? '上传截图或手动输入期权参数，获取我们算法的评分和建议'
-                            : 'Upload a screenshot or enter option parameters to get our algorithm\'s score and recommendations'}
-                    </p>
                 </div>
 
                 {/* Input Mode - Manual input only (OCR hidden for now) */}
@@ -1072,20 +1076,82 @@ export default function ReverseScore() {
                 {/* Results */}
                 {result && !loading && (
                     <>
-                        {/* Stock Info */}
+                        {/* Total Score + Stock Info */}
                         <div className="form-card">
-                            <h3 className="text-lg font-semibold mb-3">
-                                {result.symbol} - {result.option_type} ${result.strike} ({result.expiry_date})
-                            </h3>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold">
+                                    {result.symbol} - {result.option_type} ${result.strike} ({result.expiry_date})
+                                </h3>
+                                {/* 总评分 */}
+                                <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                }}>
+                                    <div style={{
+                                        width: '64px',
+                                        height: '64px',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '1.5rem',
+                                        fontWeight: 700,
+                                        backgroundColor: result.total_score >= 70
+                                            ? 'rgba(16, 185, 129, 0.2)'
+                                            : result.total_score >= 50
+                                            ? 'rgba(245, 158, 11, 0.2)'
+                                            : 'rgba(239, 68, 68, 0.2)',
+                                        color: result.total_score >= 70
+                                            ? '#10B981'
+                                            : result.total_score >= 50
+                                            ? '#F59E0B'
+                                            : '#EF4444',
+                                        border: `3px solid ${
+                                            result.total_score >= 70
+                                                ? '#10B981'
+                                                : result.total_score >= 50
+                                                ? '#F59E0B'
+                                                : '#EF4444'
+                                        }`
+                                    }}>
+                                        {result.total_score?.toFixed(0) || '-'}
+                                    </div>
+                                    <span style={{ fontSize: '0.7rem', color: 'hsl(240, 5%, 50%)' }}>
+                                        {isZh ? '总评分' : 'Total'}
+                                    </span>
+                                </div>
+                            </div>
                             <div className="stock-info">
                                 <div className="stock-info-item">
                                     <div className="stock-info-label">
                                         {isZh ? '当前股价' : 'Current Price'}
                                     </div>
                                     <div className="stock-info-value">
-                                        ${result.current_price?.toFixed(2) || '-'}
+                                        ${(result.current_price || result.stock_data?.current_price)?.toFixed(2) || '-'}
                                     </div>
                                 </div>
+                                {result.days_to_expiry && (
+                                    <div className="stock-info-item">
+                                        <div className="stock-info-label">
+                                            {isZh ? '剩余天数' : 'DTE'}
+                                        </div>
+                                        <div className="stock-info-value">
+                                            {result.days_to_expiry}{isZh ? '天' : 'd'}
+                                        </div>
+                                    </div>
+                                )}
+                                {result.implied_volatility && (
+                                    <div className="stock-info-item">
+                                        <div className="stock-info-label">
+                                            {isZh ? '隐含波动率' : 'IV'}
+                                        </div>
+                                        <div className="stock-info-value">
+                                            {result.implied_volatility?.toFixed(1)}%
+                                        </div>
+                                    </div>
+                                )}
                                 {result.trend_info && (
                                     <>
                                         <div className="stock-info-item">
