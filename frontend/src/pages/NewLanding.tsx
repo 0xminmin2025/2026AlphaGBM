@@ -323,6 +323,7 @@ export default function NewLanding() {
                     <div className="flex items-center justify-between h-16">
                         {/* Logo */}
                         <div className="flex items-center gap-2">
+                            <img src="/logo.png" alt="AlphaGBM" className="h-8 w-8" />
                             <span className="font-bold text-xl tracking-tight">
                                 Alpha<span style={{ color: '#0D9B97' }}>GBM</span>
                             </span>

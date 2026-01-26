@@ -102,6 +102,7 @@ export default function Login() {
                     {/* Brand Logo */}
                     <div className="flex justify-center mb-2">
                         <div className="flex items-center space-x-2">
+                            <img src="/logo.png" alt="AlphaGBM" className="h-10 w-10" />
                             <span className="font-bold text-2xl tracking-tight text-[#FAFAFA]">
                                 Alpha<span className="text-[#0D9B97]">GBM</span>
                             </span>

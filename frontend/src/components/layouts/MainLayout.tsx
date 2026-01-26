@@ -78,6 +78,7 @@ export default function MainLayout() {
                 <div className="container flex h-16 items-center justify-between px-4 sm:px-8 max-w-7xl mx-auto">
                     {/* Logo */}
                     <Link to="/" className="flex items-center space-x-2">
+                        <img src="/logo.png" alt="AlphaGBM" className="h-8 w-8" />
                         <span className="font-bold text-xl tracking-tight">Alpha<span className="text-[#0D9B97]">GBM</span></span>
                     </Link>
 

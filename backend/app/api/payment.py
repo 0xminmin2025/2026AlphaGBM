@@ -221,16 +221,16 @@ def get_transactions():
         
     transactions = []
     for t in pagination.items:
+        # Stripe 金额以最小货币单位存储（美分/分），需要除以 100 转换为标准单位
+        amount_display = float(t.amount) / 100.0
         transactions.append({
-            'period_start': '', # Not applicable for single transaction usually, unless subscription period?
+            'period_start': '',
             'date': t.created_at.isoformat(),
             'description': t.description,
-            'amount': float(t.amount) / 100.0 if t.currency == 'cny' else t.amount, # Amount is usually in cents for Stripe? My payment service uses amount_total from session.
-            # In handle_checkout_completed, amount=session['amount_total']. Stripe amounts are in smallest unit (cents).
-            # So I should divide by 100 if currency is cny/usd.
+            'amount': amount_display,
             'currency': t.currency,
             'status': t.status,
-            'invoice_pdf': '' # We don't store invoice URL readily in Transaction model yet?
+            'invoice_pdf': ''
         })
     
     return jsonify({
