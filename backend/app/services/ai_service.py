@@ -215,6 +215,81 @@ def get_fallback_analysis(ticker, style, data, risk_result):
     return analysis
 
 
+def _compute_alphagbm_recommendation(data, risk_result, style):
+    """
+    根据已有数据计算 AlphaGBM 系统综合研判结果。
+    返回 dict: action, reason, trend_direction, upside_pct, position_pct
+    """
+    current_price = data.get('price', 0)
+    target_price = data.get('target_price', current_price)
+    suggested_position = risk_result.get('suggested_position', 0)
+    ev_recommendation = data.get('ev_model', {}).get('recommendation', {})
+
+    # 计算上涨空间
+    if current_price > 0:
+        upside_pct = (target_price - current_price) / current_price
+    else:
+        upside_pct = 0
+
+    # 趋势方向：基于价格 vs MA50 vs MA200
+    ma50 = data.get('ma50', 0)
+    ma200 = data.get('ma200', 0)
+    if current_price > 0 and ma50 > 0 and ma200 > 0:
+        if current_price > ma50 > ma200:
+            trend_direction = "上涨趋势"
+        elif current_price < ma50 < ma200:
+            trend_direction = "下跌趋势"
+        else:
+            trend_direction = "横盘整理"
+    else:
+        trend_direction = "数据不足"
+
+    # 操作建议逻辑
+    if suggested_position == 0:
+        action = "观望"
+        reason = "系统风控评估风险过高，不建议建仓"
+    elif upside_pct > 0.20:
+        action = "买入"
+        reason = f"目标价较当前价有{upside_pct*100:.1f}%上涨空间，具备较强买入价值"
+    elif upside_pct > 0.05:
+        action = "分批建仓"
+        reason = f"目标价较当前价有{upside_pct*100:.1f}%上涨空间，建议分批建仓"
+    elif upside_pct > -0.05:
+        action = "持有"
+        reason = f"当前价格接近目标价（偏差{upside_pct*100:.1f}%），建议持有观察"
+    elif upside_pct > -0.20:
+        action = "减仓"
+        reason = f"当前价格已超过目标价{abs(upside_pct)*100:.1f}%，建议逐步减仓锁定利润"
+    else:
+        action = "卖出"
+        reason = f"当前价格大幅超过目标价{abs(upside_pct)*100:.1f}%，建议卖出锁定利润"
+
+    # 结合 EV 模型补充理由
+    ev_action = ev_recommendation.get('action', '')
+    ev_reason = ev_recommendation.get('reason', '')
+    if ev_action and ev_reason:
+        reason += f"；EV模型判断：{ev_reason}"
+
+    # 结合趋势方向补充理由
+    if style == 'momentum':
+        if trend_direction == "上涨趋势" and action in ("买入", "分批建仓"):
+            reason += "；趋势方向确认为上涨趋势，与买入方向一致"
+        elif trend_direction == "下跌趋势" and action in ("买入", "分批建仓"):
+            reason += "；但注意当前处于下跌趋势，需谨慎"
+            # 趋势风格下，下跌趋势时降级建议
+            if action == "买入":
+                action = "分批建仓"
+                reason += "，降级为分批建仓"
+
+    return {
+        'action': action,
+        'reason': reason,
+        'trend_direction': trend_direction,
+        'upside_pct': round(upside_pct * 100, 1),
+        'position_pct': suggested_position,
+    }
+
+
 def get_gemini_analysis(ticker, style, data, risk_result):
     """
     发送数据给 Gemini 进行定性分析
@@ -256,6 +331,9 @@ def get_gemini_analysis(ticker, style, data, risk_result):
     is_fund = data.get('is_etf_or_fund', False)
     fund_type = data.get('fund_type', None)
     
+    # 计算 AlphaGBM 系统综合研判
+    alphagbm_rec = _compute_alphagbm_recommendation(data, risk_result, style)
+
     # 构建 Prompt (提示词工程)
     if is_fund and fund_type == 'ETF':
         # ETF专用分析框架
@@ -526,6 +604,22 @@ def get_gemini_analysis(ticker, style, data, risk_result):
                     prompt += f"  - {adj}\n"
                 prompt += f"\n"
     
+    # 添加 AlphaGBM 系统综合研判
+    prompt += f"""
+
+### AlphaGBM 系统综合研判
+
+**⚠️ 重要：以下是 AlphaGBM 量化系统的综合研判结果，AI 报告必须与此保持一致，不得产生矛盾建议。**
+
+- **系统操作建议**: {alphagbm_rec['action']}
+- **上涨空间**: {alphagbm_rec['upside_pct']}%（目标价 vs 当前价）
+- **建议仓位**: {alphagbm_rec['position_pct']}%
+- **趋势方向**: {alphagbm_rec['trend_direction']}
+- **研判理由**: {alphagbm_rec['reason']}
+
+**指令：你的分析和建议必须与 AlphaGBM 系统的研判方向一致。如果你基于自身分析有不同看法，请在报告中说明 AlphaGBM 系统的建议，并解释你的补充观点，但不能直接给出与系统相反的操作建议。例如：如果系统建议"买入"，你不能建议"卖出"；你可以说"系统建议买入，但需注意以下风险..."**
+"""
+
     # 继续构建提示词的分析任务部分
     prompt += """
 

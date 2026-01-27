@@ -20,6 +20,79 @@ declare global {
     }
 }
 
+// Sector & Industry English→Chinese translation map
+const SECTOR_ZH: Record<string, string> = {
+    'Technology': '科技', 'Healthcare': '医疗保健', 'Financial Services': '金融服务',
+    'Financials': '金融', 'Consumer Cyclical': '可选消费', 'Consumer Discretionary': '可选消费',
+    'Consumer Defensive': '必需消费', 'Consumer Staples': '必需消费',
+    'Communication Services': '通信服务', 'Industrials': '工业', 'Energy': '能源',
+    'Utilities': '公用事业', 'Real Estate': '房地产', 'Basic Materials': '基础材料',
+    'Materials': '基础材料',
+};
+
+const INDUSTRY_ZH: Record<string, string> = {
+    // Technology
+    'Semiconductors': '半导体', 'Semiconductor Equipment & Materials': '半导体设备与材料',
+    'Software—Application': '应用软件', 'Software—Infrastructure': '基础软件',
+    'Information Technology Services': '信息技术服务',
+    'Internet Content & Information': '互联网内容与信息', 'Internet Retail': '互联网零售',
+    'Consumer Electronics': '消费电子', 'Computer Hardware': '计算机硬件',
+    'Electronic Components': '电子元器件', 'Scientific & Technical Instruments': '科学与技术仪器',
+    'Electronic Gaming & Multimedia': '电子游戏与多媒体',
+    // Healthcare
+    'Biotechnology': '生物科技', 'Drug Manufacturers—General': '综合制药',
+    'Drug Manufacturers—Specialty & Generic': '特种与仿制药', 'Medical Devices': '医疗器械',
+    'Health Information Services': '健康信息服务', 'Medical Instruments & Supplies': '医疗器材与用品',
+    'Diagnostics & Research': '诊断与研究', 'Pharmaceutical Retailers': '医药零售',
+    // Finance
+    'Banks—Diversified': '综合银行', 'Banks—Regional': '区域银行',
+    'Insurance—Life': '人寿保险', 'Insurance—Property & Casualty': '财产与意外保险',
+    'Insurance—Diversified': '综合保险', 'Asset Management': '资产管理',
+    'Capital Markets': '资本市场', 'Credit Services': '信贷服务',
+    'Financial Data & Stock Exchanges': '金融数据与证券交易所',
+    // Consumer
+    'Auto Manufacturers': '汽车制造', 'Auto Parts': '汽车零部件',
+    'Restaurants': '餐饮', 'Apparel Retail': '服装零售', 'Specialty Retail': '专业零售',
+    'Home Improvement Retail': '家居建材零售', 'Discount Stores': '折扣零售',
+    'Household & Personal Products': '家居与个人用品', 'Packaged Foods': '包装食品',
+    'Beverages—Non-Alcoholic': '非酒精饮料', 'Beverages—Alcoholic': '酒精饮料',
+    'Tobacco': '烟草', 'Luxury Goods': '奢侈品', 'Footwear & Accessories': '鞋类与配饰',
+    'Apparel Manufacturing': '服装制造', 'Residential Construction': '住宅建设',
+    // Communication & Entertainment
+    'Telecom Services': '电信服务', 'Entertainment': '娱乐', 'Advertising Agencies': '广告代理',
+    'Publishing': '出版', 'Broadcasting': '广播',
+    // Industrials
+    'Aerospace & Defense': '航空航天与国防', 'Airlines': '航空公司', 'Railroads': '铁路',
+    'Trucking': '货运', 'Industrial Distribution': '工业分销',
+    'Specialty Industrial Machinery': '特种工业机械',
+    'Farm & Heavy Construction Machinery': '农机与重型建筑机械',
+    'Waste Management': '废弃物管理', 'Consulting Services': '咨询服务',
+    'Staffing & Employment Services': '人力资源服务', 'Electrical Equipment & Parts': '电气设备与零件',
+    // Energy
+    'Oil & Gas Integrated': '综合油气', 'Oil & Gas E&P': '油气勘探与生产',
+    'Oil & Gas Midstream': '油气中游', 'Oil & Gas Equipment & Services': '油气设备与服务',
+    'Solar': '太阳能', 'Uranium': '铀矿',
+    // Utilities & Real Estate
+    'Utilities—Regulated Electric': '受管制电力', 'Utilities—Renewable': '可再生能源',
+    'Utilities—Diversified': '综合公用事业',
+    'REIT—Residential': '住宅REIT', 'REIT—Retail': '零售REIT',
+    'REIT—Office': '办公REIT', 'REIT—Industrial': '工业REIT',
+    'REIT—Diversified': '综合REIT', 'REIT—Specialty': '特种REIT',
+    // Materials
+    'Gold': '黄金', 'Copper': '铜', 'Steel': '钢铁', 'Aluminum': '铝',
+    'Chemicals': '化工', 'Specialty Chemicals': '特种化工', 'Building Materials': '建筑材料',
+    'Lumber & Wood Production': '木材与木制品', 'Paper & Paper Products': '纸与纸制品',
+};
+
+/** Translate sector/industry to Chinese when UI is in Chinese; otherwise return as-is */
+function translateField(value: string | undefined, map: Record<string, string>): string {
+    if (!value) return '';
+    if (i18n.language?.startsWith('zh')) {
+        return map[value] || value;
+    }
+    return value;
+}
+
 // Price Chart Component using Chart.js
 function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) {
     const { t } = useTranslation();
@@ -171,52 +244,56 @@ const styles = `
         font-weight: 500;
     }
 
-    /* Philosophy Card */
-    .philosophy-card {
-        background: var(--card);
-        border: 1px solid var(--primary);
-        border-radius: 8px;
+    /* Philosophy - compact single-line bar (matching Options page design) */
+    .philosophy-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        background: rgba(13, 155, 151, 0.05);
+        border-radius: 0.5rem;
+        flex-wrap: wrap;
     }
 
-    .philosophy-formula {
-        display: inline-block;
+    .philosophy-formula-pill {
+        display: inline-flex;
+        align-items: center;
         background: var(--primary);
         color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 6px;
+        padding: 0.2rem 0.6rem;
+        border-radius: 0.375rem;
         font-weight: 700;
-        font-size: 0.9rem;
-        margin: 0 0.25rem;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        font-size: 0.8rem;
     }
 
-    .philosophy-formula.bull { background: var(--bull); }
-    .philosophy-formula.warning { background: var(--warning); }
-
-    .pillar-item {
-        background: var(--muted);
-        border-left: 3px solid var(--primary);
-        padding: 0.6rem 0.9rem;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        line-height: 1.4;
+    .pillar-icon {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        background: rgba(13, 155, 151, 0.15);
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--primary);
+        cursor: help;
         transition: all 0.2s;
     }
 
-    .pillar-item:hover {
-        background: var(--card-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    .pillar-icon:hover {
+        background: rgba(13, 155, 151, 0.25);
     }
 
-    .style-badge {
-        background: var(--muted);
-        border: 1px solid var(--border);
-        padding: 0.4rem 0.9rem;
-        border-radius: 24px;
-        font-size: 0.8rem;
-        color: var(--foreground);
-        text-align: center;
+    .pillar-icon-text {
+        font-size: 0.7rem;
+    }
+
+    @media (max-width: 640px) {
+        .pillar-icon-text {
+            font-size: 0.65rem;
+        }
+        .pillar-icon {
+            padding: 0.2rem 0.4rem;
+        }
     }
 
     /* Warning Card */
@@ -440,77 +517,38 @@ function generateTakeProfitStrategy(
     }
 }
 
-// Investment Philosophy Component (collapsible, default collapsed)
+// Investment Philosophy Component - compact single-line bar (matching Options page design)
 function InvestmentPhilosophy() {
     const { t } = useTranslation();
-    // 默认收起，从 localStorage 读取用户偏好
-    const [expanded, setExpanded] = useState(() => {
-        return localStorage.getItem('stockPhilosophyExpanded') === 'true';
-    });
-
-    const handleToggle = () => {
-        const newState = !expanded;
-        setExpanded(newState);
-        localStorage.setItem('stockPhilosophyExpanded', String(newState));
-    };
 
     return (
-        <div className="philosophy-card shadow-md mb-4 overflow-hidden">
-            <div
-                className="cursor-pointer transition-colors hover:bg-[rgba(13,155,151,0.05)]"
-                style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                onClick={handleToggle}
-            >
-                <div className="flex items-center gap-2" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.95rem' }}>
-                    <i className="bi bi-lightbulb-fill"></i>
-                    <span>{t('stock.philosophy.title')}</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.75rem' }}>
-                    <span>{expanded ? t('stock.philosophy.collapse') : t('stock.philosophy.expand')}</span>
-                    <i className={`bi bi-chevron-${expanded ? 'up' : 'down'} transition-transform duration-200`}></i>
-                </div>
+        <div className="philosophy-bar">
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                {t('stock.philosophy.label')}:
+            </span>
+            <span className="philosophy-formula-pill">G = B + M</span>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar1.desc')}>
+                    <i className="bi bi-search" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar1.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar2.desc')}>
+                    <i className="bi bi-bug" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar2.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar3.desc')}>
+                    <i className="bi bi-shield-check" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar3.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar4.desc')}>
+                    <i className="bi bi-compass" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar4.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar5.desc')}>
+                    <i className="bi bi-bar-chart-line" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar5.title')}</span>
+                </span>
             </div>
-            {expanded && (
-                <div
-                    style={{
-                        padding: '0.75rem 1rem',
-                        borderTop: '1px solid var(--border)',
-                        animation: 'slideDown 0.2s ease-out'
-                    }}
-                >
-                    {/* Core Model - 更紧凑 */}
-                    <div style={{ marginBottom: '0.8rem' }}>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', lineHeight: 1.4 }} dangerouslySetInnerHTML={{ __html: t('stock.philosophy.coreModel') }}>
-                        </div>
-                    </div>
-
-                    {/* Five Pillars - 更紧凑的网格 */}
-                    <div style={{ marginBottom: '0.8rem' }}>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.fivePillars')}</strong>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2 mt-1">
-                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar1.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar1.desc')}</div></div>
-                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar2.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar2.desc')}</div></div>
-                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar3.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar3.desc')}</div></div>
-                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar4.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar4.desc')}</div></div>
-                            <div className="pillar-item" style={{ padding: '0.4rem 0.6rem' }}><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.7rem' }}>{t('stock.philosophy.pillar5.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', lineHeight: 1.3 }}>{t('stock.philosophy.pillar5.desc')}</div></div>
-                        </div>
-                    </div>
-
-                    {/* Investment Styles - 更紧凑 */}
-                    <div>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.styles')}</strong>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.65rem', marginBottom: '0.4rem', lineHeight: 1.3 }}>
-                            {t('stock.philosophy.stylesDesc')}
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Quality</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.quality')}</span></div>
-                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Value</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.value')}</span></div>
-                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Growth</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.growth')}</span></div>
-                            <div className="style-badge" style={{ padding: '0.3rem 0.6rem' }}><strong style={{ color: 'var(--primary)', marginRight: '0.2rem', fontSize: '0.7rem' }}>Momentum</strong><span style={{ fontSize: '0.65rem' }}>{t('stock.philosophy.style.momentum')}</span></div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
@@ -1197,15 +1235,20 @@ export default function Home() {
                                             <div><div className="text-report-label">{t('stock.report.overview.name')}</div><div className="text-report-value">{d.name}</div></div>
                                             {!d.is_etf_or_fund && (
                                                 <>
-                                                    <div><div className="text-report-label">{t('stock.report.overview.sector')}</div><div className="text-report-value">{d.sector || t('stock.report.overview.noData')}</div></div>
-                                                    <div><div className="text-report-label">{t('stock.report.overview.industry')}</div><div className="text-report-value">{d.industry || t('stock.report.overview.noData')}</div></div>
+                                                    <div><div className="text-report-label">{t('stock.report.overview.sector')}</div><div className="text-report-value">{translateField(d.sector, SECTOR_ZH) || t('stock.report.overview.noData')}</div></div>
+                                                    <div><div className="text-report-label">{t('stock.report.overview.industry')}</div><div className="text-report-value">{translateField(d.industry, INDUSTRY_ZH) || t('stock.report.overview.noData')}</div></div>
                                                 </>
                                             )}
                                         </div>
                                         {/* Company News */}
                                         {d.company_news && Array.isArray(d.company_news) && d.company_news.length > 0 && (
                                             <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
-                                                <div style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.8rem' }}>{t('stock.report.overview.news')}</div>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                                                    <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>{t('stock.report.overview.news')}</span>
+                                                    {i18n.language?.startsWith('zh') && !d.symbol?.endsWith('.SS') && !d.symbol?.endsWith('.SZ') && (
+                                                        <span style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.report.overview.newsSourceEn')}</span>
+                                                    )}
+                                                </div>
                                                 <ul style={{ color: 'var(--muted-foreground)', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, paddingLeft: '1.5rem' }}>
                                                     {d.company_news.slice(0, 5).map((news: any, idx: number) => (
                                                         <li key={idx} style={{ marginBottom: '0.8rem' }}>
