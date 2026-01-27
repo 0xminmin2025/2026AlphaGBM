@@ -8,10 +8,137 @@ from ..models import db, ServiceType, StockAnalysisHistory, TaskType
 import yfinance as yf
 import logging
 import json
+import time
+import threading
+import requests
 from datetime import datetime
 
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
 logger = logging.getLogger(__name__)
+
+
+# --------------- Yahoo Finance Search helpers ---------------
+
+class TTLCache:
+    """Simple thread-safe dict cache with per-key TTL and max size."""
+
+    def __init__(self, ttl: int = 300, max_size: int = 500):
+        self._store: dict = {}  # key -> (value, expire_ts)
+        self._lock = threading.Lock()
+        self._ttl = ttl
+        self._max_size = max_size
+
+    def get(self, key: str):
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            value, expire_ts = entry
+            if time.time() > expire_ts:
+                del self._store[key]
+                return None
+            return value
+
+    def set(self, key: str, value):
+        with self._lock:
+            # Evict expired entries when approaching max size
+            if len(self._store) >= self._max_size:
+                now = time.time()
+                expired = [k for k, (_, ts) in self._store.items() if now > ts]
+                for k in expired:
+                    del self._store[k]
+                # If still too large, drop oldest entries
+                if len(self._store) >= self._max_size:
+                    oldest = sorted(self._store, key=lambda k: self._store[k][1])
+                    for k in oldest[:len(self._store) - self._max_size + 1]:
+                        del self._store[k]
+            self._store[key] = (value, time.time() + self._ttl)
+
+
+_search_cache = TTLCache(ttl=300, max_size=500)
+
+EXCHANGE_TO_MARKET = {
+    'NMS': 'US', 'NGM': 'US', 'NCM': 'US', 'NYQ': 'US', 'ASE': 'US',
+    'PCX': 'US', 'BTS': 'US', 'OPR': 'US',
+    'NASDAQ': 'US', 'NYSE': 'US', 'AMEX': 'US', 'NYSEARCA': 'US',
+    'NYSEAMERICAN': 'US',
+    'HKG': 'HK', 'HKSE': 'HK', 'HKS': 'HK',
+    'SHH': 'CN', 'SHZ': 'CN', 'Shanghai': 'CN', 'Shenzhen': 'CN',
+}
+
+
+def _map_exchange_to_market(exchange: str, symbol: str) -> str:
+    """Map Yahoo Finance exchange name to our market code (US/HK/CN)."""
+    market = EXCHANGE_TO_MARKET.get(exchange)
+    if market:
+        return market
+    # Fallback: infer from symbol suffix
+    sym = symbol.upper()
+    if sym.endswith('.HK'):
+        return 'HK'
+    if sym.endswith('.SS') or sym.endswith('.SZ'):
+        return 'CN'
+    return 'US'
+
+@stock_bp.route('/search', methods=['GET'])
+def search_stocks():
+    """
+    Fuzzy stock search via Yahoo Finance.
+    GET /api/stock/search?q=QUERY&limit=8
+    No auth required — must be fast for autocomplete.
+    """
+    query = request.args.get('q', '').strip()
+    limit = min(request.args.get('limit', 8, type=int), 20)
+
+    if not query or len(query) < 1:
+        return jsonify({'success': True, 'results': []})
+
+    cache_key = f"{query.lower()}:{limit}"
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        return jsonify({'success': True, 'results': cached, 'source': 'cache'})
+
+    try:
+        resp = requests.get(
+            'https://query2.finance.yahoo.com/v1/finance/search',
+            params={
+                'q': query,
+                'quotesCount': limit,
+                'newsCount': 0,
+                'listsCount': 0,
+                'enableFuzzyQuery': True,
+            },
+            headers={'User-Agent': 'Mozilla/5.0'},
+            timeout=4,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        ALLOWED_TYPES = {'EQUITY', 'ETF', 'FUND', 'MUTUALFUND'}
+        results = []
+        for quote in data.get('quotes', []):
+            qtype = quote.get('quoteType', '').upper()
+            if qtype not in ALLOWED_TYPES:
+                continue
+            symbol = quote.get('symbol', '')
+            exchange = quote.get('exchange', '')
+            name_en = quote.get('shortname') or quote.get('longname') or ''
+            market = _map_exchange_to_market(exchange, symbol)
+            results.append({
+                'ticker': symbol,
+                'nameCn': '',
+                'nameEn': name_en,
+                'pinyin': '',
+                'market': market,
+            })
+
+        _search_cache.set(cache_key, results)
+        return jsonify({'success': True, 'results': results})
+
+    except Exception as e:
+        logger.warning(f"Yahoo Finance search failed for '{query}': {e}")
+        return jsonify({'success': True, 'results': []})
+
 
 def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: bool = False) -> dict:
     """
