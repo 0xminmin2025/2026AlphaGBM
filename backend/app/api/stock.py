@@ -4,14 +4,36 @@ from ..services.task_queue import create_analysis_task, get_task_status
 from ..utils.auth import require_auth, get_user_id
 from ..utils.decorators import check_quota, db_retry
 from ..utils.serialization import convert_numpy_types
-from ..models import db, ServiceType, StockAnalysisHistory, TaskType
+from ..models import db, ServiceType, StockAnalysisHistory, TaskType, TaskStatus, AnalysisTask, DailyAnalysisCache
 import yfinance as yf
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, date
+from sqlalchemy import func
 
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
 logger = logging.getLogger(__name__)
+
+
+def get_cached_analysis(ticker: str, style: str):
+    """Returns cached analysis for today, or None."""
+    today = date.today()
+    return DailyAnalysisCache.query.filter_by(
+        ticker=ticker, style=style, analysis_date=today
+    ).first()
+
+
+def get_in_progress_task_for_stock(ticker: str, style: str):
+    """Returns an in-progress task for this ticker+style today, or None."""
+    today = date.today()
+    return AnalysisTask.query.filter(
+        AnalysisTask.task_type == TaskType.STOCK_ANALYSIS.value,
+        AnalysisTask.status.in_([TaskStatus.PENDING.value, TaskStatus.PROCESSING.value]),
+        AnalysisTask.input_params['ticker'].as_string() == ticker,
+        AnalysisTask.input_params['style'].as_string() == style,
+        func.date(AnalysisTask.created_at) == today
+    ).first()
+
 
 def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: bool = False) -> dict:
     """
@@ -190,7 +212,7 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
 @check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
 def analyze_stock_async():
     """
-    Create async stock analysis task
+    Create async stock analysis task (with daily cache support)
 
     Request Body:
     {
@@ -222,14 +244,51 @@ def analyze_stock_async():
         if not user_id:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
 
-        # Create async task
+        # CASE A: Check if today's cache exists
+        cache_entry = get_cached_analysis(ticker, style)
+        if cache_entry:
+            logger.info(f"[analyze-async] Cache HIT for {ticker}/{style}")
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={'ticker': ticker, 'style': style},
+                priority=priority,
+                cache_mode='cached',
+                cached_data=cache_entry.full_analysis_data
+            )
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
+
+        # CASE B: Check for in-progress task
+        try:
+            in_progress_task = get_in_progress_task_for_stock(ticker, style)
+        except Exception:
+            in_progress_task = None
+
+        if in_progress_task:
+            logger.info(f"[analyze-async] In-progress task found for {ticker}/{style}")
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={'ticker': ticker, 'style': style},
+                priority=priority,
+                cache_mode='waiting',
+                source_task_id=in_progress_task.id
+            )
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
+
+        # CASE C: No cache — run full analysis
         task_id = create_analysis_task(
             user_id=user_id,
             task_type=TaskType.STOCK_ANALYSIS.value,
-            input_params={
-                'ticker': ticker,
-                'style': style
-            },
+            input_params={'ticker': ticker, 'style': style},
             priority=priority
         )
 
@@ -249,18 +308,19 @@ def analyze_stock_async():
 @check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
 def analyze_stock():
     """
-    Stock Analysis Endpoint - Supports both sync and async mode
+    Stock Analysis Endpoint - Always uses async task queue with daily caching
 
     Accepts: {
         "ticker": "AAPL",
         "style": "quality",  # optional, default quality
-        "onlyHistoryData": false, # optional
-        "async": false  # optional, if true creates async task
+        "onlyHistoryData": false, # optional, for chart data only (sync)
     }
 
     Returns:
-    - Sync mode: JSON with analysis results in original format
-    - Async mode: {"success": true, "task_id": "uuid", "message": "..."}
+    - onlyHistoryData=true: Sync JSON with chart data
+    - Full analysis: {"success": true, "task_id": "uuid", "message": "..."}
+      Always creates an async task. If today's cache exists, the task simulates
+      progress over ~10s then returns cached data. Otherwise runs full analysis.
     """
     ticker = None
     try:
@@ -274,113 +334,77 @@ def analyze_stock():
 
         style = data.get('style', 'quality')
         only_history = data.get('onlyHistoryData', False)
-        use_async = data.get('async', False)
 
-        logger.info(f"Analyzing stock {ticker} with style {style} for user {getattr(g, 'user_id', 'unknown')} (async: {use_async})")
+        user_id = getattr(g, 'user_id', None)
+        logger.info(f"Analyzing stock {ticker} with style {style} for user {user_id}")
 
-        # Check if async mode is requested
-        if use_async:
-            user_id = get_user_id()
-            if not user_id:
-                return jsonify({'success': False, 'error': 'Authentication required for async mode'}), 401
+        # For chart-only data, keep sync mode (no yfinance heavy calls)
+        if only_history:
+            result = get_stock_analysis_data(ticker, style, only_history=True)
+            if 'error' in result:
+                return jsonify({'success': False, 'error': result['error']}), 400
+            return jsonify({'success': True, 'data': result})
 
-            # Create async task
+        # Full analysis — always use async task with cache logic
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        # CASE A: Check if today's cache exists for this (ticker, style)
+        cache_entry = get_cached_analysis(ticker, style)
+        if cache_entry:
+            logger.info(f"Cache HIT for {ticker}/{style} — creating fake-progress task")
             task_id = create_analysis_task(
                 user_id=user_id,
                 task_type=TaskType.STOCK_ANALYSIS.value,
-                input_params={
-                    'ticker': ticker,
-                    'style': style
-                },
-                priority=data.get('priority', 100)
+                input_params={'ticker': ticker, 'style': style},
+                priority=data.get('priority', 100),
+                cache_mode='cached',
+                cached_data=cache_entry.full_analysis_data
             )
-
-            logger.info(f"Created async stock analysis task {task_id} for {ticker} ({style}) - User: {user_id}")
-
             return jsonify({
                 'success': True,
                 'task_id': task_id,
                 'message': 'Analysis task created successfully'
             }), 201
 
-        # Sync mode - use the extracted helper function
-        result = get_stock_analysis_data(ticker, style, only_history)
+        # CASE B: Check if another task for the same (ticker, style) is already in progress
+        try:
+            in_progress_task = get_in_progress_task_for_stock(ticker, style)
+        except Exception as e:
+            # JSON path query may not be supported on SQLite — fall through to CASE C
+            logger.warning(f"In-progress task lookup failed (may not support JSON queries): {e}")
+            in_progress_task = None
 
-        # Handle errors from helper function
-        if 'error' in result:
-            return jsonify({'success': False, 'error': result['error']}), 400
+        if in_progress_task:
+            logger.info(f"In-progress task found ({in_progress_task.id}) for {ticker}/{style} — creating waiting task")
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={'ticker': ticker, 'style': style},
+                priority=data.get('priority', 100),
+                cache_mode='waiting',
+                source_task_id=in_progress_task.id
+            )
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
 
-        # If only requesting history data, return it directly
-        if only_history:
-            return jsonify({'success': True, 'data': result})
+        # CASE C: No cache, no in-progress task — run full analysis
+        logger.info(f"Cache MISS for {ticker}/{style} — creating real analysis task")
+        task_id = create_analysis_task(
+            user_id=user_id,
+            task_type=TaskType.STOCK_ANALYSIS.value,
+            input_params={'ticker': ticker, 'style': style},
+            priority=data.get('priority', 100)
+        )
 
-        # For full analysis, result already contains the complete response
-        response = result
-
-        # 7. Save analysis results to history
-        if not only_history:  # Only save history for full analysis, not just chart data
-            try:
-                # Check if user_id is available
-                if not hasattr(g, 'user_id') or not g.user_id:
-                    logger.error(f"No user_id available in Flask globals for history saving")
-                    return jsonify(response)  # Return response without saving history
-
-                # Extract key data for storage from the result
-                market_data = response.get('data', {})
-                risk_result = response.get('risk', {})
-                ai_report = response.get('report', '')
-                ev_result = market_data.get('ev_model', {})
-
-                logger.info(f"Preparing to save analysis history for {ticker} (user: {g.user_id})")
-
-                # Extract summary from AI report for quick preview (first 1000 chars)
-                ai_summary = None
-                if isinstance(ai_report, dict):
-                    ai_summary = ai_report.get('summary', '')[:1000] if ai_report.get('summary') else None
-                elif isinstance(ai_report, str):
-                    ai_summary = ai_report[:1000] if ai_report else None
-
-                # Store the analysis response directly using the new simplified format
-                # This matches the async task queue format and is more efficient
-                complete_analysis_data_clean = convert_numpy_types(response)
-
-                analysis_history = StockAnalysisHistory(
-                    user_id=g.user_id,
-                    ticker=ticker,
-                    style=style,
-                    # Extract key fields for indexing and quick display - also convert numpy types
-                    current_price=convert_numpy_types(market_data.get('price')),
-                    target_price=convert_numpy_types(market_data.get('target_price')),
-                    stop_loss_price=convert_numpy_types(market_data.get('stop_loss_price')),
-                    market_sentiment=convert_numpy_types(market_data.get('market_sentiment')),
-                    risk_score=convert_numpy_types(risk_result.get('score')),
-                    risk_level=risk_result.get('level'),  # String field, no need to convert
-                    position_size=convert_numpy_types(risk_result.get('suggested_position')),
-                    ev_score=convert_numpy_types(ev_result.get('ev_score')),
-                    ev_weighted_pct=convert_numpy_types(ev_result.get('ev_weighted_pct')),
-                    recommendation_action=ev_result.get('recommendation', {}).get('action'),  # String field
-                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),  # String field
-                    ai_summary=ai_summary,
-                    # Store the complete response data directly (new simplified format)
-                    full_analysis_data=complete_analysis_data_clean
-                )
-
-                logger.info(f"Adding analysis history to database session...")
-                db.session.add(analysis_history)
-
-                logger.info(f"Committing analysis history to database...")
-                db.session.commit()
-
-                logger.info(f"Successfully saved analysis history for {ticker} (user: {g.user_id}, id: {analysis_history.id})")
-
-            except Exception as e:
-                logger.error(f"Failed to save analysis history for {ticker}: {str(e)}")
-                import traceback
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-                # Don't fail the entire request if history saving fails
-                db.session.rollback()
-
-        return jsonify(response)
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': 'Analysis task created successfully'
+        }), 201
 
     except Exception as e:
         logger.error(f"Error analyzing stock {ticker}: {e}")

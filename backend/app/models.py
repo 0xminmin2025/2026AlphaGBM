@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, date
 import enum
 
 db = SQLAlchemy()
@@ -375,6 +375,34 @@ class DailyRecommendation(db.Model):
             'market_summary': self.market_summary,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class DailyAnalysisCache(db.Model):
+    """每日股票分析缓存 - 每个(ticker, style)组合每天只分析一次"""
+    __tablename__ = 'daily_analysis_cache'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    style = db.Column(db.String(50), nullable=False)
+    analysis_date = db.Column(db.Date, nullable=False, index=True)
+    full_analysis_data = db.Column(db.JSON, nullable=False)
+    source_task_id = db.Column(db.String(36), nullable=True)  # task that generated this cache
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('ticker', 'style', 'analysis_date', name='uq_daily_analysis_cache'),
+        db.Index('idx_daily_cache_lookup', 'ticker', 'style', 'analysis_date'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ticker': self.ticker,
+            'style': self.style,
+            'analysis_date': self.analysis_date.isoformat() if self.analysis_date else None,
+            'source_task_id': self.source_task_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 
