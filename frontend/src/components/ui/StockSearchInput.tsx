@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { searchStocks } from '@/lib/stockData';
 import type { StockInfo } from '@/lib/stockData';
 import { useTranslation } from 'react-i18next';
+import { useStockSearch } from '@/hooks/useStockSearch';
 
 interface StockSearchInputProps {
     value: string;
@@ -20,21 +20,17 @@ export default function StockSearchInput({
 }: StockSearchInputProps) {
     const { i18n } = useTranslation();
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [suggestions, setSuggestions] = useState<StockInfo[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Update suggestions when value changes
+    const { setQuery, results: suggestions, isSearching } = useStockSearch({ limit: 8 });
+
+    // Sync value to search hook
     useEffect(() => {
-        if (value.trim().length > 0) {
-            const results = searchStocks(value, 8);
-            setSuggestions(results);
-            setSelectedIndex(-1);
-        } else {
-            setSuggestions([]);
-        }
-    }, [value]);
+        setQuery(value);
+        setSelectedIndex(-1);
+    }, [value, setQuery]);
 
     // Handle click outside to close suggestions
     useEffect(() => {
@@ -164,12 +160,20 @@ export default function StockSearchInput({
             {/* No results hint */}
             {showSuggestions && value.trim().length > 0 && suggestions.length === 0 && (
                 <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl p-4 text-center">
-                    <div className="text-slate-400 text-sm">
-                        {i18n.language === 'zh'
-                            ? '\u672a\u627e\u5230\u5339\u914d\u7684\u80a1\u7968\uff0c\u5c06\u76f4\u63a5\u4f7f\u7528\u4ee3\u7801'
-                            : 'No match found, will use ticker directly'}
-                    </div>
-                    <div className="text-[#0D9B97] font-mono mt-1">{value}</div>
+                    {isSearching ? (
+                        <div className="text-slate-400 text-sm">
+                            {i18n.language === 'zh' ? '\u641c\u7d22\u4e2d...' : 'Searching...'}
+                        </div>
+                    ) : (
+                        <>
+                            <div className="text-slate-400 text-sm">
+                                {i18n.language === 'zh'
+                                    ? '\u672a\u627e\u5230\u5339\u914d\u7684\u80a1\u7968\uff0c\u5c06\u76f4\u63a5\u4f7f\u7528\u4ee3\u7801'
+                                    : 'No match found, will use ticker directly'}
+                            </div>
+                            <div className="text-[#0D9B97] font-mono mt-1">{value}</div>
+                        </>
+                    )}
                 </div>
             )}
         </div>

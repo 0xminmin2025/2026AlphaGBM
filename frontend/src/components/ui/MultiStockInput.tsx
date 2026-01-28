@@ -5,10 +5,10 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { searchStocks } from '@/lib/stockData';
 import type { StockInfo } from '@/lib/stockData';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
+import { useStockSearch } from '@/hooks/useStockSearch';
 
 interface MultiStockInputProps {
     values: string[];
@@ -32,26 +32,26 @@ export default function MultiStockInput({
 
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [suggestions, setSuggestions] = useState<StockInfo[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const isMaxReached = values.length >= maxCount;
 
-    // Update suggestions when input changes
+    const { setQuery, results: suggestions, isSearching } = useStockSearch({
+        limit: 8,
+        excludeTickers: values,
+    });
+
+    // Sync input value to search hook
     useEffect(() => {
-        if (inputValue.trim().length > 0 && !isMaxReached) {
-            // Filter out already selected stocks
-            const results = searchStocks(inputValue, 8).filter(
-                stock => !values.includes(stock.ticker)
-            );
-            setSuggestions(results);
-            setSelectedIndex(-1);
+        if (!isMaxReached) {
+            setQuery(inputValue);
         } else {
-            setSuggestions([]);
+            setQuery('');
         }
-    }, [inputValue, values, isMaxReached]);
+        setSelectedIndex(-1);
+    }, [inputValue, isMaxReached, setQuery]);
 
     // Handle click outside to close suggestions
     useEffect(() => {
@@ -279,17 +279,23 @@ export default function MultiStockInput({
             {/* No results hint - allow direct input */}
             {showSuggestions && inputValue.trim().length > 0 && suggestions.length === 0 && !isMaxReached && (
                 <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
-                    <div
-                        className="px-2.5 sm:px-3 py-2.5 sm:py-3 cursor-pointer hover:bg-white/5 transition-colors"
-                        onClick={() => handleAddStock(inputValue)}
-                    >
-                        <div className="text-slate-400 text-xs sm:text-sm">
-                            {isZh
-                                ? '未找到匹配的股票，点击直接添加：'
-                                : 'No match found, click to add:'}
+                    {isSearching ? (
+                        <div className="px-2.5 sm:px-3 py-2.5 sm:py-3 text-slate-400 text-xs sm:text-sm">
+                            {isZh ? '搜索中...' : 'Searching...'}
                         </div>
-                        <div className="text-[#0D9B97] font-mono font-semibold mt-1 text-sm sm:text-base">{inputValue}</div>
-                    </div>
+                    ) : (
+                        <div
+                            className="px-2.5 sm:px-3 py-2.5 sm:py-3 cursor-pointer hover:bg-white/5 transition-colors"
+                            onClick={() => handleAddStock(inputValue)}
+                        >
+                            <div className="text-slate-400 text-xs sm:text-sm">
+                                {isZh
+                                    ? '未找到匹配的股票，点击直接添加：'
+                                    : 'No match found, click to add:'}
+                            </div>
+                            <div className="text-[#0D9B97] font-mono font-semibold mt-1 text-sm sm:text-base">{inputValue}</div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
