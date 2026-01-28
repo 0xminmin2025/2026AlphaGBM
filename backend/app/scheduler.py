@@ -13,6 +13,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from .models import db, PortfolioHolding, DailyProfitLoss, StyleProfit
 from .utils.serialization import convert_numpy_types
 
+# Import DataProvider (yfinance + defeatbeta fallback)
+try:
+    from .services.data_provider import DataProvider
+except ImportError:
+    DataProvider = None
+
 logger = logging.getLogger(__name__)
 
 # Exchange rate caching
@@ -55,9 +61,9 @@ def get_exchange_rates():
     return exchange_rates_cache
 
 def get_current_stock_price(ticker):
-    """Get current stock price using yfinance"""
+    """Get current stock price using DataProvider (yfinance + defeatbeta fallback)"""
     try:
-        stock = yf.Ticker(ticker)
+        stock = DataProvider(ticker) if DataProvider is not None else yf.Ticker(ticker)
         info = stock.info
 
         # Try different price fields in order of preference

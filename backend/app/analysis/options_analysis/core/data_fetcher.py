@@ -12,6 +12,19 @@ import numpy as np
 
 from .tiger_client import TigerOptionsClient
 
+# Import DataProvider (yfinance + defeatbeta fallback)
+try:
+    from ....services.data_provider import DataProvider
+except ImportError:
+    DataProvider = None
+
+
+def _create_ticker(symbol: str):
+    """Create a ticker object using DataProvider (with defeatbeta fallback) or yfinance."""
+    if DataProvider is not None:
+        return DataProvider(symbol)
+    return yf.Ticker(symbol)
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,8 +138,8 @@ class OptionsDataFetcher:
 
             logger.info(f"获取标的股票数据: {symbol}")
 
-            # 使用yfinance获取股票数据
-            ticker = yf.Ticker(symbol)
+            # 使用DataProvider获取股票数据 (yfinance + defeatbeta fallback)
+            ticker = _create_ticker(symbol)
 
             # 获取基本信息
             info = ticker.info
@@ -241,7 +254,7 @@ class OptionsDataFetcher:
     def _get_yfinance_options_data(self, symbol: str) -> Dict[str, Any]:
         """使用yfinance获取期权数据（备用方案）"""
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = _create_ticker(symbol)
 
             # 获取期权到期日
             expiry_dates = ticker.options

@@ -14,6 +14,20 @@ except ImportError:
     # 如果导入失败，定义一个占位符
     YFRateLimitError = type('YFRateLimitError', (Exception,), {})
 
+# 导入DataProvider (yfinance + defeatbeta fallback)
+try:
+    from .data_provider import DataProvider, data_provider_download
+except ImportError:
+    DataProvider = None
+    data_provider_download = None
+
+
+def _create_ticker(symbol: str):
+    """Create a ticker object using DataProvider (with defeatbeta fallback) or yfinance."""
+    if DataProvider is not None:
+        return DataProvider(symbol)
+    return yf.Ticker(symbol)
+
 # 导入配置参数
 # 导入配置参数
 try:
@@ -149,7 +163,7 @@ def calculate_pe_percentile(current_pe, hist_data=None, ticker=None):
     # 方法1: 尝试使用ticker获取历史盈利数据计算PE序列
     if ticker is not None:
         try:
-            stock = yf.Ticker(ticker)
+            stock = _create_ticker(ticker)
 
             # 获取5年历史价格
             hist_prices = stock.history(period="5y")
@@ -620,14 +634,14 @@ def get_ticker_price(ticker, max_retries=3, retry_delay=2):
     
     for attempt in range(max_retries):
         try:
-            stock = yf.Ticker(normalized_ticker)
+            stock = _create_ticker(normalized_ticker)
 
             # 尝试从info获取
             info = stock.info
             if info and len(info) >= 5:
                 # 从info获取价格
-                current_price = (info.get('currentPrice') or 
-                               info.get('regularMarketPrice') or 
+                current_price = (info.get('currentPrice') or
+                               info.get('regularMarketPrice') or
                                info.get('previousClose') or 0)
                 if current_price > 0:
                     return current_price
@@ -686,7 +700,7 @@ def get_market_data(ticker, onlyHistoryData=False, startDate=None, max_retries=3
     
     for attempt in range(max_retries):
         try:
-            stock = yf.Ticker(normalized_ticker)
+            stock = _create_ticker(normalized_ticker)
 
             if onlyHistoryData:
                 try:
@@ -1912,7 +1926,7 @@ def get_macro_market_data():
     try:
         # 1. 10年期美债收益率 (^TNX) - 反映市场对利率和通胀的预期
         try:
-            tnx = yf.Ticker('^TNX')
+            tnx = _create_ticker('^TNX')
             tnx_hist = tnx.history(period='5d', timeout=10)
             if not tnx_hist.empty and len(tnx_hist) >= 2:
                 treasury_current = float(tnx_hist['Close'].iloc[-1])
@@ -1925,11 +1939,11 @@ def get_macro_market_data():
         
         # 2. 美元指数 (DX-Y.NYB 或 ^DXY) - 反映美元强弱，影响全球流动性
         try:
-            dxy = yf.Ticker('DX-Y.NYB')
+            dxy = _create_ticker('DX-Y.NYB')
             dxy_hist = dxy.history(period='5d', timeout=10)
             if dxy_hist.empty:
                 # 尝试备用代码
-                dxy = yf.Ticker('^DXY')
+                dxy = _create_ticker('^DXY')
                 dxy_hist = dxy.history(period='5d', timeout=10)
             
             if not dxy_hist.empty and len(dxy_hist) >= 2:
@@ -1943,7 +1957,7 @@ def get_macro_market_data():
         
         # 3. 黄金价格 (GC=F) - 避险情绪指标
         try:
-            gold = yf.Ticker('GC=F')
+            gold = _create_ticker('GC=F')
             gold_hist = gold.history(period='5d', timeout=10)
             if not gold_hist.empty and len(gold_hist) >= 2:
                 gold_current = float(gold_hist['Close'].iloc[-1])
@@ -1956,7 +1970,7 @@ def get_macro_market_data():
         
         # 4. 原油价格 (CL=F) - 通胀和经济增长预期
         try:
-            oil = yf.Ticker('CL=F')
+            oil = _create_ticker('CL=F')
             oil_hist = oil.history(period='5d', timeout=10)
             if not oil_hist.empty and len(oil_hist) >= 2:
                 oil_current = float(oil_hist['Close'].iloc[-1])
@@ -2171,9 +2185,13 @@ def calculate_market_correlation(ticker, benchmark='SPY', period='6mo'):
     try:
         normalized_ticker = normalize_ticker(ticker)
 
-        # 下载股票和基准数据
-        stock_data = yf.download(normalized_ticker, period=period, progress=False)
-        benchmark_data = yf.download(benchmark, period=period, progress=False)
+        # 下载股票和基准数据 (with defeatbeta fallback)
+        if data_provider_download is not None:
+            stock_data = data_provider_download(normalized_ticker, period=period, progress=False)
+            benchmark_data = data_provider_download(benchmark, period=period, progress=False)
+        else:
+            stock_data = yf.download(normalized_ticker, period=period, progress=False)
+            benchmark_data = yf.download(benchmark, period=period, progress=False)
 
         if stock_data.empty or benchmark_data.empty:
             print(f"[相关性] {ticker}: 无法获取数据")
@@ -2269,7 +2287,7 @@ def get_options_market_data(ticker):
     try:
         # 1. 获取VIX（恐慌指数）- 这是最重要的市场波动率指标
         try:
-            vix_ticker = yf.Ticker('^VIX')
+            vix_ticker = _create_ticker('^VIX')
             vix_hist = vix_ticker.history(period='5d', timeout=10)
             if not vix_hist.empty and len(vix_hist) >= 2:
                 vix_current = float(vix_hist['Close'].iloc[-1])
@@ -2287,7 +2305,7 @@ def get_options_market_data(ticker):
         
         if is_us_stock:
             try:
-                stock = yf.Ticker(normalized_ticker)
+                stock = _create_ticker(normalized_ticker)
                 # 获取最近的到期日期
                 try:
                     expirations = stock.options

@@ -5,6 +5,7 @@ from ..utils.auth import require_auth, get_user_id
 from ..utils.decorators import check_quota, db_retry
 from ..utils.serialization import convert_numpy_types
 from ..models import db, ServiceType, StockAnalysisHistory, TaskType, TaskStatus, AnalysisTask, DailyAnalysisCache
+from ..services.data_provider import DataProvider
 import yfinance as yf
 import logging
 import json
@@ -119,7 +120,7 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
         try:
             # Get 1-month history for ATR calculation
             normalized_ticker = analysis_engine.normalize_ticker(ticker)
-            stock = yf.Ticker(normalized_ticker)
+            stock = DataProvider(normalized_ticker)
             hist = stock.history(period="1mo", timeout=10)
 
             if not hist.empty and len(hist) >= 15:
