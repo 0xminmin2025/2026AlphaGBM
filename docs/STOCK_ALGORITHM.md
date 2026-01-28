@@ -1,498 +1,598 @@
 # 股票分析算法详解
 
-本文档详细说明 AlphaGBM 股票分析系统的核心算法。
+本文档详细说明 AlphaGBM 股票分析系统的核心算法、评分逻辑和数据流程。
 
-> **2026年1月更新**：新增PE历史分位点计算、动态ATR止损（VIX调整）、DCF估值法、EV信心度评分、市场相关性风险检测等重要优化。
+> **文档版本**: 2026.01.28 | 基于实际代码同步更新
 
 ---
 
 ## 目录
 
-1. [系统架构概览](#一系统架构概览)
+1. [系统架构与分析流程](#一系统架构与分析流程)
 2. [核心模型：G = B + M](#二核心模型g--b--m)
-3. [分析流程（7步）](#三分析流程7步)
-4. [市场数据获取](#四市场数据获取)
-5. [风险分析模块](#五风险分析模块)
-6. [市场情绪计算](#六市场情绪计算)
-7. [目标价格计算](#七目标价格计算)
+3. [数据采集模块](#三数据采集模块)
+4. [风险分析模块（五大支柱）](#四风险分析模块五大支柱)
+5. [市场情绪计算（M维度）](#五市场情绪计算m维度)
+6. [目标价格计算（5种方法）](#六目标价格计算5种方法)
+7. [EV期望值模型](#七ev期望值模型)
 8. [ATR动态止损](#八atr动态止损)
-9. [EV期望值模型](#九ev期望值模型)
+9. [市场预警系统](#九市场预警系统)
 10. [AI分析报告](#十ai分析报告)
 11. [市场差异化处理](#十一市场差异化处理)
+12. [配置参数速查](#十二配置参数速查)
 
 ---
 
-## 一、系统架构概览
+## 一、系统架构与分析流程
+
+### 1.1 完整分析管线
+
+```mermaid
+flowchart TB
+    subgraph 数据采集
+        A[get_market_data] --> B[基础数据<br/>价格/PE/PEG/增长率/Beta]
+        C[get_options_market_data] --> D[VIX/Put-Call比率]
+        E[get_macro_market_data] --> F[美债/美元/黄金/原油<br/>Fed会议/CPI/中国事件]
+        G[get_polymarket_data] --> H[预测市场数据]
+    end
+
+    subgraph 核心分析
+        B & D & F & H --> I[analyze_risk_and_position<br/>五大支柱风险评估]
+        B & D & F --> J[calculate_market_sentiment<br/>M维度情绪评分]
+        I & J --> K[calculate_ev_model<br/>期望值模型]
+        I & J --> L[calculate_target_price<br/>5种估值方法]
+        B --> M[calculate_atr_stop_loss<br/>动态止损]
+    end
+
+    subgraph 预警与报告
+        F & D & B --> N[get_market_warnings<br/>市场预警]
+        F & D --> O[calculate_geopolitical_risk<br/>地缘政治风险]
+        I & J & K & L & M & N --> P[get_gemini_analysis<br/>AI分析报告]
+    end
+
+    P --> Q[最终分析结果]
+```
+
+### 1.2 核心函数调用链
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     股票分析系统架构                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│   │ 市场数据获取  │ -> │ 风险分析     │ -> │ 市场情绪计算  │     │
-│   │ (yfinance)   │    │ (五大支柱)   │    │ (G=B+M)      │     │
-│   └──────────────┘    └──────────────┘    └──────────────┘     │
-│         │                   │                    │              │
-│         v                   v                    v              │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│   │ 目标价计算    │    │ ATR动态止损  │    │ EV期望值模型 │     │
-│   │ (5种方法)    │    │ (VIX调整)    │    │ (多时间视界) │     │
-│   └──────────────┘    └──────────────┘    └──────────────┘     │
-│         │                   │                    │              │
-│         └───────────────────┼────────────────────┘              │
-│                             v                                    │
-│                    ┌──────────────┐                             │
-│                    │ AI分析报告   │                             │
-│                    │ (Gemini)     │                             │
-│                    └──────────────┘                             │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+analyze_stock(ticker, style)
+│
+├─→ get_market_data(ticker)              # 基础市场数据
+├─→ get_options_market_data(ticker)      # VIX、Put/Call
+├─→ get_macro_market_data()              # 宏观经济数据
+├─→ get_polymarket_data()                # 预测市场
+│
+├─→ calculate_geopolitical_risk()        # 地缘政治风险指数
+├─→ get_market_warnings()                # 市场预警
+│
+├─→ analyze_risk_and_position()          # 风险评估 → risk_score
+├─→ calculate_market_sentiment()         # 情绪评分 → sentiment_score
+│
+├─→ calculate_ev_model()                 # EV模型 → ev_result
+├─→ calculate_target_price()             # 目标价 → target_price
+├─→ calculate_atr_stop_loss()            # 止损价 → stop_loss
+│
+└─→ get_gemini_analysis()                # AI报告
 ```
 
-**核心文件**：
-- `backend/app/services/analysis_engine.py` - 核心分析引擎
-- `backend/app/services/ev_model.py` - EV期望值模型
-- `backend/app/services/ai_service.py` - AI分析服务
-- `backend/app/constants.py` - 配置参数
-- `backend/app/api/stock.py` - API接口
+### 1.3 核心文件位置
+
+| 文件 | 职责 |
+|------|------|
+| `backend/app/services/analysis_engine.py` | 核心分析引擎（3000+行） |
+| `backend/app/services/ev_model.py` | EV期望值模型 |
+| `backend/app/services/ai_service.py` | AI分析服务 |
+| `backend/app/services/data_provider.py` | 数据源抽象（yfinance + defeatbeta fallback） |
+| `backend/app/constants.py` | 配置参数 |
 
 ---
 
 ## 二、核心模型：G = B + M
 
-### 2.1 模型理念
-
-**AlphaGBM 核心公式**：`收益 = 基本面 + 情绪`
+### 2.1 模型公式
 
 ```
 G = B + M
 
 G (Gain)     = 预期收益
-B (Basics)   = 基本面价值（财务数据、行业趋势）
-M (Momentum) = 市场情绪（技术趋势、资金流向、估值情绪）
+B (Basics)   = 基本面价值（财务数据、行业趋势、估值）
+M (Momentum) = 市场情绪（技术趋势、资金流向、波动率）
 ```
 
-### 2.2 权重配置
+### 2.2 维度说明
 
-| 维度 | 正常权重 | 财报滞后期权重 | 说明 |
-|------|----------|----------------|------|
-| 基本面 (B) | 40% | 20% | 财报刚发布时数据可能滞后 |
-| 技术面 | 30% | 45% | 财报期技术面更可靠 |
-| 情绪面 (M) | 30% | 35% | 市场情绪反应更快 |
+| 维度 | 组成 | 数据来源 |
+|------|------|----------|
+| **B（基本面）** | PE/PEG、增长率、利润率、ROE、FCF | yfinance / defeatbeta-api |
+| **M（情绪面）** | VIX、技术指标、资金流向、宏观环境 | yfinance / Tiger API |
 
 ---
 
-## 三、分析流程（7步）
+## 三、数据采集模块
 
-```python
-def get_stock_analysis_data(ticker, style):
-    """完整的股票分析流程"""
-
-    # 1. 获取市场数据
-    market_data = get_market_data(ticker)
-
-    # 2. 风险分析（五大支柱）
-    risk_result = analyze_risk_and_position(style, market_data)
-
-    # 3. 市场情绪计算
-    market_sentiment = calculate_market_sentiment(market_data)
-
-    # 4. 目标价格计算（5种方法加权）
-    target_price = calculate_target_price(market_data, risk_result, style)
-
-    # 5. ATR动态止损（VIX调整）
-    stop_loss = calculate_atr_stop_loss(price, hist, beta, vix)
-
-    # 6. EV期望值模型（多时间视界）
-    ev_result = calculate_ev_model(market_data, risk_result, style)
-
-    # 7. AI分析报告（Gemini）
-    ai_report = get_gemini_analysis(ticker, style, market_data, risk_result)
-
-    return combined_result
-```
-
----
-
-## 四、市场数据获取
-
-### 4.1 数据来源
-
-| 数据类型 | 来源 | 备用 |
-|----------|------|------|
-| 股票行情 | Yahoo Finance | Alpha Vantage |
-| 期权数据 | Yahoo Finance | - |
-| VIX指数 | Yahoo Finance (^VIX) | - |
-| 宏观数据 | Yahoo Finance (^TNX, DX-Y.NYB) | - |
-
-### 4.2 获取的关键数据
+### 3.1 基础市场数据 `get_market_data()`
 
 ```python
 market_data = {
     # 价格数据
-    'price': float,           # 当前价格
-    'week52_high': float,     # 52周最高
-    'week52_low': float,      # 52周最低
-    'ma50': float,            # 50日均线
-    'ma200': float,           # 200日均线
+    'price': float,              # 当前价格
+    'week52_high': float,        # 52周最高
+    'week52_low': float,         # 52周最低
+    'ma50': float,               # 50日均线
+    'ma200': float,              # 200日均线
 
     # 基本面数据
-    'pe': float,              # 市盈率
-    'peg': float,             # PEG比率
-    'growth': float,          # 营收增长率
-    'margin': float,          # 利润率
-    'beta': float,            # Beta值
-    'free_cash_flow': float,  # 自由现金流（新增）
-    'shares_outstanding': int, # 流通股数（新增）
+    'pe': float,                 # 市盈率
+    'peg': float,                # PEG比率
+    'growth': float,             # 营收增长率
+    'margin': float,             # 利润率
+    'beta': float,               # Beta系数
+    'free_cash_flow': float,     # 自由现金流
+    'shares_outstanding': int,   # 流通股数
 
-    # 期权市场数据
-    'options_data': {
-        'vix': float,         # VIX恐慌指数
-        'vix_change': float,  # VIX变化率
-        'put_call_ratio': float  # Put/Call比率
-    },
+    # 财报数据
+    'earnings_dates': list,      # 财报日期（最近2个）
 
-    # 宏观经济数据
-    'macro_data': {
-        'treasury_10y': float,  # 10年美债收益率
-        'dxy': float,           # 美元指数
-        'gold': float,          # 黄金价格
-        'oil': float            # 原油价格
-    },
-
-    # 相关性数据（新增）
+    # 相关性数据
     'market_correlation': {
-        'current_correlation': float,  # 与SPY的当前相关性
-        'beta_estimate': float,        # 估算Beta
+        'current_correlation': float,   # 与SPY的60日相关性
+        'beta_estimate': float,         # 估算Beta
         'high_correlation_warning': bool
     }
 }
 ```
 
+### 3.2 期权市场数据 `get_options_market_data()`
+
+```python
+options_data = {
+    'vix': float,              # CBOE波动率指数
+    'vix_change': float,       # VIX变化率%
+    'put_call_ratio': float,   # Put/Call比率
+    'options_volume': float,   # 期权总成交量
+    'has_options': bool        # 是否有期权数据
+}
+```
+
+### 3.3 宏观经济数据 `get_macro_market_data()`
+
+```python
+macro_data = {
+    # 市场指标
+    'treasury_10y': float,       # 10年期美债收益率
+    'treasury_10y_change': float,
+    'dxy': float,                # 美元指数
+    'dxy_change': float,
+    'gold': float,               # 黄金价格
+    'gold_change': float,
+    'oil': float,                # 原油价格
+    'oil_change': float,
+
+    # 经济日历（硬编码+计算）
+    'fed_meetings': list,        # 美联储会议日期
+    'cpi_releases': list,        # CPI发布日期
+    'china_events': list,        # 中国经济事件
+    'options_expirations': list, # 期权到期日
+
+    # 计算指标
+    'geopolitical_risk': float,  # 地缘政治风险指数（0-10）
+    'polymarket': dict           # 预测市场数据
+}
+```
+
+### 3.4 数据源与Ticker
+
+| 数据 | yfinance Ticker | 备用来源 |
+|------|-----------------|----------|
+| VIX恐慌指数 | `^VIX` | 无 |
+| 10年期美债 | `^TNX` | 硬编码4.5% |
+| 美元指数 | `DX-Y.NYB` / `^DXY` | 无 |
+| 黄金价格 | `GC=F` | 无 |
+| 原油价格 | `CL=F` | 无 |
+| S&P 500 | `^GSPC` | 无 |
+| 财报日期 | `ticker.calendar` | `ticker.info['earningsTimestamp']` |
+
 ---
 
-## 五、风险分析模块
+## 四、风险分析模块（五大支柱）
 
-### 5.1 五大支柱框架
+### 4.1 风险评估框架
 
-| 支柱 | 检测内容 | 风险权重 |
-|------|----------|----------|
-| **估值风险** | PE分位点、PEG合理性 | 30% |
-| **技术风险** | 均线位置、价格位置 | 20% |
-| **流动性风险** | 日均成交额 | 15% |
-| **事件风险** | 财报日期、解禁期 | 20% |
-| **市场风险** | VIX、宏观环境 | 15% |
+```mermaid
+flowchart LR
+    subgraph 五大支柱
+        A[估值风险<br/>PE/PEG过高]
+        B[增长风险<br/>负增长/放缓]
+        C[流动性风险<br/>成交量不足]
+        D[市场风险<br/>VIX/宏观]
+        E[技术风险<br/>价格破位]
+    end
 
-### 5.2 流动性检查（市场差异化）
-
-```python
-# constants.py 中的市场配置
-MARKET_CONFIG = {
-    'US': {
-        'min_daily_volume_usd': 5_000_000,    # 美股 $500万
-        'liquidity_coefficient': 1.0,
-    },
-    'HK': {
-        'min_daily_volume_usd': 2_000_000,    # 港股 $200万
-        'liquidity_coefficient': 0.6,
-    },
-    'CN': {
-        'min_daily_volume_usd': 1_000_000,    # A股（换算后）
-        'liquidity_coefficient': 0.5,
-    }
-}
-
-def check_liquidity(data, ticker):
-    """市场差异化流动性检查"""
-    market = detect_market_from_ticker(ticker)
-    config = get_market_config(market)
-    threshold = config['min_daily_volume_usd'] * config['liquidity_coefficient']
-
-    # 检查日均成交额是否达标
-    is_liquid = estimated_daily_volume >= threshold
-    return is_liquid, liquidity_info
+    A & B & C & D & E --> F[加总风险评分<br/>0-10]
+    F --> G[建议仓位]
 ```
 
-### 5.3 PE历史分位点计算（新增）
+### 4.2 风险评分计算（累加制）
 
-```python
-def calculate_pe_percentile(current_pe, ticker):
-    """
-    计算当前PE在5年历史中的分位点
+风险评分采用**累加制**，各因素触发条件满足则加分：
 
-    数据来源：yfinance季度盈利数据
-    计算方法：
-    1. 获取5年历史价格
-    2. 获取季度EPS数据
-    3. 计算每季度的历史PE
-    4. 用scipy.stats.percentileofscore计算分位点
-    """
-    # 获取历史盈利数据
-    earnings = stock.quarterly_earnings
+| 风险因素 | 触发条件 | 加分 |
+|----------|----------|------|
+| **估值风险** | PE > 60 | +2.0 |
+| | PE > 40 | +1.5 |
+| | PEG > 2.0 | +1.0 |
+| | PE高估 + Z-Score高 | +0.5 |
+| **增长风险** | Growth < -10% | +2.0 |
+| | Growth < 0% | +1.0 |
+| **流动性风险** | 成交额 < 市场门槛 | +2.0 |
+| **市场风险** | VIX > 30 | +1.5 |
+| | Put/Call > 1.5 | +1.0 |
+| | 10Y收益率 > 4.5% | +0.5 |
+| **技术风险** | 价格 < MA50 × 90% | +0.5 |
+| | 价格 < MA200 | +1.0 |
 
-    # 计算历史PE序列
-    for date, row in earnings.iterrows():
-        eps = row['Earnings']
-        price_at_date = get_price_at(date)
-        pe = price_at_date / (eps * 4)  # 年化
-        historical_pe_list.append(pe)
+### 4.3 风险等级与建议仓位
 
-    # 计算分位点
-    percentile = stats.percentileofscore(historical_pe_list, current_pe)
+| 风险评分 | 等级 | 建议最大仓位 | 操作建议 |
+|----------|------|--------------|----------|
+| 0-2 | 极低 | 20% | 可适度建仓 |
+| 2-4 | 低 | 15% | 正常持仓 |
+| 4-6 | 中等 | 10% | 谨慎操作 |
+| 6-8 | 高 | 5% | 减少敞口 |
+| 8-10 | 极高 | 0% | 不建议买入 |
 
-    return percentile, z_score, historical_pe_list
+---
+
+## 五、市场情绪计算（M维度）
+
+### 5.1 情绪评分权重分布
+
+```mermaid
+pie title 市场情绪权重配置
+    "PE情绪" : 30
+    "价格位置" : 25
+    "期权市场(VIX+P/C)" : 20
+    "PEG情绪" : 15
+    "技术面" : 10
 ```
 
-**PE分位点情绪评分映射**：
+### 5.2 完整权重表
 
-| 分位点 | 情绪评分 | 含义 |
+| 指标 | 权重 | 评分范围 | 说明 |
+|------|------|----------|------|
+| PE情绪 | 30% | 0-10 | PE估值情绪 |
+| 价格位置 | 25% | 0-10 | 52周高低点位置 |
+| VIX恐慌指数 | 12% | 0-10 | 市场波动率 |
+| Put/Call比率 | 8% | 0-10 | 期权市场方向 |
+| PEG情绪 | 15% | 0-10 | 成长估值情绪 |
+| 技术面 | 10% | 0-10 | 均线位置/趋势 |
+| 宏观环境 | — | — | 子权重分解↓ |
+| → 美债收益率 | 4% | 0-10 | 流动性环境 |
+| → 美元指数 | 3% | 0-10 | 全球流动性 |
+| → 黄金价格 | 2% | 0-10 | 避险情绪 |
+| → 原油价格 | 1% | 0-10 | 通胀预期 |
+| Polymarket | 3% | 0-10 | 预测市场情绪 |
+| 期权到期 | 2% | 0-10 | 交割日影响 |
+
+### 5.3 PE情绪评分规则
+
+| PE区间 | 情绪评分 | 含义 |
 |--------|----------|------|
-| 0-20% | 3.0 | 历史低估，极度悲观 |
-| 20-40% | 4.5 | 偏低估 |
-| 40-60% | 5.5 | 中性 |
-| 60-80% | 6.5 | 偏高估 |
-| 80-90% | 8.0 | 历史高位 |
-| 90-100% | 9.0 | 极度高估 |
+| < 10 | 3.0 | 极度低估 |
+| 10-15 | 4.0 | 低估 |
+| 15-25 | 5.0 | 合理 |
+| 25-40 | 7.0 | 偏高 |
+| 40-60 | 8.5 | 高估 |
+| > 60 | 9.5 | 极度高估 |
 
-### 5.4 风险等级与建议仓位
+### 5.4 PEG情绪评分（动态阈值）
 
-| 风险评分 | 等级 | 建议最大仓位 |
-|----------|------|--------------|
-| 0-2 | 极低 | 25% |
-| 2-4 | 低 | 20% |
-| 4-6 | 中等 | 15% |
-| 6-8 | 高 | 5% |
-| 8-10 | 极高 | 0% (不建议) |
+```python
+# 动态PEG阈值计算
+dynamic_peg_threshold = 1.5 × [1 - (treasury_yield - 3%) × 0.15]
+# 限制范围：0.5 ~ 2.0
+
+# 评分规则
+PEG < 0.7 × threshold  → 8.0（成长价值）
+PEG < threshold        → 6.0（合理）
+PEG < 1.3 × threshold  → 5.0（中性）
+PEG > 1.3 × threshold  → 3.0（高估）
+```
+
+### 5.5 价格位置情绪评分
+
+```python
+position = (price - week52_low) / (week52_high - week52_low)
+
+# 评分规则
+position < 0.2  → 2.0（接近52周低点，悲观）
+position 0.2-0.4 → 4.0
+position 0.4-0.6 → 5.0（中位）
+position 0.6-0.8 → 7.0
+position > 0.8  → 8.5（接近52周高点，乐观）
+```
+
+### 5.6 VIX情绪评分
+
+| VIX区间 | 基础分 | 变化调整 |
+|---------|--------|----------|
+| < 15 | 8.0 | VIX↓>10%: +1.0 |
+| 15-20 | 6.5 | — |
+| 20-25 | 5.0 | — |
+| 25-30 | 3.5 | VIX↑>10%: -1.5 |
+| 30-40 | 2.0 | VIX↑>5%: -0.8 |
+| > 40 | 1.0 | — |
+
+### 5.7 Put/Call比率评分
+
+| P/C比率 | 情绪分 | 含义 |
+|---------|--------|------|
+| < 0.7 | 7.5 | 极度乐观 |
+| 0.7-0.9 | 6.0 | 乐观 |
+| 0.9-1.1 | 5.0 | 中性 |
+| 1.1-1.3 | 4.0 | 谨慎 |
+| 1.3-1.5 | 3.0 | 悲观 |
+| > 1.5 | 2.0 | 恐慌 |
+
+### 5.8 美债收益率情绪评分
+
+| 10Y收益率 | 情绪分 | 含义 |
+|-----------|--------|------|
+| < 2.5% | 7.0 | 宽松 |
+| 2.5-3.5% | 6.0 | 温和 |
+| 3.5-4.5% | 5.0 | 中性 |
+| 4.5-5.0% | 4.0 | 偏紧 |
+| > 5.0% | 2.5 | 收紧 |
 
 ---
 
-## 六、市场情绪计算
+## 六、目标价格计算（5种方法）
 
-### 6.1 情绪评分组成（0-10分）
+### 6.1 估值方法架构
 
-| 指标 | 权重 | 说明 |
-|------|------|------|
-| 技术面情绪 | 10% | 均线位置、价格趋势 |
-| VIX恐慌指数 | 12% | 市场波动率 |
-| Put/Call比率 | 8% | 期权市场情绪 |
-| 宏观经济 | 10% | 利率、美元、商品 |
-| PE分位点 | 15% | 估值历史位置 |
-| 成交量异常 | 5% | 资金流入流出 |
-| 中国市场情绪 | 40%* | *仅A股/港股 |
+```mermaid
+flowchart TB
+    A[目标价计算] --> B[PE估值法]
+    A --> C[PEG估值法]
+    A --> D[增长率折现法]
+    A --> E[DCF估值法]
+    A --> F[技术面分析]
 
-### 6.2 VIX情绪评分
-
-```python
-def calculate_vix_sentiment(vix, vix_change):
-    """VIX恐慌指数对情绪的影响"""
-
-    if vix < 15:
-        vix_sentiment = 8.0   # 低波动，市场平静
-    elif vix < 20:
-        vix_sentiment = 6.5   # 正常波动
-    elif vix < 25:
-        vix_sentiment = 5.0   # 中等偏高
-    elif vix < 30:
-        vix_sentiment = 3.5   # 高波动，情绪偏悲观
-    elif vix < 40:
-        vix_sentiment = 2.0   # 很高波动，恐慌
-    else:
-        vix_sentiment = 1.0   # 极高波动，极度恐慌
-
-    # VIX快速上升进一步降低情绪
-    if vix_change > 10:
-        vix_sentiment -= 1.5
-    elif vix_change > 5:
-        vix_sentiment -= 0.8
-
-    return vix_sentiment
+    B & C & D & E & F --> G[行业权重加权]
+    G --> H[风险调整]
+    H --> I[最终目标价]
 ```
 
-### 6.3 相关性风险检测（新增）
+### 6.2 五种估值方法
+
+#### 方法1：PE估值法
 
 ```python
-def calculate_market_correlation(ticker, benchmark='SPY'):
-    """
-    计算个股与大盘的相关性
-    用于检测风险聚集
-    """
-    # 计算60日滚动相关性
-    rolling_corr = stock_returns.rolling(60).corr(benchmark_returns)
-
-    # 高相关性警告
-    if current_corr > 0.85:
-        high_correlation_warning = True
-        # 高相关+高Beta = 市场下跌时损失更大
-        if beta > 1.2:
-            sentiment_adjustment = -0.3
-
-    return {
-        'current_correlation': current_corr,
-        'avg_correlation': avg_corr,
-        'beta_estimate': beta,
-        'high_correlation_warning': warning
-    }
-```
-
----
-
-## 七、目标价格计算
-
-### 7.1 五种估值方法
-
-| 方法 | 适用场景 | 权重范围 |
-|------|----------|----------|
-| **PE估值** | 有盈利的公司 | 20-45% |
-| **PEG估值** | 成长股 | 10-25% |
-| **增长率折现** | 高增长公司 | 15-25% |
-| **DCF估值** | 稳定现金流公司 | 10-30% |
-| **技术面分析** | 所有公司 | 10-15% |
-
-### 7.2 行业权重配置
-
-```python
-# 根据行业类别分配不同权重
-industry_weights = {
-    'technology': {
-        'PE估值': 0.20, 'PEG估值': 0.25,
-        '增长率折现': 0.25, 'DCF估值': 0.20, '技术面分析': 0.10
-    },
-    'financial': {
-        'PE估值': 0.45, 'PEG估值': 0.15,
-        '增长率折现': 0.15, 'DCF估值': 0.10, '技术面分析': 0.15
-    },
-    'energy': {
-        'PE估值': 0.30, 'PEG估值': 0.10,
-        '增长率折现': 0.15, 'DCF估值': 0.30, '技术面分析': 0.15
-    },
-    'consumer': {
-        'PE估值': 0.25, 'PEG估值': 0.20,
-        '增长率折现': 0.20, 'DCF估值': 0.25, '技术面分析': 0.10
-    }
-}
-```
-
-### 7.3 DCF估值法（新增）
-
-```python
-def calculate_dcf_target(data, risk_result):
-    """
-    简化DCF模型
-
-    公式：企业价值 = Σ(FCF_t / (1+r)^t) + 终值
-    """
-    fcf = data['free_cash_flow']
-    shares = data['shares_outstanding']
-    growth = data['growth']
-
-    # 折现率 = 无风险利率 + 风险溢价
-    risk_free_rate = 0.04  # 美债收益率
-    risk_premium = 0.03 + (risk_score / 100)
-    discount_rate = risk_free_rate + risk_premium
-
-    # 5年预测（增长率逐年递减）
-    fcf_projections = []
-    for year in range(1, 6):
-        year_growth = growth * (0.9 ** (year - 1))
-        projected_fcf = current_fcf * (1 + year_growth)
-        discounted = projected_fcf / ((1 + discount_rate) ** year)
-        fcf_projections.append(discounted)
-
-    # 永续价值（Gordon Growth Model）
-    terminal_growth = min(growth * 0.3, 0.025)  # 不超过2.5%
-    terminal_value = fcf_projections[-1] * (1 + terminal_growth) / (discount_rate - terminal_growth)
-
-    # 股权价值
-    enterprise_value = sum(fcf_projections) + terminal_value
-    target_price = enterprise_value / shares
-
-    return target_price
-```
-
-### 7.4 风险调整
-
-```python
-# 根据风险评分调整目标价
-if risk_score >= 6:
-    risk_adjustment = 0.85  # 高风险下调15%
-elif risk_score >= 4:
-    risk_adjustment = 0.95  # 中等风险下调5%
+if current_pe > reasonable_pe × 1.5:
+    target = price × (reasonable_pe / current_pe)
+elif current_pe < reasonable_pe × 0.7:
+    target = price × (reasonable_pe / current_pe) × 0.9
 else:
-    risk_adjustment = 1.0   # 低风险不调整
-
-# 根据投资风格调整
-style_adjustments = {
-    'value': 0.95,     # 价值风格更保守
-    'growth': 1.05,    # 成长风格稍乐观
-    'momentum': 1.08,  # 趋势风格更乐观
-    'quality': 1.0     # 质量风格中性
-}
-
-target_price = avg_price * risk_adjustment * style_adjustments[style]
+    target = price × (reasonable_pe / current_pe) × 0.95
 ```
+
+#### 方法2：PEG估值法
+
+```python
+if peg < dynamic_peg_threshold:
+    peg_multiplier = min(dynamic_threshold / current_peg, 1.5)
+    target = price × peg_multiplier
+```
+
+#### 方法3：增长率折现法
+
+```python
+# 增长阶段乘数
+if growth > 30%:      multiplier = 1 + growth × 0.6
+elif growth > 15%:    multiplier = 1 + growth × 0.4
+elif growth > 0%:     multiplier = 1 + growth × 0.2
+else:                 multiplier = 1.0
+
+# 利润率加成
+if margin > 15%:      multiplier × 1.1
+
+target = price × multiplier
+```
+
+#### 方法4：DCF估值法
+
+```python
+# 折现率 = 无风险利率 + 风险溢价
+discount_rate = 0.04 + 0.03 + (risk_score / 100)
+
+# 5年预测（增长率逐年递减）
+for year in range(1, 6):
+    year_growth = growth × (0.9 ** (year - 1))
+    projected_fcf = current_fcf × (1 + year_growth)
+    discounted = projected_fcf / ((1 + discount_rate) ** year)
+    fcf_projections.append(discounted)
+
+# 永续价值（Gordon Growth Model）
+terminal_growth = min(growth × 0.3, 0.025)  # 不超过2.5%
+terminal_value = fcf_year5 × (1 + terminal_growth) / (discount_rate - terminal_growth)
+terminal_pv = terminal_value / ((1 + discount_rate) ** 5)
+
+# 企业价值
+enterprise_value = sum(fcf_projections) + terminal_pv
+target = enterprise_value / shares_outstanding
+```
+
+#### 方法5：技术面分析
+
+```python
+position = (price - week52_low) / (week52_high - week52_low)
+
+if position < 0.3:
+    if bullish: target = week52_high
+    else:       target = (week52_high + week52_low) / 2
+elif position < 0.7:
+    if bullish: target = week52_high
+    else:       target = price × 1.15
+else:  # > 0.7
+    target = price × 1.1
+```
+
+### 6.3 行业权重配置
+
+| 行业 | PE估值 | PEG估值 | 增长折现 | DCF | 技术面 |
+|------|--------|---------|----------|-----|--------|
+| 科技/医疗 | 20% | 25% | 25% | 20% | 10% |
+| 金融 | 45% | 15% | 15% | 10% | 15% |
+| 能源/公用事业 | 30% | 10% | 15% | 30% | 15% |
+| 消费/工业 | 25% | 20% | 20% | 25% | 10% |
+| 默认 | 30% | 20% | 20% | 20% | 10% |
+
+### 6.4 风险调整
+
+```python
+# 风险折价
+if risk_score >= 6:
+    target × 0.85  # 高风险下调15%
+elif risk_score >= 4:
+    target × 0.92  # 中等风险下调8%
+else:
+    target × 1.0   # 低风险不调整
+```
+
+---
+
+## 七、EV期望值模型
+
+### 7.1 核心公式
+
+```
+EV = (上涨概率 × 上涨幅度) + (下跌概率 × 下跌幅度)
+```
+
+### 7.2 多时间视界加权
+
+```mermaid
+flowchart LR
+    A[1周EV] -->|50%| D[综合EV]
+    B[1月EV] -->|30%| D
+    C[3月EV] -->|20%| D
+```
+
+```python
+ev_weighted = ev_1week × 0.50 + ev_1month × 0.30 + ev_3months × 0.20
+```
+
+### 7.3 概率计算因子
+
+| 因子 | 条件 | 概率调整 |
+|------|------|----------|
+| **价格位置** | 52周位置 < 30% | +10% |
+| | 52周位置 > 80% | -10% |
+| **均线排列** | 多头排列 (Price > MA50 > MA200) | +12% |
+| | 金叉（MA50刚上穿MA200） | +8% |
+| | 空头排列 | -12% |
+| | 死叉 | -8% |
+| **基本面** | PEG < 1.0 | +8% |
+| | PEG > 2.0 | -5% |
+| | Growth > 20% | +5% |
+| | Growth < 0% | -8% |
+| **风险评分** | Risk >= 4 | -15% |
+| | Risk >= 3 | -10% |
+| | Risk >= 2 | -5% |
+| | Risk <= 1 | +5% |
+| **情绪调整** | (sentiment - 5.0) × 0.02 | ±调整 |
+
+**概率范围限制**：20% ~ 80%
+
+### 7.4 预期波动幅度
+
+```python
+time_factor = sqrt(days / 252)
+expected_move = annual_volatility × time_factor
+
+# 使用IV（如有），否则使用HV
+# 受52周高低点约束
+```
+
+### 7.5 EV评分转换（0-10）
+
+```python
+base_score = 5.0 + (ev_weighted × 25)
+final_score = base_score - (risk_score × 0.3)
+```
+
+### 7.6 EV信心度评估
+
+| 因子 | 权重 | 评分规则 |
+|------|------|----------|
+| 时间一致性 | 40% | 3个时间维度方向一致: +40; 部分一致: +25; 分歧: -15 |
+| 信号强度 | 30% | EV > 10%: +30; 5-10%: +20; 2-5%: +10; <2%: -10 |
+| 数据质量 | 20% | >200天: +20; 60-200天: +10; 20-60天: +5; <20天: -10 |
+| 波动稳定性 | 10% | 波动率比0.7-1.3: +10; >1.5: -5; <0.5: +5 |
+
+### 7.7 EV推荐映射
+
+| EV值 | 推荐 | 信心度 |
+|------|------|--------|
+| > +8% | STRONG_BUY | high |
+| +3% ~ +8% | BUY | medium |
+| -3% ~ +3% | HOLD | medium |
+| -8% ~ -3% | AVOID | medium |
+| < -8% | STRONG_AVOID | high |
 
 ---
 
 ## 八、ATR动态止损
 
-### 8.1 基本公式
+### 8.1 ATR计算
 
 ```python
 # True Range
-TR = max(High - Low, |High - PrevClose|, |Low - PrevClose|)
+TR = max(High - Low, |High - Close_prev|, |Low - Close_prev|)
 
 # ATR(14) = 14日TR简单移动平均
 ATR = SMA(TR, 14)
+```
 
-# 止损价格
+### 8.2 止损公式
+
+```python
 stop_loss = buy_price - (ATR × multiplier)
 ```
 
-### 8.2 VIX动态调整（新增）
+### 8.3 动态乘数调整
 
-```python
-def calculate_atr_stop_loss(buy_price, hist_data, beta, vix):
-    """
-    基于ATR计算止损，并根据VIX动态调整
-    """
-    base_multiplier = 2.5  # 基础ATR倍数
-
-    # VIX调整（VIX > 20时扩大止损空间）
-    if vix > 20:
-        vix_adjustment = min(1.0, ((vix - 20) / 10) * 0.3)
-        # VIX每上升10点，ATR倍数+0.3
-    elif vix < 15:
-        vix_adjustment = -0.2  # 低VIX时收紧止损
-    else:
-        vix_adjustment = 0
-
-    # Beta调整
-    if beta > 1.5:
-        beta_multiplier = 1.2  # 高Beta扩大止损
-    elif beta < 0.8:
-        beta_multiplier = 0.8  # 低Beta收紧止损
-    else:
-        beta_multiplier = 1.0
-
-    # 最终倍数（限制在1.5-4.0）
-    final_multiplier = (base_multiplier + vix_adjustment) * beta_multiplier
-    final_multiplier = max(1.5, min(4.0, final_multiplier))
-
-    stop_loss_price = buy_price - (ATR * final_multiplier)
-
-    return {
-        'stop_loss_price': stop_loss_price,
-        'atr_multiplier': final_multiplier,
-        'adjustments': [...],
-        'vix': vix,
-        'beta': beta
-    }
+```mermaid
+flowchart LR
+    A[基础乘数 2.5] --> B[Beta调整]
+    B --> C[VIX调整]
+    C --> D[最终乘数<br/>1.5 ~ 4.0]
 ```
 
-### 8.3 调整示例
+#### Beta调整
 
-| 场景 | VIX | Beta | 基础倍数 | 最终倍数 |
+| Beta区间 | 乘数系数 |
+|----------|----------|
+| > 1.5（高波动） | × 1.2 |
+| 1.2-1.5 | × 1.1 |
+| 0.8-1.0 | × 0.9 |
+| < 0.8（低波动） | × 0.8 |
+
+#### VIX调整
+
+```python
+if vix > 20:
+    adjustment = min(1.0, ((vix - 20) / 10) × 0.3)
+    multiplier += adjustment
+    # VIX每上升10点，乘数+0.3
+elif vix < 15:
+    multiplier -= 0.2  # 低波动时收紧
+```
+
+### 8.4 调整示例
+
+| 场景 | VIX | Beta | 基础乘数 | 最终乘数 |
 |------|-----|------|----------|----------|
 | 平静市场 | 15 | 1.0 | 2.5 | 2.3 |
 | 正常市场 | 20 | 1.0 | 2.5 | 2.5 |
@@ -500,96 +600,91 @@ def calculate_atr_stop_loss(buy_price, hist_data, beta, vix):
 | 高波动+高Beta | 30 | 1.8 | 2.5 | 3.4 |
 | 恐慌市场 | 40 | 1.5 | 2.5 | 3.8 |
 
+### 8.5 硬止损保护
+
+```python
+hard_stop = buy_price × (1 - 0.15)  # 15%硬止损
+stop_loss_price = min(atr_stop, hard_stop)  # 取更保守的
+```
+
 ---
 
-## 九、EV期望值模型
+## 九、市场预警系统
 
-### 9.1 核心公式
+### 9.1 预警数据流
 
-```
-EV = (上涨概率 × 上涨幅度) + (下跌概率 × 下跌幅度)
-```
+```mermaid
+flowchart TB
+    subgraph 数据源
+        A[VIX]
+        B[美债收益率]
+        C[黄金价格]
+        D[Fed会议日期]
+        E[CPI发布日期]
+        F[期权到期日]
+        G[财报日期]
+        H[地缘政治风险]
+        I[Polymarket]
+    end
 
-### 9.2 多时间视界
-
-| 时间视界 | 权重 | 说明 |
-|----------|------|------|
-| 1周 | 50% | 短期预测准确性最高 |
-| 1月 | 30% | 中期趋势 |
-| 3月 | 20% | 长期方向 |
-
-```python
-ev_weighted = (
-    ev_1week * 0.50 +
-    ev_1month * 0.30 +
-    ev_3months * 0.20
-)
+    A & B & C & D & E & F & G & H & I --> J[get_market_warnings]
+    J --> K[预警列表<br/>级别/类型/消息/天数]
 ```
 
-### 9.3 EV信心度评分（新增）
+### 9.2 完整预警规则表
 
-```python
-def calculate_ev_confidence(ev_1week, ev_1month, ev_3months, data):
-    """
-    评估EV预测的可信度
+| 预警类型 | 触发条件 | 严重级别 | 数据源 |
+|----------|----------|----------|--------|
+| VIX恐慌 | VIX >= 30 | HIGH | yfinance `^VIX` |
+| VIX接近危险 | VIX >= 25 | MEDIUM | yfinance `^VIX` |
+| VIX快速上升 | VIX >= 20 且 变化 > 10% | MEDIUM | yfinance `^VIX` |
+| VIX中等偏高 | VIX >= 20 | LOW | yfinance `^VIX` |
+| Put/Call恐慌 | P/C >= 1.5 | HIGH | 计算值 |
+| Put/Call谨慎 | P/C >= 1.2 | MEDIUM | 计算值 |
+| 美债收益率飙升 | 10Y >= 5.0% | HIGH | yfinance `^TNX` |
+| 美债收益率上升 | 10Y >= 4.5% | MEDIUM | yfinance `^TNX` |
+| 美债快速上升 | 变化 > 0.2% | MEDIUM | yfinance `^TNX` |
+| 黄金暴涨 | 变化 > 3% | HIGH | yfinance `GC=F` |
+| 黄金显著上涨 | 变化 > 1.5% | MEDIUM | yfinance `GC=F` |
+| 美联储会议临近 | <= 3天 | HIGH | 硬编码日历 |
+| 美联储会议将至 | 4-7天 | MEDIUM | 硬编码日历 |
+| 美联储会议预警 | 8-14天 | LOW | 硬编码日历 |
+| CPI发布临近 | <= 3天 | MEDIUM | 计算日期 |
+| CPI发布将至 | 4-7天 | LOW | 计算日期 |
+| 中国经济事件 | 0-7天 | LOW-MEDIUM | 硬编码+计算 |
+| 期权到期（四重） | <= 3天 | HIGH | 计算（第三周五） |
+| 期权到期 | 4-7天 | MEDIUM | 计算（第三周五） |
+| 期权到期预警 | 8-14天 | LOW | 计算（第三周五） |
+| 财报发布临近 | 0-3天 | HIGH | yfinance `calendar` |
+| 财报发布将至 | 4-7天 | MEDIUM | yfinance `calendar` |
+| 地缘政治风险高 | 风险指数 >= 7 | HIGH | 代理指标计算 |
+| 地缘政治风险中 | 风险指数 >= 6 | MEDIUM | 代理指标计算 |
+| Polymarket关键事件 | 存在关键事件 | MEDIUM | Polymarket API |
+| Polymarket经济预测 | 存在经济预测 | LOW | Polymarket API |
+| Polymarket美联储预测 | 存在Fed预测 | LOW | Polymarket API |
 
-    因素：
-    1. 时间一致性（40%）：三个时间维度方向是否一致
-    2. 信号强度（30%）：EV绝对值是否足够大
-    3. 数据质量（20%）：历史数据是否充足
-    4. 波动率稳定性（10%）：近期波动率是否稳定
-    """
-    score = 50  # 基础分
+### 9.3 地缘政治风险指数计算
 
-    # 1. 时间一致性
-    directions = [get_direction(ev_1week), get_direction(ev_1month), get_direction(ev_3months)]
-    if all_same_direction(directions):
-        score += 40  # 方向完全一致
-    elif partial_consistent(directions):
-        score += 25  # 部分一致
-    else:
-        score -= 15  # 方向分歧
-
-    # 2. 信号强度
-    avg_abs_ev = average([abs(ev_1week), abs(ev_1month), abs(ev_3months)])
-    if avg_abs_ev > 0.10:
-        score += 30  # 强信号
-    elif avg_abs_ev > 0.05:
-        score += 20  # 中等信号
-    elif avg_abs_ev < 0.02:
-        score -= 10  # 弱信号
-
-    # 确定等级
-    if score >= 70:
-        level = 'HIGH'
-    elif score >= 40:
-        level = 'MEDIUM'
-    else:
-        level = 'LOW'
-
-    return {
-        'level': level,
-        'score': score,
-        'factors': [...],
-        'description': '...'
-    }
+```mermaid
+pie title 地缘政治风险权重
+    "黄金价格变化" : 40
+    "VIX指数" : 30
+    "美元指数" : 20
+    "原油波动" : 10
 ```
 
-### 9.4 EV推荐映射
-
-| EV值 | 推荐 | 信心度 |
-|------|------|--------|
-| > 8% | STRONG_BUY | high |
-| 3%-8% | BUY | medium |
-| -3%-3% | HOLD | medium |
-| -8%--3% | AVOID | medium |
-| < -8% | STRONG_AVOID | high |
+| 指标 | 权重 | 高风险条件 | 高风险分值 |
+|------|------|------------|------------|
+| 黄金变化 | 40% | > +3% | 8.0 |
+| VIX指数 | 30% | > 30 | 8.5 |
+| 美元指数 | 20% | > 105 且 上涨 > 1% | 7.5 |
+| 原油波动 | 10% | |变化| > 5% | 7.0 |
 
 ---
 
 ## 十、AI分析报告
 
-### 10.1 Gemini分析流程
+### 10.1 分析流程
 
 ```
 1. 构建Prompt（包含所有数据）
@@ -601,29 +696,30 @@ def calculate_ev_confidence(ev_1week, ev_1month, ev_3months, data):
 4. 如果失败，使用备用分析（Fallback）
 ```
 
-### 10.2 报告结构
+### 10.2 Prompt包含数据
 
-```markdown
-## 第一部分：公司概况
-- 公司名称、行业、市值
+1. 当前价格和52周范围
+2. 基本面指标（Growth%、Margin%、PE、PEG）
+3. 技术指标（MA50、MA200、Beta）
+4. 系统风险评分和风险标志
+5. 期权数据（VIX、Put/Call比率）
+6. 宏观数据（Treasury、USD、Gold、Oil）
+7. 财报日期和IPO解禁数据
+8. 中国市场情绪（如A股/港股）
+9. 市场预警列表
+10. EV模型短期风险评估
 
-## 第二部分：基本面分析 (B)
-- 营收增长、利润率、PE/PEG分析
+### 10.3 报告结构（7部分）
 
-## 第三部分：情绪/趋势分析 (M)
-- 技术面、市场情绪、VIX影响
+1. **投资风格与原则**
+2. **公司概况**
+3. **AlphaGBM深度分解**
+4. **五大支柱检查（怀疑论与预演）**
+5. **风险控制评估**
+6. **估值与交易策略**
+7. **退出策略（全面）**
 
-## 第四部分：风险评估
-- 主要风险点、风险等级
-
-## 第五部分：估值分析
-- 目标价格、估值方法说明
-
-## 第六部分：交易策略
-- 操作建议、建议仓位、止损价格
-```
-
-### 10.3 投资风格约束
+### 10.4 投资风格约束
 
 | 风格 | 核心原则 | 最大仓位 |
 |------|----------|----------|
@@ -639,25 +735,17 @@ def calculate_ev_confidence(ev_1week, ev_1month, ev_3months, data):
 ### 11.1 市场识别规则
 
 ```python
-def detect_market_from_ticker(ticker):
-    """根据股票代码识别市场"""
+suffix_map = {
+    '.SS': 'CN',  # 上海
+    '.SZ': 'CN',  # 深圳
+    '.HK': 'HK',  # 香港
+}
 
-    suffix_map = {
-        '.SS': 'CN',  # 上海
-        '.SZ': 'CN',  # 深圳
-        '.HK': 'HK',  # 香港
-    }
+# 纯数字检测（A股）
+if ticker[:2] in ['60', '68', '00', '30']:
+    return 'CN'
 
-    # 检查后缀
-    for suffix, market in suffix_map.items():
-        if ticker.endswith(suffix):
-            return market
-
-    # 检查纯数字（A股）
-    if ticker[:2] in ['60', '68', '00', '30']:
-        return 'CN'
-
-    return 'US'  # 默认美股
+return 'US'  # 默认美股
 ```
 
 ### 11.2 市场特定参数
@@ -668,7 +756,7 @@ def detect_market_from_ticker(ticker):
 | 流动性系数 | 1.0 | 0.6 | 0.5 |
 | 风险溢价 | 1.0 | 1.15 | 1.3 |
 | PE高风险阈值 | 40 | 35 | 50 |
-| 波动率调整 | 1.0 | 1.1 | 1.2 |
+| 增长折现系数 | 0.6 | 0.65 | 0.7 |
 
 ### 11.3 中国市场情绪因子
 
@@ -682,58 +770,81 @@ def detect_market_from_ticker(ticker):
 
 ---
 
-## 十二、关键算法总结
+## 十二、配置参数速查
 
-| 算法 | 输入 | 输出 | 核心逻辑 |
-|------|------|------|----------|
-| PE分位点 | 当前PE, 历史数据 | 0-100% | scipy.percentileofscore |
-| 动态ATR止损 | 价格, ATR, VIX, Beta | 止损价格 | ATR × 动态倍数 |
-| DCF估值 | FCF, 增长率, 风险 | 目标价格 | 5年预测 + 终值 |
-| EV模型 | 概率, 幅度 | -20% ~ +20% | 多时间加权 |
-| EV信心度 | 三维EV, 数据质量 | HIGH/MEDIUM/LOW | 多因子评分 |
-| 相关性检测 | 股票收益, 基准收益 | 相关系数, Beta | 60日滚动相关 |
-
----
-
-## 十三、设计亮点
-
-1. **G=B+M模型**：简洁直观的投资框架，基本面+情绪双维度
-2. **五种估值方法加权**：根据行业特点自动分配权重，避免单一方法偏差
-3. **VIX动态止损**：高波动环境自动扩大止损空间，避免被震出
-4. **PE历史分位点**：相对估值比绝对PE更有参考意义
-5. **EV信心度**：减少弱信号误导，提高决策质量
-6. **市场差异化**：美股、港股、A股使用不同参数，适应各市场特点
-7. **相关性风险检测**：识别与大盘高度相关的股票，提示分散化不足
-
----
-
-## 十四、配置参数速查
+### 12.1 ATR止损参数
 
 ```python
-# constants.py 关键配置
-
-# ATR止损
 ATR_PERIOD = 14
 ATR_MULTIPLIER_BASE = 2.5
 ATR_MULTIPLIER_MIN = 1.5
 ATR_MULTIPLIER_MAX = 4.0
+FIXED_STOP_LOSS_PCT = 0.15  # 15%硬止损
+```
 
-# Beta调整
-BETA_HIGH_THRESHOLD = 1.5
-BETA_LOW_THRESHOLD = 0.8
+### 12.2 Beta阈值
 
-# VIX阈值
+```python
+BETA_HIGH_THRESHOLD = 1.5      # 乘数 1.2
+BETA_MID_HIGH_THRESHOLD = 1.2  # 乘数 1.1
+BETA_MID_LOW_THRESHOLD = 1.0   # 乘数 0.9
+BETA_LOW_THRESHOLD = 0.8       # 乘数 0.8
+```
+
+### 12.3 VIX阈值
+
+```python
 VIX_HIGH = 30.0
 VIX_MEDIUM = 25.0
+VIX_RISING = 20.0
+```
 
-# PE分位点
-PE_HISTORY_WINDOW_YEARS = 5
-PE_MIN_DATA_POINTS = 20
+### 12.4 Put/Call阈值
 
-# 流动性
-MIN_DAILY_VOLUME_USD = 5_000_000
+```python
+PUT_CALL_HIGH = 1.5
+PUT_CALL_MEDIUM = 1.2
+```
+
+### 12.5 美债收益率阈值
+
+```python
+TREASURY_YIELD_VERY_HIGH = 5.0
+TREASURY_YIELD_HIGH = 4.5
+TREASURY_YIELD_BASE = 4.0
+```
+
+### 12.6 PE/PEG阈值
+
+```python
+PE_HIGH_THRESHOLD = 40
+PE_VERY_HIGH_THRESHOLD = 60
+PEG_HIGH_THRESHOLD = 2.0
+PEG_THRESHOLD_BASE = 1.5
+```
+
+### 12.7 估值参数
+
+```python
+GROWTH_DISCOUNT_FACTOR = 0.6   # 增长折现系数
+TECHNICAL_SENTIMENT_BOOST = 0.10
 ```
 
 ---
 
-*文档版本: 2026.01 | 最后更新: 2026-01-22*
+## 算法总结表
+
+| 算法 | 输入 | 输出 | 核心逻辑 |
+|------|------|------|----------|
+| 风险评分 | PE/PEG/VIX/技术指标 | 0-10分 | 累加制风险计分 |
+| 情绪评分 | PE/VIX/P-C/宏观 | 0-10分 | 多维度加权平均 |
+| PE分位点 | 当前PE/历史数据 | 0-100% | scipy.percentileofscore |
+| 动态ATR止损 | 价格/ATR/VIX/Beta | 止损价格 | ATR × 动态乘数 |
+| DCF估值 | FCF/增长率/风险 | 目标价格 | 5年预测 + 永续价值 |
+| EV模型 | 概率/幅度 | -20% ~ +20% | 多时间加权 |
+| EV信心度 | 三维EV/数据质量 | HIGH/MEDIUM/LOW | 多因子评分 |
+| 地缘政治风险 | 黄金/VIX/DXY/Oil | 0-10分 | 代理指标加权 |
+
+---
+
+*文档版本: 2026.01.28 | 最后更新: 2026-01-28*

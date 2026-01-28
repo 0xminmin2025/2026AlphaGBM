@@ -12,12 +12,12 @@ cryptography==43.0.0
 flask-mail==0.10.0
 yfinance==0.2.63
 defeatbeta-api==0.0.33
-pandas==2.2.0
-numpy==1.26.4
+pandas==2.2.3
+numpy>=1.26.4
 google-generativeai==0.8.5
 python-dotenv==1.2.1
 python-dateutil==2.9.0
-requests==2.31.0
+requests==2.32.3
 akshare==1.17.26
 alpha_vantage==3.0.0
 apscheduler==3.11.2
