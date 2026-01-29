@@ -1,11 +1,14 @@
 from flask import Blueprint, request, jsonify, g
 from ..services import analysis_engine, ev_model, ai_service
 from ..services.task_queue import create_analysis_task, get_task_status
+from ..services.sector_rotation_service import get_sector_rotation_service
+from ..services.capital_structure_service import get_capital_structure_service
 from ..utils.auth import require_auth, get_user_id
 from ..utils.decorators import check_quota, db_retry
 from ..utils.serialization import convert_numpy_types
 from ..models import db, ServiceType, StockAnalysisHistory, TaskType, TaskStatus, AnalysisTask, DailyAnalysisCache
 from ..services.data_provider import DataProvider
+from ..constants import detect_market_from_ticker
 import yfinance as yf
 import logging
 import json
@@ -291,17 +294,84 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
             market_data['stop_loss_price'] = stop_loss_price
             market_data['stop_loss_method'] = '固定15%止损（计算失败）'
 
-        # 4.6 Calculate EV Model (Matching original)
+        # 4.6 板块轮动分析 (Sector Rotation Analysis)
+        sector_analysis = None
         try:
+            # 获取市场类型
+            market = detect_market_from_ticker(ticker)
+            sector = market_data.get('sector', 'Technology')
+            industry = market_data.get('industry')
+
+            sector_service = get_sector_rotation_service()
+            sector_analysis = sector_service.analyze_stock_sector(
+                ticker=ticker,
+                sector=sector,
+                industry=industry,
+                stock_data=market_data,
+                market=market
+            )
+            market_data['sector_analysis'] = sector_analysis
+            logger.info(f"板块分析完成: {ticker}, 板块={sector_analysis.get('sector')}, 强度={sector_analysis.get('sector_strength')}, 溢价={sector_analysis.get('sector_rotation_premium', 0):.2%}")
+        except Exception as e:
+            logger.warning(f"板块分析时发生异常: {e}")
+            sector_analysis = None
+            market_data['sector_analysis'] = {
+                'sector': market_data.get('sector', 'Unknown'),
+                'alignment_score': 50,
+                'is_sector_leader': False,
+                'sector_rotation_premium': 0.0,
+                'error': str(e)
+            }
+
+        # 4.7 资金结构分析 (Capital Structure Analysis)
+        capital_analysis = None
+        try:
+            # 获取历史数据用于资金分析
+            normalized_ticker = analysis_engine.normalize_ticker(ticker)
+            capital_hist = DataProvider(normalized_ticker).history(period="3mo", timeout=10)
+
+            capital_service = get_capital_structure_service()
+            capital_analysis = capital_service.analyze_stock_capital(
+                ticker=ticker,
+                hist_data=capital_hist,
+                market_data=market_data
+            )
+            market_data['capital_analysis'] = capital_analysis
+            logger.info(f"资金分析完成: {ticker}, 集中度={capital_analysis.get('concentration_score')}, 阶段={capital_analysis.get('propagation_stage')}, 因子={capital_analysis.get('capital_factor', 0):.2%}")
+        except Exception as e:
+            logger.warning(f"资金分析时发生异常: {e}")
+            capital_analysis = None
+            market_data['capital_analysis'] = {
+                'concentration_score': 50,
+                'propagation_stage': 'neutral',
+                'capital_factor': 0.0,
+                'signals': [],
+                'error': str(e)
+            }
+
+        # 4.8 Calculate EV Model (基础版本 + 扩展版本)
+        try:
+            # 基础EV模型
             ev_result = ev_model.calculate_ev_model(market_data, risk_result, style)
-            market_data['ev_model'] = ev_result
-            logger.info(f"EV模型计算完成: {ticker}, 加权EV={ev_result.get('ev_weighted_pct', 0):.2f}%")
+
+            # 扩展EV模型（整合板块和资金因子）
+            ev_extended_result = ev_model.calculate_ev_model_extended(
+                market_data, risk_result, style,
+                sector_analysis=sector_analysis,
+                capital_analysis=capital_analysis
+            )
+
+            # 合并结果，扩展版本包含基础版本所有字段
+            market_data['ev_model'] = ev_extended_result
+            logger.info(f"EV模型计算完成: {ticker}, 基础EV={ev_extended_result.get('ev_base_pct', 0):.2f}%, 扩展EV={ev_extended_result.get('ev_extended_pct', 0):.2f}%")
         except Exception as e:
             logger.warning(f"计算EV模型时发生异常: {e}")
             market_data['ev_model'] = {
                 'error': str(e),
                 'ev_weighted': 0.0,
                 'ev_weighted_pct': 0.0,
+                'ev_extended': 0.0,
+                'ev_extended_pct': 0.0,
                 'ev_score': 5.0,
                 'recommendation': {
                     'action': 'HOLD',

@@ -78,11 +78,15 @@ htmlcov/
 
 # Database
 data/
+!backend/app/analysis/stock_analysis/data/
 *.db
 *.sqlite
 *.sqlite3
 
 defeatable-api/
+
+# Research data (cached OHLCV, results, snapshots)
+papers/data/
 
 # Frontend Exceptions
 !frontend/src/lib/

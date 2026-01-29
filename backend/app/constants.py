@@ -296,3 +296,83 @@ def adjust_parameter_for_market(base_value: float, market: str, param_type: str)
         return base_value * config.get('liquidity_coefficient', 1.0)
     else:
         return base_value
+
+
+# ==================== 板块轮动分析配置 ====================
+
+SECTOR_ROTATION_CONFIG = {
+    # 缓存配置
+    'cache_ttl': 300,              # 5分钟缓存（秒）
+
+    # 分析周期（天数）
+    'analysis_periods': [5, 20, 60],
+
+    # 轮动溢价范围
+    'rotation_premium_max': 0.10,  # 最大轮动溢价 +10%
+    'rotation_premium_min': -0.05, # 最小轮动溢价 -5%
+
+    # 龙头判断阈值
+    'leader_outperform_threshold': 0.05,  # 超额收益5%
+
+    # 强度评分权重
+    'weight_relative_strength': 0.40,     # 相对强度权重
+    'weight_momentum': 0.30,              # 动量趋势权重
+    'weight_volume': 0.20,                # 资金流入权重
+    'weight_rotation_stage': 0.10,        # 轮动位置权重
+
+    # 市场差异化参数
+    'market_adjustments': {
+        'US': {
+            'relative_strength_sensitivity': 1.0,
+            'volume_importance': 1.0,
+        },
+        'HK': {
+            'relative_strength_sensitivity': 1.1,   # 港股波动略大
+            'volume_importance': 0.9,               # 港股成交量参考性略低
+        },
+        'CN': {
+            'relative_strength_sensitivity': 1.2,   # A股波动更大
+            'volume_importance': 1.1,               # A股成交量参考性更高
+        },
+    },
+}
+
+# ==================== 资金结构分析配置 ====================
+
+CAPITAL_STRUCTURE_CONFIG = {
+    # 成交量集中度阈值
+    'volume_concentration_threshold': 1.5,    # 放量阈值（量比）
+
+    # 价量配合回看天数
+    'harmony_lookback': 20,
+
+    # 资金因子范围
+    'capital_factor_max': 0.05,     # 最大 +5%
+    'capital_factor_min': -0.03,    # 最小 -3%
+
+    # 评分权重
+    'weight_volume_concentration': 0.30,
+    'weight_price_volume_harmony': 0.30,
+    'weight_chip_concentration': 0.25,
+    'weight_turnover': 0.15,
+
+    # 情绪传导阶段因子
+    'propagation_stage_factors': {
+        'leader_start': 0.05,       # 龙头启动期
+        'early_spread': 0.03,       # 扩散初期
+        'full_spread': 0.01,        # 全面扩散
+        'high_divergence': -0.02,   # 高位分化
+        'retreat': -0.03,           # 退潮期
+        'neutral': 0.0,             # 中性期
+    },
+
+    # 持续性概率
+    'persistence_probability': {
+        'leader_start': 0.70,
+        'early_spread': 0.65,
+        'full_spread': 0.50,
+        'high_divergence': 0.40,
+        'retreat': 0.35,
+        'neutral': 0.50,
+    },
+}
