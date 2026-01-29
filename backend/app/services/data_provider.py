@@ -39,16 +39,30 @@ logger = logging.getLogger(__name__)
 
 
 def _is_rate_limit_error(e: Exception) -> bool:
-    """Check if an exception is a yfinance rate limit error."""
+    """Check if an exception is a yfinance rate limit error or related network issue."""
+    import json
     error_msg = str(e)
     error_type = type(e).__name__
-    return (
-        isinstance(e, YFRateLimitError) or
-        error_type == 'YFRateLimitError' or
-        'Too Many Requests' in error_msg or
-        'Rate limited' in error_msg or
-        '429' in error_msg
-    )
+
+    # Direct rate limit errors
+    if isinstance(e, YFRateLimitError) or error_type == 'YFRateLimitError':
+        return True
+
+    # JSONDecodeError often happens when yfinance gets rate limited (empty response)
+    if isinstance(e, json.JSONDecodeError) or error_type == 'JSONDecodeError':
+        return True
+
+    # String-based detection
+    rate_limit_indicators = [
+        'Too Many Requests',
+        'Rate limited',
+        '429',
+        'Expecting value: line 1 column 1',  # Empty JSON response
+        'Max retries exceeded',
+        'SSLError',
+        'Connection refused',
+    ]
+    return any(indicator in error_msg for indicator in rate_limit_indicators)
 
 
 def _is_index_or_macro_ticker(ticker: str) -> bool:

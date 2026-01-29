@@ -13,8 +13,23 @@ from datetime import datetime, date, timedelta
 from typing import Dict, Any, List, Optional
 import yfinance as yf
 import numpy as np
+import pandas as pd
 
 from ..models import db, DailyRecommendation
+
+# Import DataProvider for fallback support (price/info only, not options)
+try:
+    from .data_provider import DataProvider
+except ImportError:
+    DataProvider = None
+
+# Import Tiger client for options data fallback
+try:
+    from .tiger_client import get_client_manager
+    _tiger_client = get_client_manager()
+except ImportError:
+    _tiger_client = None
+
 from .option_scorer import OptionScorer
 from .option_models import OptionData
 
@@ -112,10 +127,11 @@ class RecommendationService:
                 return cached['data']
 
         try:
-            ticker = yf.Ticker(symbol)
+            # Use DataProvider if available for fallback support
+            ticker = DataProvider(symbol) if DataProvider else yf.Ticker(symbol)
             hist = ticker.history(period=f"{days + 2}d")  # 多取2天防止非交易日
 
-            if len(hist) < 2:
+            if hist is None or len(hist) < 2:
                 return {'trend': 'unknown', 'change_pct': 0, 'is_good_timing_for_put': False}
 
             first_close = float(hist['Close'].iloc[0])
@@ -284,43 +300,85 @@ class RecommendationService:
         - 获取标的质量评分
         - 获取价格趋势，用于时机加分
 
+        Data sources:
+        - Price/info: DataProvider (yfinance + defeatbeta fallback)
+        - Options: yfinance primary, Tiger API fallback
+
         Returns:
             该股票的期权推荐列表
         """
         try:
-            ticker = yf.Ticker(symbol)
+            # Use DataProvider for price/info (supports defeatbeta fallback)
+            data_ticker = DataProvider(symbol) if DataProvider else yf.Ticker(symbol)
 
-            # 获取股票当前价格
-            info = ticker.info
+            # 获取股票当前价格 (from DataProvider with fallback)
+            info = data_ticker.info
             current_price = info.get('regularMarketPrice') or info.get('currentPrice')
             if current_price:
-                current_price = float(current_price)  # Ensure it's a float
+                current_price = float(current_price)
             else:
-                hist = ticker.history(period="1d")
-                if not hist.empty:
+                hist = data_ticker.history(period="1d")
+                if hist is not None and not hist.empty:
                     current_price = float(hist['Close'].iloc[-1])
                 else:
                     return []
 
-            # 获取期权到期日
-            if not ticker.options:
-                return []
+            # ========== 获取期权数据 (yfinance primary, Tiger fallback) ==========
+            expiry_dates = None
+            use_tiger = False
 
-            # ========== 排除日权（新增）==========
-            # 用户实战经验：日权接股风险不可控，不在推荐列表中包含
-            today_str = date.today().isoformat()
-            tomorrow_str = (date.today() + timedelta(days=1)).isoformat()
+            # Try yfinance first
+            try:
+                yf_ticker = yf.Ticker(symbol)
+                if yf_ticker.options:
+                    expiry_dates = list(yf_ticker.options[:5])
+                    logger.debug(f"{symbol}: 使用 yfinance 获取期权到期日")
+            except Exception as e:
+                logger.warning(f"{symbol}: yfinance 期权数据失败: {e}")
 
-            # 跳过当天和明天到期的期权（日权）
-            expiry_dates = [
-                exp for exp in ticker.options[:5]
-                if exp > tomorrow_str  # 改为 > 明天，排除日权
-            ][:3]
+            # Fallback to Tiger API
+            if not expiry_dates and _tiger_client:
+                try:
+                    # Initialize Tiger client if needed
+                    if not _tiger_client.quote_client:
+                        _tiger_client.initialize_client()
+
+                    if _tiger_client.quote_client:
+                        tiger_expirations = _tiger_client.get_option_expirations(symbol)
+                        if tiger_expirations is not None and not tiger_expirations.empty:
+                            # Tiger returns DataFrame with 'expiry' column
+                            if 'expiry' in tiger_expirations.columns:
+                                expiry_dates = tiger_expirations['expiry'].tolist()[:5]
+                            elif 'date' in tiger_expirations.columns:
+                                expiry_dates = tiger_expirations['date'].tolist()[:5]
+                            else:
+                                # Try first column
+                                expiry_dates = tiger_expirations.iloc[:, 0].tolist()[:5]
+                            use_tiger = True
+                            logger.info(f"{symbol}: 使用 Tiger API 获取期权到期日")
+                except Exception as e:
+                    logger.warning(f"{symbol}: Tiger API 期权数据也失败: {e}")
 
             if not expiry_dates:
                 return []
 
-            # ========== 获取标的质量和价格趋势（新增）==========
+            # ========== 排除日权 ==========
+            today_str = date.today().isoformat()
+            tomorrow_str = (date.today() + timedelta(days=1)).isoformat()
+
+            # Convert expiry dates to string format if needed and filter
+            filtered_expiry_dates = []
+            for exp in expiry_dates:
+                exp_str = exp if isinstance(exp, str) else exp.strftime('%Y-%m-%d') if hasattr(exp, 'strftime') else str(exp)
+                if exp_str > tomorrow_str:
+                    filtered_expiry_dates.append(exp_str)
+
+            expiry_dates = filtered_expiry_dates[:3]
+
+            if not expiry_dates:
+                return []
+
+            # ========== 获取标的质量和价格趋势 ==========
             symbol_quality = self.get_symbol_quality_score(symbol)
             price_trend = self.get_price_trend(symbol)
 
@@ -328,22 +386,58 @@ class RecommendationService:
 
             for expiry in expiry_dates:
                 try:
-                    chain = ticker.option_chain(expiry)
+                    calls_df = None
+                    puts_df = None
+
+                    if use_tiger and _tiger_client and _tiger_client.quote_client:
+                        # Use Tiger API for option chain
+                        chain = _tiger_client.get_option_chain(symbol, expiry)
+                        if chain is not None and not chain.empty:
+                            # Tiger returns combined DataFrame, need to split by put_call
+                            if 'put_call' in chain.columns:
+                                calls_df = chain[chain['put_call'] == 'CALL'].copy()
+                                puts_df = chain[chain['put_call'] == 'PUT'].copy()
+                            elif 'right' in chain.columns:
+                                calls_df = chain[chain['right'] == 'CALL'].copy()
+                                puts_df = chain[chain['right'] == 'PUT'].copy()
+
+                            # Rename Tiger columns to match yfinance format
+                            tiger_to_yf_map = {
+                                'strike_price': 'strike',
+                                'latest_price': 'lastPrice',
+                                'bid_price': 'bid',
+                                'ask_price': 'ask',
+                                'open_interest': 'openInterest',
+                                'implied_volatility': 'impliedVolatility',
+                                'volatility': 'impliedVolatility',
+                            }
+                            for df in [calls_df, puts_df]:
+                                if df is not None:
+                                    for old_col, new_col in tiger_to_yf_map.items():
+                                        if old_col in df.columns and new_col not in df.columns:
+                                            df[new_col] = df[old_col]
+                    else:
+                        # Use yfinance
+                        try:
+                            chain = yf_ticker.option_chain(expiry)
+                            calls_df = chain.calls
+                            puts_df = chain.puts
+                        except Exception as e:
+                            logger.warning(f"yfinance option_chain 失败 {symbol} {expiry}: {e}")
+                            continue
 
                     # 分析看涨期权
-                    calls = chain.calls
-                    if not calls.empty:
+                    if calls_df is not None and not calls_df.empty:
                         call_recs = self._score_options(
-                            symbol, current_price, expiry, calls, 'CALL',
+                            symbol, current_price, expiry, calls_df, 'CALL',
                             symbol_quality, price_trend
                         )
                         recommendations.extend(call_recs)
 
                     # 分析看跌期权
-                    puts = chain.puts
-                    if not puts.empty:
+                    if puts_df is not None and not puts_df.empty:
                         put_recs = self._score_options(
-                            symbol, current_price, expiry, puts, 'PUT',
+                            symbol, current_price, expiry, puts_df, 'PUT',
                             symbol_quality, price_trend
                         )
                         recommendations.extend(put_recs)
@@ -391,6 +485,11 @@ class RecommendationService:
             price_trend = {'trend': 'unknown', 'change_pct': 0, 'is_good_timing_for_put': False}
 
         try:
+            # Ensure strike column is numeric (Tiger API may return strings)
+            if 'strike' in options_df.columns:
+                options_df = options_df.copy()
+                options_df['strike'] = pd.to_numeric(options_df['strike'], errors='coerce')
+
             # 筛选合适的期权（虚值或轻微实值）
             if option_type == 'CALL':
                 # Sell Call: 选择虚值期权（执行价 > 当前价）
