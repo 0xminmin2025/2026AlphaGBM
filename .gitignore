@@ -82,7 +82,7 @@ data/
 *.sqlite
 *.sqlite3
 
-defeatable-api/
+defeatbeta-api/
 
 # Frontend Exceptions
 !frontend/src/lib/
