@@ -11,6 +11,9 @@ import { useTaskPolling } from '@/hooks/useTaskPolling';
 import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
 import i18n from '@/lib/i18n';
+import { StockSectorCard } from '@/components/SectorRotation/StockSectorCard';
+import { ConcentrationGauge } from '@/components/CapitalStructure/ConcentrationGauge';
+import { PropagationStage } from '@/components/CapitalStructure/PropagationStage';
 
 // Declare global types for Chart.js and marked
 declare global {
@@ -1127,6 +1130,39 @@ export default function Home() {
                                             )}
                                         </ul>
                                     </div>
+
+                                    {/* Sector Analysis Card */}
+                                    {d.sector_analysis && (
+                                        <StockSectorCard
+                                            sectorAnalysis={d.sector_analysis}
+                                            stockTicker={d.symbol}
+                                        />
+                                    )}
+
+                                    {/* Capital Structure Card */}
+                                    {d.capital_analysis && (
+                                        <div className="card shadow-md" style={{ padding: '1.5rem' }}>
+                                            <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                                                <i className="bi bi-cash-stack"></i>
+                                                {t('capital.title', '资金结构分析')}
+                                            </h5>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="flex flex-col items-center">
+                                                    <p className="text-sm text-gray-400 mb-2">{t('capital.concentration', '资金集中度')}</p>
+                                                    <ConcentrationGauge
+                                                        score={d.capital_analysis.concentration_score || 50}
+                                                        size="md"
+                                                    />
+                                                </div>
+                                                <PropagationStage
+                                                    stage={d.capital_analysis.propagation_stage || 'neutral'}
+                                                    stageInfo={d.capital_analysis.stage_info}
+                                                    signals={d.capital_analysis.signals || []}
+                                                    showDetails={true}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Right Column: AI Report */}
