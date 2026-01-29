@@ -47,7 +47,10 @@ def _is_rate_limit_error(e: Exception) -> bool:
         error_type == 'YFRateLimitError' or
         'Too Many Requests' in error_msg or
         'Rate limited' in error_msg or
-        '429' in error_msg
+        '429' in error_msg or
+        'Expecting value: line 1 column 1' in error_msg or  # Empty JSON response from rate limit
+        'JSONDecodeError' in error_type or
+        'No price data found' in error_msg  # yfinance returns this when rate limited
     )
 
 
@@ -111,14 +114,20 @@ class DataProvider:
         if not self._yf_failed:
             try:
                 result = self._get_yf().info
-                if result and len(result) >= 5:
+                # Check if result is valid (yfinance returns empty/minimal dict on rate limit)
+                if result and len(result) >= 5 and result.get('regularMarketPrice') is not None:
                     return result
+                # If result is empty or missing key fields, treat as rate limit
+                logger.warning(f"[DataProvider] yfinance returned empty/invalid info for {self.ticker}, falling back to defeatbeta")
+                self._yf_failed = True
             except Exception as e:
                 if _is_rate_limit_error(e):
                     logger.warning(f"[DataProvider] yfinance rate limited for {self.ticker}.info, falling back to defeatbeta")
                     self._yf_failed = True
                 else:
-                    raise
+                    # For any other exception, also try defeatbeta fallback
+                    logger.warning(f"[DataProvider] yfinance error for {self.ticker}.info ({e}), falling back to defeatbeta")
+                    self._yf_failed = True
 
         # Fallback to defeatbeta
         if _is_index_or_macro_ticker(self.ticker):
@@ -322,7 +331,7 @@ class DataProvider:
     def history(self, period=None, start=None, end=None, timeout=30) -> pd.DataFrame:
         """
         Returns OHLCV DataFrame in yfinance format.
-        Falls back to defeatbeta on rate limit.
+        Falls back to defeatbeta on rate limit or empty results.
         """
         if not self._yf_failed:
             try:
@@ -337,12 +346,17 @@ class DataProvider:
                 result = self._get_yf().history(**kwargs)
                 if result is not None and not result.empty:
                     return result
+                # yfinance returned empty - treat as rate limit
+                logger.warning(f"[DataProvider] yfinance returned empty history for {self.ticker}, falling back to defeatbeta")
+                self._yf_failed = True
             except Exception as e:
                 if _is_rate_limit_error(e):
                     logger.warning(f"[DataProvider] yfinance rate limited for {self.ticker}.history(), falling back to defeatbeta")
                     self._yf_failed = True
                 else:
-                    raise
+                    # For any other exception, also try defeatbeta fallback
+                    logger.warning(f"[DataProvider] yfinance error for {self.ticker}.history() ({e}), falling back to defeatbeta")
+                    self._yf_failed = True
 
         # Fallback to defeatbeta
         if _is_index_or_macro_ticker(self.ticker):
