@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaGBM Formula Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <h1 class="text-xl font-bold text-blue-400">AlphaGBM Formula Tester</h1>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="symbolInput" placeholder="Enter Symbol"
+                               class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm w-32 focus:outline-none focus:border-blue-500">
+                        <button onclick="fetchSymbolData()"
+                                class="bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded text-sm font-medium">
+                            Fetch Data
+                        </button>
+                    </div>
+                    <span id="statusIndicator" class="text-xs text-gray-400">Ready</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-gray-800 border-b border-gray-700">
+        <div class="container mx-auto px-4">
+            <div class="flex gap-1">
+                <button onclick="showSection('stock')" id="tab-stock"
+                        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-blue-400">
+                    Stock Analysis
+                </button>
+                <button onclick="showSection('options')" id="tab-options"
+                        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-gray-200">
+                    Options Scoring
+                </button>
+                <button onclick="showSection('technical')" id="tab-technical"
+                        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-gray-200">
+                    Technical Indicators
+                </button>
+                <button onclick="showSection('rawdata')" id="tab-rawdata"
+                        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-gray-200">
+                    Raw Data
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- Stock Analysis Section -->
+        <section id="section-stock" class="section">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Risk Score Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Risk Score Calculator</h3>
+                        <button onclick="toggleFormula('risk-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="risk-formula" class="formula-box hidden">
+                        <pre>
+Risk Score = Volatility Risk (0-25) + Valuation Risk (0-20)
+           + Financial Risk (0-15) + Market Cap Risk (0-10)
+           + Risk Premium Adjustment
+
+Risk Level:
+- >= 60: High (Position Size: 2%)
+- >= 35: Medium (Position Size: 3%)
+- < 35: Low (Position Size: 5%)
+
+Risk Adjustment Factor = max(1 - (score/100) * 0.5, 0.5)</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="input-group">
+                                <label>Volatility (Annual %)</label>
+                                <input type="number" id="risk-volatility" value="30" step="1" min="0" max="200" class="input-field">
+                                <input type="range" id="risk-volatility-slider" value="30" min="0" max="200" class="slider"
+                                       oninput="syncInput('risk-volatility', this.value)">
+                            </div>
+                            <div class="input-group">
+                                <label>PE Ratio</label>
+                                <input type="number" id="risk-pe" value="25" step="0.1" min="0" max="100" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Debt to Equity %</label>
+                                <input type="number" id="risk-de" value="50" step="1" min="0" max="500" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Market Cap ($B)</label>
+                                <input type="number" id="risk-mcap" value="10" step="0.1" min="0" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Risk Premium</label>
+                                <input type="number" id="risk-premium" value="1.0" step="0.1" min="0" max="3" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Sector</label>
+                                <select id="risk-sector" class="input-field">
+                                    <option value="general">General</option>
+                                    <option value="Technology">Technology</option>
+                                    <option value="Healthcare">Healthcare</option>
+                                    <option value="Finance">Finance</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="calculateRiskScore()" class="btn-primary mt-4">Calculate</button>
+                        <div id="risk-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- Target Price Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Target Price Calculator</h3>
+                        <button onclick="toggleFormula('target-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="target-formula" class="formula-box hidden">
+                        <pre>
+Methods:
+1. PE Multiple: EPS × Reasonable PE
+2. PEG Valuation: EPS × (Growth × 100 × PEG)
+3. Price-to-Book: Book Value × Reasonable PB
+4. Revenue Growth: Price × (1 + Growth)
+
+Final = Average(all methods) × Risk Adjustment Factor
+Risk Adjustment = max(1 - (risk_score/100) × 0.5, 0.5)</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="input-group">
+                                <label>Current Price</label>
+                                <input type="number" id="target-price" value="100" step="0.01" min="0" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>PE Ratio</label>
+                                <input type="number" id="target-pe" value="20" step="0.1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>PEG Ratio</label>
+                                <input type="number" id="target-peg" value="1.5" step="0.1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Book Value</label>
+                                <input type="number" id="target-book" value="50" step="0.1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Revenue Growth %</label>
+                                <input type="number" id="target-rev-growth" value="15" step="1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Earnings Growth %</label>
+                                <input type="number" id="target-earn-growth" value="20" step="1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Risk Score</label>
+                                <input type="number" id="target-risk" value="40" step="1" min="0" max="100" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Style</label>
+                                <select id="target-style" class="input-field">
+                                    <option value="balanced">Balanced</option>
+                                    <option value="growth">Growth</option>
+                                    <option value="value">Value</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="calculateTargetPrice()" class="btn-primary mt-4">Calculate</button>
+                        <div id="target-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- Market Sentiment Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Market Sentiment Calculator</h3>
+                        <button onclick="toggleFormula('sentiment-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="sentiment-formula" class="formula-box hidden">
+                        <pre>
+Components:
+- Price Momentum: (Last - First) / First × 100, capped ±50
+- Volume Trend: (Vol5d / Vol20d - 1) × 50, capped ±25
+- Volatility: -min(annual_vol × 100, 30)
+- Technical: (pos_vs_MA20 + pos_vs_MA50) × 25, capped ±25
+
+Total Score: -100 to +100
+>30: Bullish, >10: Slightly Bullish
+<-30: Bearish, <-10: Slightly Bearish</pre>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-sm text-gray-400 mb-4">Uses historical price/volume data. Fetch a symbol first or calculation uses sample data.</p>
+                        <button onclick="calculateSentiment()" class="btn-primary">Calculate Sentiment</button>
+                        <div id="sentiment-result" class="result-box mt-4"></div>
+                        <canvas id="sentiment-chart" class="mt-4 hidden"></canvas>
+                    </div>
+                </div>
+
+                <!-- Style Scores -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Style Scores (Growth / Value / Quality)</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="input-group">
+                                <label>Revenue Growth %</label>
+                                <input type="number" id="style-rev" value="20" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Earnings Growth %</label>
+                                <input type="number" id="style-earn" value="25" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>PEG Ratio</label>
+                                <input type="number" id="style-peg" value="1.2" step="0.1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>PE Ratio</label>
+                                <input type="number" id="style-pe" value="18" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>PB Ratio</label>
+                                <input type="number" id="style-pb" value="2.5" step="0.1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Dividend Yield %</label>
+                                <input type="number" id="style-div" value="2" step="0.1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ROE %</label>
+                                <input type="number" id="style-roe" value="18" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Gross Margin %</label>
+                                <input type="number" id="style-margin" value="40" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Debt/Equity %</label>
+                                <input type="number" id="style-de" value="45" class="input-field">
+                            </div>
+                        </div>
+                        <button onclick="calculateStyleScores()" class="btn-primary">Calculate All Scores</button>
+                        <div id="style-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Options Scoring Section -->
+        <section id="section-options" class="section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- VRP Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">VRP (Volatility Risk Premium)</h3>
+                        <button onclick="toggleFormula('vrp-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="vrp-formula" class="formula-box hidden">
+                        <pre>
+VRP Absolute = IV - HV
+VRP Relative = (IV - HV) / HV × 100%
+
+VRP Level Thresholds:
+- Very High: >= 15% (favor sellers)
+- High: >= 5%
+- Normal: -5% to 5%
+- Low: <= -5%
+- Very Low: <= -15% (favor buyers)</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="input-group">
+                                <label>Implied Volatility %</label>
+                                <input type="number" id="vrp-iv" value="30" step="1" min="1" max="200" class="input-field">
+                                <input type="range" id="vrp-iv-slider" value="30" min="1" max="100" class="slider"
+                                       oninput="syncInput('vrp-iv', this.value)">
+                            </div>
+                            <div class="input-group">
+                                <label>Historical Volatility %</label>
+                                <input type="number" id="vrp-hv" value="25" step="1" min="1" max="200" class="input-field">
+                                <input type="range" id="vrp-hv-slider" value="25" min="1" max="100" class="slider"
+                                       oninput="syncInput('vrp-hv', this.value)">
+                            </div>
+                            <div class="input-group col-span-2">
+                                <label>ATM Implied Volatility % (optional)</label>
+                                <input type="number" id="vrp-atm" value="28" step="1" class="input-field">
+                            </div>
+                        </div>
+                        <button onclick="calculateVRP()" class="btn-primary mt-4">Calculate</button>
+                        <div id="vrp-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- Trend Alignment -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Trend Alignment Score</h3>
+                        <button onclick="toggleFormula('trend-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="trend-formula" class="formula-box hidden">
+                        <pre>
+Base Score Matrix:
+             Uptrend  Sideways  Downtrend
+Sell Call:    100       60         30
+Sell Put:      30       60        100
+Buy Call:     100       50         20
+Buy Put:       20       50        100
+
+Adjustment:
+- Matching trend: score × (1 + strength × 0.2)
+- Non-matching:   score × (1 - strength × 0.3)</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="input-group">
+                                <label>Strategy</label>
+                                <select id="trend-strategy" class="input-field">
+                                    <option value="sell_put">Sell Put</option>
+                                    <option value="sell_call">Sell Call</option>
+                                    <option value="buy_call">Buy Call</option>
+                                    <option value="buy_put">Buy Put</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Current Trend</label>
+                                <select id="trend-direction" class="input-field">
+                                    <option value="uptrend">Uptrend</option>
+                                    <option value="sideways">Sideways</option>
+                                    <option value="downtrend">Downtrend</option>
+                                </select>
+                            </div>
+                            <div class="input-group col-span-2">
+                                <label>Trend Strength: <span id="trend-strength-val">0.5</span></label>
+                                <input type="range" id="trend-strength" value="0.5" min="0" max="1" step="0.1" class="slider"
+                                       oninput="document.getElementById('trend-strength-val').textContent = this.value">
+                            </div>
+                        </div>
+                        <button onclick="calculateTrendAlignment()" class="btn-primary mt-4">Calculate</button>
+                        <div id="trend-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- Sell Put Score -->
+                <div class="card lg:col-span-2">
+                    <div class="card-header">
+                        <h3 class="card-title">Sell Put Score Calculator</h3>
+                        <button onclick="toggleFormula('sellput-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="sellput-formula" class="formula-box hidden">
+                        <pre>
+Weights: premium_yield(20%) + support_strength(20%) + safety_margin(15%)
+       + trend_alignment(15%) + probability_profit(15%) + liquidity(10%) + time_decay(5%)
+
+Premium Yield = (TimeValue / Strike) × (365 / DaysToExpiry) × 100
+Safety Margin = (CurrentPrice - Strike) / CurrentPrice × 100
+ATR Safety = ActualBuffer / (ATR × 2.0) >= 1.0 is safe</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="input-group">
+                                <label>Current Price</label>
+                                <input type="number" id="sp-price" value="100" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Strike Price</label>
+                                <input type="number" id="sp-strike" value="95" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Bid</label>
+                                <input type="number" id="sp-bid" value="2.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Ask</label>
+                                <input type="number" id="sp-ask" value="2.70" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Days to Expiry</label>
+                                <input type="number" id="sp-dte" value="30" min="1" max="365" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>IV %</label>
+                                <input type="number" id="sp-iv" value="30" step="1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Volume</label>
+                                <input type="number" id="sp-volume" value="500" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Open Interest</label>
+                                <input type="number" id="sp-oi" value="2000" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ATR (14)</label>
+                                <input type="number" id="sp-atr" value="3.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Support 1</label>
+                                <input type="number" id="sp-s1" value="94" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Support 2</label>
+                                <input type="number" id="sp-s2" value="90" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>MA 50</label>
+                                <input type="number" id="sp-ma50" value="98" step="0.5" class="input-field">
+                            </div>
+                        </div>
+                        <div class="flex gap-4 mt-4">
+                            <button onclick="calculateSellPutScore()" class="btn-primary">Calculate Score</button>
+                            <button onclick="populateSellPutFromData()" class="btn-secondary">Use Fetched Data</button>
+                        </div>
+                        <div id="sellput-result" class="result-box mt-4"></div>
+                        <canvas id="sellput-chart" class="mt-4 hidden" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Sell Call Score -->
+                <div class="card lg:col-span-2">
+                    <div class="card-header">
+                        <h3 class="card-title">Sell Call Score Calculator</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="input-group">
+                                <label>Current Price</label>
+                                <input type="number" id="sc-price" value="100" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Strike Price</label>
+                                <input type="number" id="sc-strike" value="105" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Bid</label>
+                                <input type="number" id="sc-bid" value="2.00" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Ask</label>
+                                <input type="number" id="sc-ask" value="2.20" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Days to Expiry</label>
+                                <input type="number" id="sc-dte" value="30" min="1" max="365" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>IV %</label>
+                                <input type="number" id="sc-iv" value="28" step="1" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Volume</label>
+                                <input type="number" id="sc-volume" value="400" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Open Interest</label>
+                                <input type="number" id="sc-oi" value="1500" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ATR (14)</label>
+                                <input type="number" id="sc-atr" value="3.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Resistance 1</label>
+                                <input type="number" id="sc-r1" value="106" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>52W High</label>
+                                <input type="number" id="sc-high52" value="110" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" id="sc-covered" class="w-4 h-4">
+                                    Covered Call
+                                </label>
+                            </div>
+                        </div>
+                        <button onclick="calculateSellCallScore()" class="btn-primary mt-4">Calculate Score</button>
+                        <div id="sellcall-result" class="result-box mt-4"></div>
+                        <canvas id="sellcall-chart" class="mt-4 hidden" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Risk Return Profile -->
+                <div class="card lg:col-span-2">
+                    <div class="card-header">
+                        <h3 class="card-title">Risk-Return Profile Calculator</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="input-group">
+                                <label>Strategy</label>
+                                <select id="rrp-strategy" class="input-field">
+                                    <option value="sell_put">Sell Put</option>
+                                    <option value="sell_call">Sell Call</option>
+                                    <option value="buy_call">Buy Call</option>
+                                    <option value="buy_put">Buy Put</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Current Price</label>
+                                <input type="number" id="rrp-price" value="100" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Strike</label>
+                                <input type="number" id="rrp-strike" value="95" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Premium</label>
+                                <input type="number" id="rrp-premium" value="2.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Days to Expiry</label>
+                                <input type="number" id="rrp-dte" value="30" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>IV %</label>
+                                <input type="number" id="rrp-iv" value="30" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>VRP Level</label>
+                                <select id="rrp-vrp" class="input-field">
+                                    <option value="very_high">Very High</option>
+                                    <option value="high">High</option>
+                                    <option value="normal" selected>Normal</option>
+                                    <option value="low">Low</option>
+                                    <option value="very_low">Very Low</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="calculateRiskReturnProfile()" class="btn-primary mt-4">Calculate Profile</button>
+                        <div id="rrp-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Technical Indicators Section -->
+        <section id="section-technical" class="section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- ATR Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">ATR Calculator</h3>
+                        <button onclick="toggleFormula('atr-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="atr-formula" class="formula-box hidden">
+                        <pre>
+True Range = max(
+    High - Low,
+    |High - Previous Close|,
+    |Low - Previous Close|
+)
+
+ATR = Simple Moving Average of TR over N periods</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <label>Period: <span id="atr-period-val">14</span></label>
+                            <input type="range" id="atr-period" value="14" min="5" max="30" class="slider"
+                                   oninput="document.getElementById('atr-period-val').textContent = this.value">
+                        </div>
+                        <p class="text-sm text-gray-400 mt-2">Uses fetched historical data for the symbol.</p>
+                        <button onclick="calculateATR()" class="btn-primary mt-4">Calculate ATR</button>
+                        <div id="atr-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- ATR Stop Loss -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">ATR Stop Loss Calculator</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="input-group">
+                                <label>Buy Price</label>
+                                <input type="number" id="sl-price" value="100" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ATR</label>
+                                <input type="number" id="sl-atr" value="3.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ATR Multiplier: <span id="sl-mult-val">2.5</span></label>
+                                <input type="range" id="sl-mult" value="2.5" min="1.5" max="4" step="0.1" class="slider"
+                                       oninput="document.getElementById('sl-mult-val').textContent = this.value">
+                            </div>
+                            <div class="input-group">
+                                <label>Min Stop Loss %</label>
+                                <input type="number" id="sl-min" value="15" step="1" class="input-field">
+                            </div>
+                            <div class="input-group col-span-2">
+                                <label>Beta (optional)</label>
+                                <input type="number" id="sl-beta" value="" step="0.1" placeholder="e.g., 1.2" class="input-field">
+                            </div>
+                        </div>
+                        <button onclick="calculateStopLoss()" class="btn-primary mt-4">Calculate Stop Loss</button>
+                        <div id="sl-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- RSI Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">RSI Calculator</h3>
+                        <button onclick="toggleFormula('rsi-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="rsi-formula" class="formula-box hidden">
+                        <pre>
+RSI = 100 - (100 / (1 + RS))
+RS = Average Gain / Average Loss
+
+Signals:
+- >= 70: Overbought
+- <= 30: Oversold
+- 30-70: Neutral</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <label>Period: <span id="rsi-period-val">14</span></label>
+                            <input type="range" id="rsi-period" value="14" min="5" max="30" class="slider"
+                                   oninput="document.getElementById('rsi-period-val').textContent = this.value">
+                        </div>
+                        <button onclick="calculateRSI()" class="btn-primary mt-4">Calculate RSI</button>
+                        <div id="rsi-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- Liquidity Score -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Liquidity Score Calculator</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="input-group">
+                                <label>Volume</label>
+                                <input type="number" id="liq-volume" value="500" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Open Interest</label>
+                                <input type="number" id="liq-oi" value="2000" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Bid</label>
+                                <input type="number" id="liq-bid" value="2.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Ask</label>
+                                <input type="number" id="liq-ask" value="2.70" step="0.01" class="input-field">
+                            </div>
+                        </div>
+                        <button onclick="calculateLiquidity()" class="btn-primary mt-4">Calculate</button>
+                        <div id="liq-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+
+                <!-- ATR Safety Margin -->
+                <div class="card lg:col-span-2">
+                    <div class="card-header">
+                        <h3 class="card-title">ATR Safety Margin Calculator</h3>
+                        <button onclick="toggleFormula('atrsafety-formula')" class="text-xs text-gray-400 hover:text-gray-200">Show Formula</button>
+                    </div>
+                    <div id="atrsafety-formula" class="formula-box hidden">
+                        <pre>
+Required Buffer = ATR × Ratio (default 2.0)
+Actual Buffer = |Current Price - Strike|
+Safety Ratio = Actual Buffer / Required Buffer
+
+Is Safe: Safety Ratio >= 1.0
+ATR Multiples = Actual Buffer / ATR</pre>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="input-group">
+                                <label>Current Price</label>
+                                <input type="number" id="atrs-price" value="100" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>Strike Price</label>
+                                <input type="number" id="atrs-strike" value="95" step="0.5" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ATR</label>
+                                <input type="number" id="atrs-atr" value="3.50" step="0.01" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label>ATR Ratio: <span id="atrs-ratio-val">2.0</span></label>
+                                <input type="range" id="atrs-ratio" value="2.0" min="1.0" max="4.0" step="0.1" class="slider"
+                                       oninput="document.getElementById('atrs-ratio-val').textContent = this.value">
+                            </div>
+                        </div>
+                        <button onclick="calculateATRSafety()" class="btn-primary mt-4">Calculate Safety</button>
+                        <div id="atrs-result" class="result-box mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Raw Data Section -->
+        <section id="section-rawdata" class="section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Stock Data -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Stock Data</h3>
+                    </div>
+                    <div class="card-body">
+                        <pre id="stock-raw-data" class="bg-gray-800 p-4 rounded text-xs overflow-auto max-h-96">
+Fetch a symbol to see stock data...</pre>
+                    </div>
+                </div>
+
+                <!-- Options Data -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Options Data</h3>
+                    </div>
+                    <div class="card-body">
+                        <pre id="options-raw-data" class="bg-gray-800 p-4 rounded text-xs overflow-auto max-h-96">
+Fetch a symbol to see options data...</pre>
+                    </div>
+                </div>
+
+                <!-- Price Chart -->
+                <div class="card lg:col-span-2">
+                    <div class="card-header">
+                        <h3 class="card-title">Price History</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="price-chart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-gray-700 py-4 mt-8">
+        <div class="container mx-auto px-4 text-center text-sm text-gray-400">
+            AlphaGBM Formula Tester - Testing tool for stock and options analysis formulas
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
