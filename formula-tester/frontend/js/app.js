@@ -11,6 +11,196 @@ let currentSymbol = '';
 let stockData = null;
 let optionsData = null;
 let priceChart = null;
+let useMockMode = false;
+
+// ============================================
+// Mock Data for Testing Without Backend
+// ============================================
+
+const MOCK_STOCK_DATA = {
+    success: true,
+    symbol: 'MOCK',
+    fetched_at: new Date().toISOString(),
+    data_source: 'mock',
+    price_data: {
+        current_price: 150.25,
+        prev_close: 148.50,
+        change: 1.75,
+        change_percent: 1.18,
+        high_52w: 180.50,
+        low_52w: 120.30,
+        volume: 45000000,
+        avg_volume_20d: 52000000
+    },
+    technical_levels: {
+        resistance_1: 155.00,
+        resistance_2: 162.50,
+        support_1: 145.00,
+        support_2: 138.50,
+        ma_5: 149.80,
+        ma_20: 147.50,
+        ma_50: 145.20,
+        ma_200: 140.00
+    },
+    volatility: {
+        daily_volatility: 1.85,
+        annualized_volatility: 29.35,
+        beta: 1.15
+    },
+    fundamentals: {
+        pe_ratio: 28.5,
+        forward_pe: 24.2,
+        peg_ratio: 1.8,
+        pb_ratio: 8.5,
+        dividend_yield: 0.65,
+        market_cap: 2500000000000,
+        debt_to_equity: 45.2,
+        roe: 35.5,
+        gross_margin: 42.8,
+        revenue_growth: 12.5,
+        earnings_growth: 18.3
+    },
+    history: {
+        dates: generateMockDates(60),
+        open: generateMockPrices(60, 145, 155),
+        high: generateMockPrices(60, 148, 158),
+        low: generateMockPrices(60, 142, 152),
+        close: generateMockPrices(60, 145, 155),
+        volume: generateMockVolumes(60)
+    }
+};
+
+const MOCK_OPTIONS_DATA = {
+    success: true,
+    symbol: 'MOCK',
+    fetched_at: new Date().toISOString(),
+    current_price: 150.25,
+    expiration: generateFutureDate(30),
+    days_to_expiry: 30,
+    available_expirations: [
+        generateFutureDate(7),
+        generateFutureDate(14),
+        generateFutureDate(21),
+        generateFutureDate(30),
+        generateFutureDate(45),
+        generateFutureDate(60)
+    ],
+    weighted_iv: 32.5,
+    atm_iv: 30.8,
+    calls: generateMockOptions('call', 150.25, 10),
+    puts: generateMockOptions('put', 150.25, 10),
+    summary: {
+        total_calls: 10,
+        total_puts: 10,
+        call_volume: 15000,
+        put_volume: 12000,
+        call_oi: 85000,
+        put_oi: 72000
+    }
+};
+
+// Mock data helper functions
+function generateMockDates(count) {
+    const dates = [];
+    const today = new Date();
+    for (let i = count - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        // Skip weekends
+        if (date.getDay() === 0) date.setDate(date.getDate() - 2);
+        if (date.getDay() === 6) date.setDate(date.getDate() - 1);
+        dates.push(date.toISOString().split('T')[0]);
+    }
+    return dates;
+}
+
+function generateMockPrices(count, min, max) {
+    const prices = [];
+    let price = (min + max) / 2;
+    for (let i = 0; i < count; i++) {
+        price += (Math.random() - 0.5) * 3;
+        price = Math.max(min, Math.min(max, price));
+        prices.push(parseFloat(price.toFixed(2)));
+    }
+    return prices;
+}
+
+function generateMockVolumes(count) {
+    const volumes = [];
+    for (let i = 0; i < count; i++) {
+        volumes.push(Math.floor(30000000 + Math.random() * 40000000));
+    }
+    return volumes;
+}
+
+function generateFutureDate(days) {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0];
+}
+
+function generateMockOptions(type, currentPrice, count) {
+    const options = [];
+    const baseStrike = Math.round(currentPrice / 5) * 5;
+
+    for (let i = -count/2; i < count/2; i++) {
+        const strike = baseStrike + (i * 5);
+        const isITM = type === 'call' ? strike < currentPrice : strike > currentPrice;
+        const distanceFromATM = Math.abs(strike - currentPrice) / currentPrice;
+        const baseIV = 28 + distanceFromATM * 50;
+        const premium = type === 'call'
+            ? Math.max(0.1, currentPrice - strike + (baseIV / 100) * currentPrice * 0.1)
+            : Math.max(0.1, strike - currentPrice + (baseIV / 100) * currentPrice * 0.1);
+
+        options.push({
+            strike: strike,
+            bid: parseFloat((premium * 0.98).toFixed(2)),
+            ask: parseFloat((premium * 1.02).toFixed(2)),
+            last: parseFloat(premium.toFixed(2)),
+            volume: Math.floor(100 + Math.random() * 2000),
+            open_interest: Math.floor(500 + Math.random() * 10000),
+            implied_volatility: parseFloat(baseIV.toFixed(2)),
+            delta: type === 'call'
+                ? parseFloat((0.5 + (currentPrice - strike) / currentPrice).toFixed(2))
+                : parseFloat((-0.5 + (currentPrice - strike) / currentPrice).toFixed(2)),
+            gamma: parseFloat((0.01 + Math.random() * 0.05).toFixed(4)),
+            theta: parseFloat((-0.05 - Math.random() * 0.1).toFixed(4)),
+            vega: parseFloat((0.1 + Math.random() * 0.2).toFixed(4)),
+            in_the_money: isITM
+        });
+    }
+    return options;
+}
+
+function loadMockData() {
+    const symbolInput = document.getElementById('symbolInput');
+    const symbol = symbolInput.value.trim().toUpperCase() || 'MOCK';
+
+    currentSymbol = symbol;
+    useMockMode = true;
+
+    // Clone mock data and update symbol
+    stockData = JSON.parse(JSON.stringify(MOCK_STOCK_DATA));
+    stockData.symbol = symbol;
+    stockData.fetched_at = new Date().toISOString();
+
+    optionsData = JSON.parse(JSON.stringify(MOCK_OPTIONS_DATA));
+    optionsData.symbol = symbol;
+    optionsData.fetched_at = new Date().toISOString();
+
+    // Update UI
+    populateStockInputs();
+    populateOptionsInputs();
+    updateRawDataDisplay('stock');
+    updateRawDataDisplay('options');
+    renderPriceChart();
+
+    document.getElementById('statusIndicator').textContent = `Mock: ${symbol}`;
+    document.getElementById('statusIndicator').classList.remove('text-yellow-400', 'text-red-400');
+    document.getElementById('statusIndicator').classList.add('text-purple-400');
+
+    console.log('Mock data loaded for', symbol);
+}
 
 // ============================================
 // Navigation & UI Utilities
@@ -1290,6 +1480,7 @@ window.showSection = showSection;
 window.toggleFormula = toggleFormula;
 window.syncInput = syncInput;
 window.fetchSymbolData = fetchSymbolData;
+window.loadMockData = loadMockData;
 window.populateSellPutFromData = populateSellPutFromData;
 window.calculateRiskScore = calculateRiskScore;
 window.calculateTargetPrice = calculateTargetPrice;

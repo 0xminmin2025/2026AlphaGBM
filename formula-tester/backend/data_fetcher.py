@@ -8,23 +8,10 @@ import numpy as np
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
-import sys
-import os
-
-# Add multiple possible paths for imports
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-_possible_paths = [
-    os.path.join(_current_dir, '..', '..', 'backend', 'app', 'services'),  # From formula-tester
-    os.path.join(_current_dir, '..', 'app', 'services'),  # Alternative path
-    '/Users/lewis/space/lewis/2026AlphaGBM/backend/app/services',  # Absolute path
-]
-for _path in _possible_paths:
-    if os.path.exists(_path) and _path not in sys.path:
-        sys.path.insert(0, _path)
 
 logger = logging.getLogger(__name__)
 
-# Try to import DataProvider with defeatbeta fallback
+# Import DataProvider from local module (with defeatbeta fallback)
 DATA_PROVIDER_AVAILABLE = False
 DataProvider = None
 
