@@ -1,39 +1,32 @@
 """
 期权数据获取模块
 整合Tiger API和其他数据源，提供统一的期权数据接口
+
+所有数据通过 DataProvider 获取，DataProvider 内部自动处理多数据源切换和指标追踪
 """
 
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-import yfinance as yf
 import pandas as pd
 import numpy as np
 
-from .tiger_client import TigerOptionsClient
-
-# Import DataProvider (yfinance + defeatbeta fallback)
-try:
-    from ....services.data_provider import DataProvider
-except ImportError:
-    DataProvider = None
+# Use DataProvider for unified data access with metrics tracking
+from ....services.data_provider import DataProvider
 
 
 def _create_ticker(symbol: str):
-    """Create a ticker object using DataProvider (with defeatbeta fallback) or yfinance."""
-    if DataProvider is not None:
-        return DataProvider(symbol)
-    return yf.Ticker(symbol)
+    """Create a ticker object using DataProvider (unified data access)."""
+    return DataProvider(symbol)
 
 logger = logging.getLogger(__name__)
 
 
 class OptionsDataFetcher:
-    """期权数据获取器"""
+    """期权数据获取器 - 使用 DataProvider 统一访问数据"""
 
     def __init__(self):
         """初始化数据获取器"""
-        self.tiger_client = TigerOptionsClient()
         self.cache_duration = 300  # 缓存5分钟
         self._cache = {}
 
@@ -58,16 +51,8 @@ class OptionsDataFetcher:
 
             logger.info(f"获取期权链数据: {symbol}, 到期天数: {expiry_days}")
 
-            # 尝试从Tiger API获取
-            tiger_data = self.tiger_client.get_options_chain(symbol, expiry_days)
-
-            if tiger_data.get('success'):
-                # 使用Tiger数据
-                result = self._format_tiger_options_data(tiger_data)
-            else:
-                # 备用：使用yfinance数据
-                logger.warning(f"Tiger API失败，使用yfinance备用数据: {tiger_data.get('error')}")
-                result = self._get_yfinance_options_data(symbol)
+            # 使用 DataProvider 获取期权数据 (内部自动选择最优数据源)
+            result = self._get_yfinance_options_data(symbol)
 
             # 添加额外的分析数据
             if result.get('success'):
@@ -102,15 +87,8 @@ class OptionsDataFetcher:
         try:
             logger.info(f"获取期权报价: {len(option_symbols)} 个期权")
 
-            # 尝试从Tiger API获取实时数据
-            tiger_quotes = self.tiger_client.get_options_quotes(option_symbols)
-
-            if tiger_quotes.get('success'):
-                return tiger_quotes
-            else:
-                # 备用方案：返回模拟数据
-                logger.warning(f"Tiger报价失败，使用模拟数据: {tiger_quotes.get('error')}")
-                return self._generate_mock_quotes(option_symbols)
+            # 使用模拟数据 (TODO: 未来可通过 DataProvider 添加实时报价支持)
+            return self._generate_mock_quotes(option_symbols)
 
         except Exception as e:
             logger.error(f"获取期权报价失败: {e}")

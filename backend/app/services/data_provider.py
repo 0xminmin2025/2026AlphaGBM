@@ -1,9 +1,9 @@
 """
 Unified Data Provider with multi-provider support and automatic failover.
 
-This module provides a drop-in replacement for yf.Ticker() that automatically
-uses multiple data providers (yfinance, defeatbeta-api, Tiger API) with
-automatic failover, caching, and deduplication.
+This module provides a drop-in replacement for yf.Ticker() that uses
+the centralized MarketDataService for all data access. All data fetches
+are automatically tracked in the metrics dashboard.
 
 Usage:
     # Instead of: stock = yf.Ticker('AAPL')
@@ -11,7 +11,7 @@ Usage:
     #
     # Same interface: stock.info, stock.history(), stock.quarterly_earnings, etc.
 
-NOTE: This is a backward-compatible facade over the new market_data.MarketDataService.
+NOTE: This is a backward-compatible facade over MarketDataService.
       For new code, prefer using market_data_service directly:
 
       from app.services.market_data import market_data_service
@@ -24,69 +24,25 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
+from collections import namedtuple
 
-import yfinance as yf
-
-# Import new market data service
-try:
-    from .market_data import market_data_service
-    MARKET_DATA_SERVICE_AVAILABLE = True
-except ImportError:
-    market_data_service = None
-    MARKET_DATA_SERVICE_AVAILABLE = False
-
-# Import yfinance rate limit exception
-try:
-    from yfinance.exceptions import YFRateLimitError
-except ImportError:
-    YFRateLimitError = type('YFRateLimitError', (Exception,), {})
+# Import market data service (singleton)
+from .market_data import market_data_service
 
 logger = logging.getLogger(__name__)
 
 
-def _is_rate_limit_error(e: Exception) -> bool:
-    """Check if an exception is a yfinance rate limit error or related network issue."""
-    import json
-    error_msg = str(e)
-    error_type = type(e).__name__
-
-    # Direct rate limit errors
-    if isinstance(e, YFRateLimitError) or error_type == 'YFRateLimitError':
-        return True
-
-    # JSONDecodeError often happens when yfinance gets rate limited (empty response)
-    if isinstance(e, json.JSONDecodeError) or error_type == 'JSONDecodeError':
-        return True
-
-    # String-based detection
-    rate_limit_indicators = [
-        'Too Many Requests',
-        'Rate limited',
-        '429',
-        'Expecting value: line 1 column 1',  # Empty JSON response
-        'Max retries exceeded',
-        'SSLError',
-        'Connection refused',
-    ]
-    return any(indicator in error_msg for indicator in rate_limit_indicators)
-
-
-def _is_index_or_macro_ticker(ticker: str) -> bool:
-    """Check if a ticker is an index/futures/macro symbol that defeatbeta can't handle."""
-    macro_prefixes = ('^', )
-    macro_suffixes = ('=F', '.NYB')
-    return (
-        ticker.startswith(macro_prefixes) or
-        ticker.endswith(macro_suffixes) or
-        ticker in ('DX-Y.NYB', 'SPY', 'QQQ', 'IWM')
-    )
-
-
 class DataProvider:
     """
-    Drop-in replacement for yf.Ticker with automatic multi-provider failover.
+    Drop-in replacement for yf.Ticker using the centralized MarketDataService.
 
-    This is a backward-compatible facade over the new MarketDataService.
+    All data access goes through market_data_service which provides:
+    - Multi-provider support (yfinance, Tiger, defeatbeta, Tushare, Alpha Vantage)
+    - Automatic failover between providers
+    - Request deduplication
+    - Caching
+    - Metrics tracking
+
     Exposes the same interface as yf.Ticker:
         - .info (property) -> dict
         - .history(period=, start=, end=, timeout=) -> DataFrame
@@ -95,6 +51,8 @@ class DataProvider:
         - .option_chain(date) -> OptionChain
         - .fast_info (property)
         - .calendar (property)
+        - .news (property)
+        - .get_margin_rate() -> float
 
     For new code, prefer using market_data_service directly:
         from app.services.market_data import market_data_service
@@ -103,14 +61,7 @@ class DataProvider:
 
     def __init__(self, ticker: str):
         self.ticker = ticker
-        self._yf_ticker = None
         self._info_cache = None
-
-    def _get_yf(self):
-        """Lazy-init yfinance ticker (for options and unsupported features)."""
-        if self._yf_ticker is None:
-            self._yf_ticker = yf.Ticker(self.ticker)
-        return self._yf_ticker
 
     # ──────────────────────────────────────────────
     # .info property
@@ -124,294 +75,16 @@ class DataProvider:
         if self._info_cache is not None:
             return self._info_cache
 
-        # Use new market data service if available
-        if MARKET_DATA_SERVICE_AVAILABLE and market_data_service:
-            try:
-                result = market_data_service.get_ticker_data(self.ticker)
-                # get_ticker_data() returns yfinance-compatible keys (regularMarketPrice, currentPrice)
-                if result and (result.get('regularMarketPrice') is not None or result.get('currentPrice') is not None):
-                    self._info_cache = result
-                    return self._info_cache
-            except Exception as e:
-                logger.warning(f"[DataProvider] market_data_service failed for {self.ticker}: {e}")
-
-        # Fallback to direct yfinance
         try:
-            result = self._get_yf().info
-            if result and result.get('regularMarketPrice') is not None:
+            result = market_data_service.get_ticker_data(self.ticker)
+            # get_ticker_data() returns yfinance-compatible keys (regularMarketPrice, currentPrice)
+            if result and (result.get('regularMarketPrice') is not None or result.get('currentPrice') is not None):
                 self._info_cache = result
-                return result
+                return self._info_cache
         except Exception as e:
-            logger.warning(f"[DataProvider] yfinance fallback failed for {self.ticker}: {e}")
+            logger.warning(f"[DataProvider] market_data_service failed for {self.ticker}: {e}")
 
-        return {}
-
-    def _convert_to_yf_info(self, data: dict) -> dict:
-        """Convert MarketDataService output to yfinance-compatible info dict."""
-        info = {'symbol': self.ticker}
-
-        # Price data
-        if data.get('current_price'):
-            info['regularMarketPrice'] = data['current_price']
-            info['currentPrice'] = data['current_price']
-        if data.get('previous_close'):
-            info['regularMarketPreviousClose'] = data['previous_close']
-            info['previousClose'] = data['previous_close']
-        if data.get('open_price'):
-            info['regularMarketOpen'] = data['open_price']
-        if data.get('day_high'):
-            info['regularMarketDayHigh'] = data['day_high']
-        if data.get('day_low'):
-            info['regularMarketDayLow'] = data['day_low']
-        if data.get('volume'):
-            info['regularMarketVolume'] = data['volume']
-        if data.get('market_cap'):
-            info['marketCap'] = data['market_cap']
-
-        # Fundamentals
-        if data.get('pe_ratio'):
-            info['trailingPE'] = data['pe_ratio']
-        if data.get('forward_pe'):
-            info['forwardPE'] = data['forward_pe']
-        if data.get('pb_ratio'):
-            info['priceToBook'] = data['pb_ratio']
-        if data.get('ps_ratio'):
-            info['priceToSalesTrailing12Months'] = data['ps_ratio']
-        if data.get('beta'):
-            info['beta'] = data['beta']
-        if data.get('eps_trailing'):
-            info['trailingEps'] = data['eps_trailing']
-        if data.get('eps_forward'):
-            info['forwardEps'] = data['eps_forward']
-        if data.get('peg_ratio'):
-            info['pegRatio'] = data['peg_ratio']
-        if data.get('dividend_yield'):
-            info['dividendYield'] = data['dividend_yield']
-
-        # Margins
-        if data.get('profit_margin'):
-            info['profitMargins'] = data['profit_margin']
-        if data.get('operating_margin'):
-            info['operatingMargins'] = data['operating_margin']
-        if data.get('roe'):
-            info['returnOnEquity'] = data['roe']
-        if data.get('roa'):
-            info['returnOnAssets'] = data['roa']
-        if data.get('revenue_growth'):
-            info['revenueGrowth'] = data['revenue_growth']
-
-        # Company info
-        if data.get('name'):
-            info['shortName'] = data['name']
-            info['longName'] = data['name']
-        if data.get('sector'):
-            info['sector'] = data['sector']
-        if data.get('industry'):
-            info['industry'] = data['industry']
-        if data.get('country'):
-            info['country'] = data['country']
-        if data.get('currency'):
-            info['currency'] = data['currency']
-        if data.get('exchange'):
-            info['exchange'] = data['exchange']
-
-        # 52-week data
-        if data.get('fifty_two_week_high'):
-            info['fiftyTwoWeekHigh'] = data['fifty_two_week_high']
-        if data.get('fifty_two_week_low'):
-            info['fiftyTwoWeekLow'] = data['fifty_two_week_low']
-
-        return info
-
-    def _build_info_from_defeatbeta(self) -> dict:
-        """Build a yfinance-compatible info dict from defeatbeta data sources."""
-        if 'info' in self._db_cache:
-            return self._db_cache['info']
-
-        info = {}
-        db = self._get_db()
-
-        # --- Price data from price() ---
-        try:
-            price_df = db.price()
-            if price_df is not None and len(price_df) > 0:
-                latest = price_df.iloc[-1]
-                info['regularMarketPrice'] = float(latest['close'])
-                info['currentPrice'] = float(latest['close'])
-                info['regularMarketOpen'] = float(latest['open'])
-                info['regularMarketDayHigh'] = float(latest['high'])
-                info['regularMarketDayLow'] = float(latest['low'])
-                info['regularMarketVolume'] = int(latest['volume'])
-
-                if len(price_df) >= 2:
-                    prev = price_df.iloc[-2]
-                    info['regularMarketPreviousClose'] = float(prev['close'])
-                    info['previousClose'] = float(prev['close'])
-
-                # 52-week high/low from ~252 trading days
-                recent_252 = price_df.tail(252)
-                info['fiftyTwoWeekHigh'] = float(recent_252['high'].max())
-                info['fiftyTwoWeekLow'] = float(recent_252['low'].min())
-
-                # Average volume
-                recent_30 = price_df.tail(30)
-                info['averageVolume'] = int(recent_30['volume'].mean())
-                recent_10 = price_df.tail(10)
-                info['averageVolume10days'] = int(recent_10['volume'].mean())
-        except Exception as e:
-            logger.warning(f"[DataProvider] defeatbeta price() failed for {self.ticker}: {e}")
-
-        # --- Summary data (PE, beta, EPS, market cap, etc.) ---
-        try:
-            summary = db.summary()
-            if summary is not None and len(summary) > 0:
-                row = summary.iloc[0]
-                info['marketCap'] = self._safe_float(row.get('market_cap'))
-                info['enterpriseValue'] = self._safe_float(row.get('enterprise_value'))
-                info['sharesOutstanding'] = self._safe_float(row.get('shares_outstanding'))
-                info['beta'] = self._safe_float(row.get('beta'))
-                info['trailingPE'] = self._safe_float(row.get('trailing_pe'))
-                info['forwardPE'] = self._safe_float(row.get('forward_pe'))
-                info['trailingEps'] = self._safe_float(row.get('tailing_eps'))
-                info['forwardEps'] = self._safe_float(row.get('forward_eps'))
-                info['enterpriseToEbitda'] = self._safe_float(row.get('enterprise_to_ebitda'))
-                info['enterpriseToRevenue'] = self._safe_float(row.get('enterprise_to_revenue'))
-                info['pegRatio'] = self._safe_float(row.get('peg_ratio'))
-                currency = row.get('currency')
-                if currency and str(currency) != 'nan':
-                    info['currency'] = str(currency)
-                else:
-                    info['currency'] = 'USD'
-        except Exception as e:
-            logger.warning(f"[DataProvider] defeatbeta summary() failed for {self.ticker}: {e}")
-
-        # --- Company info (sector, industry, name) ---
-        try:
-            company_info = db.info()
-            if company_info is not None and len(company_info) > 0:
-                row = company_info.iloc[0]
-                info['sector'] = str(row.get('sector', '')) if row.get('sector') else ''
-                info['industry'] = str(row.get('industry', '')) if row.get('industry') else ''
-                info['shortName'] = str(row.get('symbol', self.ticker))
-                info['longName'] = str(row.get('symbol', self.ticker))
-                info['country'] = str(row.get('country', '')) if row.get('country') else ''
-        except Exception as e:
-            logger.warning(f"[DataProvider] defeatbeta info() failed for {self.ticker}: {e}")
-
-        # --- Profitability metrics ---
-        try:
-            nm = db.quarterly_net_margin()
-            if nm is not None and len(nm) > 0:
-                info['profitMargins'] = self._safe_float(nm.iloc[-1].get('net_margin'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta quarterly_net_margin() failed: {e}")
-
-        try:
-            om = db.quarterly_operating_margin()
-            if om is not None and len(om) > 0:
-                info['operatingMargins'] = self._safe_float(om.iloc[-1].get('operating_margin'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta quarterly_operating_margin() failed: {e}")
-
-        # --- ROE, ROA ---
-        try:
-            roe = db.roe()
-            if roe is not None and len(roe) > 0:
-                info['returnOnEquity'] = self._safe_float(roe.iloc[-1].get('roe'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta roe() failed: {e}")
-
-        try:
-            roa = db.roa()
-            if roa is not None and len(roa) > 0:
-                info['returnOnAssets'] = self._safe_float(roa.iloc[-1].get('roa'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta roa() failed: {e}")
-
-        # --- Growth metrics ---
-        try:
-            rg = db.quarterly_revenue_yoy_growth()
-            if rg is not None and len(rg) > 0:
-                info['revenueGrowth'] = self._safe_float(rg.iloc[-1].get('yoy_growth'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta revenue_growth failed: {e}")
-
-        try:
-            eg = db.quarterly_net_income_yoy_growth()
-            if eg is not None and len(eg) > 0:
-                info['earningsGrowth'] = self._safe_float(eg.iloc[-1].get('yoy_growth'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta earnings_growth failed: {e}")
-
-        # --- Revenue (TTM) ---
-        try:
-            rev = db.ttm_revenue()
-            if rev is not None and len(rev) > 0:
-                info['totalRevenue'] = self._safe_float(rev.iloc[-1].get('ttm_total_revenue'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta ttm_revenue() failed: {e}")
-
-        # --- PB ratio ---
-        try:
-            pb = db.pb_ratio()
-            if pb is not None and len(pb) > 0:
-                info['priceToBook'] = self._safe_float(pb.iloc[-1].get('pb_ratio'))
-                bv_per_share = None
-                bv = self._safe_float(pb.iloc[-1].get('book_value_of_equity_usd'))
-                shares = info.get('sharesOutstanding')
-                if bv and shares and shares > 0:
-                    bv_per_share = bv / shares
-                info['bookValue'] = bv_per_share
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta pb_ratio() failed: {e}")
-
-        # --- PS ratio ---
-        try:
-            ps = db.ps_ratio()
-            if ps is not None and len(ps) > 0:
-                info['priceToSalesTrailing12Months'] = self._safe_float(ps.iloc[-1].get('ps_ratio'))
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta ps_ratio() failed: {e}")
-
-        # --- Dividends ---
-        try:
-            divs = db.dividends()
-            if divs is not None and len(divs) > 0:
-                # Calculate annual dividend from last 4 quarterly payments
-                recent_divs = divs.tail(4)
-                annual_div = sum(float(r['amount']) for _, r in recent_divs.iterrows())
-                info['dividendRate'] = annual_div
-                current_price = info.get('currentPrice', 0)
-                if current_price and current_price > 0:
-                    info['dividendYield'] = annual_div / current_price
-        except Exception as e:
-            logger.debug(f"[DataProvider] defeatbeta dividends() failed: {e}")
-
-        # Fields that defeatbeta CANNOT provide — set to None/defaults
-        # These will be filled by yfinance if it recovers, or skipped gracefully
-        info.setdefault('targetHighPrice', None)
-        info.setdefault('targetLowPrice', None)
-        info.setdefault('targetMeanPrice', None)
-        info.setdefault('targetMedianPrice', None)
-        info.setdefault('recommendationKey', None)
-        info.setdefault('numberOfAnalystOpinions', None)
-        info.setdefault('sharesShort', None)
-        info.setdefault('shortRatio', None)
-        info.setdefault('shortPercentOfFloat', None)
-        info.setdefault('heldPercentInsiders', None)
-        info.setdefault('heldPercentInstitutions', None)
-        info.setdefault('floatShares', None)
-        info.setdefault('quickRatio', None)
-        info.setdefault('currentRatio', None)
-        info.setdefault('debtToEquity', None)
-        info.setdefault('totalCash', None)
-        info.setdefault('totalDebt', None)
-        info.setdefault('revenuePerShare', None)
-        info.setdefault('payoutRatio', None)
-
-        self._db_cache['info'] = info
-        logger.info(f"[DataProvider] Built info from defeatbeta for {self.ticker} ({len(info)} fields)")
-        return info
+        return {'symbol': self.ticker}
 
     # ──────────────────────────────────────────────
     # .history() method
@@ -421,132 +94,37 @@ class DataProvider:
         Returns OHLCV DataFrame in yfinance format.
         Uses MarketDataService with automatic multi-provider failover.
         """
-        # Use new market data service if available
-        if MARKET_DATA_SERVICE_AVAILABLE and market_data_service:
-            try:
-                # Convert start/end to date objects if needed
-                start_date = None
-                end_date = None
-                if start is not None:
-                    if isinstance(start, str):
-                        start_date = pd.Timestamp(start).date()
-                    elif hasattr(start, 'date'):
-                        start_date = start.date() if hasattr(start, 'date') else start
-                    else:
-                        start_date = start
-                if end is not None:
-                    if isinstance(end, str):
-                        end_date = pd.Timestamp(end).date()
-                    elif hasattr(end, 'date'):
-                        end_date = end.date() if hasattr(end, 'date') else end
-                    else:
-                        end_date = end
-
-                result = market_data_service.get_history_df(
-                    self.ticker,
-                    period=period,
-                    start=start_date,
-                    end=end_date
-                )
-                if result is not None and not result.empty:
-                    return result
-            except Exception as e:
-                logger.warning(f"[DataProvider] market_data_service history failed for {self.ticker}: {e}")
-
-        # Fallback to direct yfinance
         try:
-            kwargs = {'timeout': timeout}
-            if period:
-                kwargs['period'] = period
+            # Convert start/end to date objects if needed
+            start_date = None
+            end_date = None
             if start is not None:
-                kwargs['start'] = start
+                if isinstance(start, str):
+                    start_date = pd.Timestamp(start).date()
+                elif hasattr(start, 'date'):
+                    start_date = start.date() if callable(getattr(start, 'date', None)) else start
+                else:
+                    start_date = start
             if end is not None:
-                kwargs['end'] = end
+                if isinstance(end, str):
+                    end_date = pd.Timestamp(end).date()
+                elif hasattr(end, 'date'):
+                    end_date = end.date() if callable(getattr(end, 'date', None)) else end
+                else:
+                    end_date = end
 
-            result = self._get_yf().history(**kwargs)
+            result = market_data_service.get_history_df(
+                self.ticker,
+                period=period,
+                start=start_date,
+                end=end_date
+            )
             if result is not None and not result.empty:
                 return result
         except Exception as e:
-            logger.warning(f"[DataProvider] yfinance fallback history failed for {self.ticker}: {e}")
+            logger.warning(f"[DataProvider] market_data_service history failed for {self.ticker}: {e}")
 
         return pd.DataFrame()
-
-    def _get_history_from_defeatbeta(self, period=None, start=None, end=None) -> pd.DataFrame:
-        """Convert defeatbeta price() data to yfinance history format."""
-        try:
-            db = self._get_db()
-            price_df = db.price()
-
-            if price_df is None or price_df.empty:
-                return pd.DataFrame()
-
-            # Convert to yfinance format
-            df = price_df.copy()
-            df['report_date'] = pd.to_datetime(df['report_date'])
-            df = df.set_index('report_date')
-            df.index.name = 'Date'
-
-            # Rename columns to match yfinance (capitalized)
-            df = df.rename(columns={
-                'open': 'Open',
-                'high': 'High',
-                'low': 'Low',
-                'close': 'Close',
-                'volume': 'Volume',
-            })
-
-            # Keep only OHLCV columns
-            cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-            df = df[[c for c in cols if c in df.columns]]
-
-            # Ensure numeric types
-            for col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-
-            # Filter by date range
-            if start is not None:
-                if isinstance(start, str):
-                    start = pd.Timestamp(start)
-                elif isinstance(start, datetime):
-                    start = pd.Timestamp(start)
-                df = df[df.index >= start]
-
-            if end is not None:
-                if isinstance(end, str):
-                    end = pd.Timestamp(end)
-                elif isinstance(end, datetime):
-                    end = pd.Timestamp(end)
-                df = df[df.index <= end]
-
-            # Handle period-based filtering
-            if period and start is None and end is None:
-                now = pd.Timestamp.now()
-                period_map = {
-                    '1d': timedelta(days=1),
-                    '5d': timedelta(days=5),
-                    '1mo': timedelta(days=30),
-                    '3mo': timedelta(days=90),
-                    '6mo': timedelta(days=180),
-                    '1y': timedelta(days=365),
-                    '2y': timedelta(days=730),
-                    '5y': timedelta(days=1825),
-                    '10y': timedelta(days=3650),
-                    'max': timedelta(days=36500),
-                }
-                delta = period_map.get(period)
-                if delta:
-                    cutoff = now - delta
-                    df = df[df.index >= cutoff]
-
-            # Make index timezone-aware if needed (yfinance returns tz-aware)
-            if df.index.tz is None:
-                df.index = df.index.tz_localize('America/New_York')
-
-            return df
-
-        except Exception as e:
-            logger.error(f"[DataProvider] defeatbeta history fallback failed for {self.ticker}: {e}")
-            return pd.DataFrame()
 
     # ──────────────────────────────────────────────
     # .quarterly_earnings property
@@ -557,50 +135,14 @@ class DataProvider:
         Returns quarterly earnings DataFrame.
         yfinance format: index=date, columns=['Revenue', 'Earnings']
         """
-        # Use new market data service if available
-        if MARKET_DATA_SERVICE_AVAILABLE and market_data_service:
-            try:
-                earnings = market_data_service.get_earnings(self.ticker)
-                if earnings and not earnings.empty:
-                    return earnings.quarterly_earnings
-            except Exception as e:
-                logger.warning(f"[DataProvider] market_data_service earnings failed for {self.ticker}: {e}")
-
-        # Fallback to direct yfinance
         try:
-            result = self._get_yf().quarterly_earnings
-            if result is not None and not result.empty:
-                return result
+            earnings = market_data_service.get_earnings(self.ticker)
+            if earnings and not earnings.empty:
+                return earnings.quarterly_earnings
         except Exception as e:
-            logger.warning(f"[DataProvider] yfinance fallback earnings failed for {self.ticker}: {e}")
+            logger.warning(f"[DataProvider] market_data_service earnings failed for {self.ticker}: {e}")
 
         return pd.DataFrame()
-
-    def _get_earnings_from_defeatbeta(self) -> pd.DataFrame:
-        """Convert defeatbeta earnings() to yfinance quarterly_earnings format."""
-        try:
-            db = self._get_db()
-            earnings = db.earnings()
-
-            if earnings is None or earnings.empty:
-                return pd.DataFrame()
-
-            # yfinance quarterly_earnings has index=date, columns=['Revenue', 'Earnings']
-            # defeatbeta has: symbol, eps_actual, eps_estimate, surprise_percent, quarter_name, quarter_date
-            df = pd.DataFrame()
-            df['Earnings'] = pd.to_numeric(earnings['eps_actual'], errors='coerce')
-            df.index = pd.to_datetime(earnings['quarter_date'])
-            df.index.name = None
-
-            # Revenue is not in defeatbeta earnings — try from income statement
-            # Set Revenue to NaN (some yfinance quarterly_earnings also lack it)
-            df['Revenue'] = np.nan
-
-            return df
-
-        except Exception as e:
-            logger.error(f"[DataProvider] defeatbeta earnings fallback failed for {self.ticker}: {e}")
-            return pd.DataFrame()
 
     # ──────────────────────────────────────────────
     # .options property
@@ -608,80 +150,96 @@ class DataProvider:
     @property
     def options(self):
         """Returns available option expiration dates."""
-        # Use new market data service if available
-        if MARKET_DATA_SERVICE_AVAILABLE and market_data_service:
-            try:
-                expirations = market_data_service.get_options_expirations(self.ticker)
-                if expirations:
-                    return tuple(expirations)
-            except Exception as e:
-                logger.warning(f"[DataProvider] market_data_service options failed for {self.ticker}: {e}")
-
-        # Fallback to yfinance
         try:
-            return self._get_yf().options
-        except Exception:
-            return ()
+            expirations = market_data_service.get_options_expirations(self.ticker)
+            if expirations:
+                return tuple(expirations)
+        except Exception as e:
+            logger.warning(f"[DataProvider] market_data_service options failed for {self.ticker}: {e}")
+
+        return ()
 
     # ──────────────────────────────────────────────
     # .option_chain() method
     # ──────────────────────────────────────────────
     def option_chain(self, date):
         """Returns option chain for a specific date."""
-        # Use new market data service if available
-        if MARKET_DATA_SERVICE_AVAILABLE and market_data_service:
-            try:
-                chain = market_data_service.get_options_chain(self.ticker, date)
-                if chain and not chain.empty:
-                    # Convert to yfinance-compatible format
-                    from collections import namedtuple
-                    OptionChain = namedtuple('OptionChain', ['calls', 'puts'])
-                    return OptionChain(calls=chain.calls, puts=chain.puts)
-            except Exception as e:
-                logger.warning(f"[DataProvider] market_data_service option_chain failed for {self.ticker}: {e}")
-
-        # Fallback to yfinance
         try:
-            return self._get_yf().option_chain(date)
-        except Exception:
-            return None
+            chain = market_data_service.get_options_chain(self.ticker, date)
+            if chain and not chain.empty:
+                # Convert to yfinance-compatible format
+                OptionChain = namedtuple('OptionChain', ['calls', 'puts'])
+                return OptionChain(calls=chain.calls, puts=chain.puts)
+        except Exception as e:
+            logger.warning(f"[DataProvider] market_data_service option_chain failed for {self.ticker}: {e}")
+
+        return None
 
     # ──────────────────────────────────────────────
     # .fast_info property
     # ──────────────────────────────────────────────
     @property
     def fast_info(self):
-        """Returns fast_info. yfinance only, degrade gracefully."""
+        """
+        Returns fast_info-like dict using market_data_service.
+        Returns subset of info for quick access.
+        """
         try:
-            return self._get_yf().fast_info
+            quote = market_data_service.get_quote(self.ticker)
+            if quote:
+                return {
+                    'lastPrice': quote.current_price,
+                    'previousClose': quote.previous_close,
+                    'open': quote.open_price,
+                    'dayHigh': quote.day_high,
+                    'dayLow': quote.day_low,
+                    'volume': quote.volume,
+                    'marketCap': quote.market_cap,
+                }
         except Exception:
-            return None
+            pass
+        return None
 
     # ──────────────────────────────────────────────
     # .calendar property
     # ──────────────────────────────────────────────
     @property
     def calendar(self):
-        """Returns calendar data. yfinance only, degrade gracefully."""
-        try:
-            return self._get_yf().calendar
-        except Exception:
-            return None
+        """
+        Returns calendar data (earnings dates, dividends, etc.)
+        Not currently supported by market_data_service.
+        """
+        # Calendar data is not supported in market_data_service
+        # Returns None to indicate no data available
+        return None
 
     # ──────────────────────────────────────────────
-    # Utility
+    # .news property
     # ──────────────────────────────────────────────
-    @staticmethod
-    def _safe_float(val) -> Optional[float]:
-        """Safely convert a value to float, returning None for NaN/None."""
-        if val is None:
-            return None
+    @property
+    def news(self):
+        """
+        Returns news data for the ticker.
+        Not currently supported by market_data_service.
+        """
+        # News is not supported in market_data_service
+        return []
+
+    # ──────────────────────────────────────────────
+    # .get_margin_rate() method
+    # ──────────────────────────────────────────────
+    def get_margin_rate(self) -> Optional[float]:
+        """
+        Get margin requirement rate for this symbol.
+
+        Returns:
+            Margin rate as a decimal (e.g., 0.25 for 25% margin requirement),
+            or None if unavailable.
+        """
         try:
-            result = float(val)
-            if pd.isna(result):
-                return None
-            return result
-        except (ValueError, TypeError):
+            return market_data_service.get_margin_rate(self.ticker)
+        except Exception as e:
+            logger.warning(f"[DataProvider] get_margin_rate failed for {self.ticker}: {e}")
             return None
 
 
@@ -690,21 +248,11 @@ def data_provider_download(ticker: str, period: str = '6mo', progress: bool = Fa
     Drop-in replacement for yf.download() with multi-provider failover.
     Returns a DataFrame with OHLCV data.
     """
-    # Use new market data service if available
-    if MARKET_DATA_SERVICE_AVAILABLE and market_data_service:
-        try:
-            result = market_data_service.get_history_df(ticker, period=period)
-            if result is not None and not result.empty:
-                return result
-        except Exception as e:
-            logger.warning(f"[DataProvider] market_data_service download failed for {ticker}: {e}")
-
-    # Fallback to yfinance
     try:
-        result = yf.download(ticker, period=period, progress=progress)
+        result = market_data_service.get_history_df(ticker, period=period)
         if result is not None and not result.empty:
             return result
     except Exception as e:
-        logger.warning(f"[DataProvider] yf.download failed for {ticker}: {e}")
+        logger.warning(f"[DataProvider] market_data_service download failed for {ticker}: {e}")
 
     return pd.DataFrame()

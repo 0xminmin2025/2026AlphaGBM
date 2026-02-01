@@ -5,8 +5,35 @@ Defines provider configurations, priorities, rate limits, and cache settings.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List, Dict, Optional
 from .interfaces import DataType, Market
+
+
+@dataclass
+class ProviderCacheTTL:
+    """Per-provider cache TTL configuration (in seconds)."""
+    quote: int = 60                  # Real-time quotes
+    history: int = 300               # Historical data
+    fundamentals: int = 3600         # PE, PB, ROE etc.
+    info: int = 86400                # Company info
+    options_chain: int = 120         # Options chain (volatile)
+    options_expirations: int = 300   # Expiration dates
+    earnings: int = 3600             # Earnings data
+    macro: int = 60                  # VIX, indices
+
+    def get_ttl(self, data_type: DataType) -> int:
+        """Get TTL for a specific data type."""
+        ttl_map = {
+            DataType.QUOTE: self.quote,
+            DataType.HISTORY: self.history,
+            DataType.FUNDAMENTALS: self.fundamentals,
+            DataType.INFO: self.info,
+            DataType.OPTIONS_CHAIN: self.options_chain,
+            DataType.OPTIONS_EXPIRATIONS: self.options_expirations,
+            DataType.EARNINGS: self.earnings,
+            DataType.MACRO: self.macro,
+        }
+        return ttl_map.get(data_type, 300)
 
 
 @dataclass
@@ -29,6 +56,9 @@ class ProviderConfig:
     max_consecutive_failures: int = 3    # Failures before marking unhealthy
     auto_recover: bool = True            # Auto-recover after cooldown
 
+    # Per-provider cache TTL (None uses global defaults)
+    cache_ttl: Optional[ProviderCacheTTL] = None
+
 
 @dataclass
 class CacheConfig:
@@ -49,6 +79,78 @@ class CacheConfig:
     # Deduplication
     dedup_window_ms: int = 500  # Requests within this window share result
 
+    def get_default_ttl(self, data_type: DataType) -> int:
+        """Get default TTL for a data type."""
+        ttl_map = {
+            DataType.QUOTE: self.memory_ttl_quote,
+            DataType.HISTORY: self.memory_ttl_history,
+            DataType.FUNDAMENTALS: self.memory_ttl_fundamentals,
+            DataType.INFO: self.memory_ttl_info,
+            DataType.OPTIONS_CHAIN: self.memory_ttl_options,
+            DataType.OPTIONS_EXPIRATIONS: self.memory_ttl_options,
+            DataType.EARNINGS: self.memory_ttl_fundamentals,
+            DataType.MACRO: self.memory_ttl_quote,
+        }
+        return ttl_map.get(data_type, 300)
+
+
+# Per-provider cache TTL configurations
+# Each provider can have different TTLs based on their data freshness and reliability
+
+YFINANCE_CACHE_TTL = ProviderCacheTTL(
+    quote=60,                 # 1 minute - real-time quotes
+    history=300,              # 5 minutes - historical data
+    fundamentals=3600,        # 1 hour - PE, PB, ROE
+    info=86400,               # 24 hours - company info
+    options_chain=120,        # 2 minutes - options are volatile
+    options_expirations=300,  # 5 minutes - expiry dates
+    earnings=3600,            # 1 hour - earnings
+    macro=60,                 # 1 minute - VIX, indices
+)
+
+DEFEATBETA_CACHE_TTL = ProviderCacheTTL(
+    quote=120,                # 2 minutes - local DuckDB, data may be slightly delayed
+    history=600,              # 10 minutes - local data, longer cache OK
+    fundamentals=7200,        # 2 hours - stable data from local source
+    info=172800,              # 48 hours - company info changes rarely
+    options_chain=120,        # N/A - defeatbeta doesn't support options
+    options_expirations=300,  # N/A
+    earnings=7200,            # 2 hours - earnings data
+    macro=120,                # N/A
+)
+
+TIGER_CACHE_TTL = ProviderCacheTTL(
+    quote=60,                 # 1 minute - Tiger has real-time quotes
+    history=300,              # 5 minutes - historical data
+    fundamentals=3600,        # N/A - Tiger doesn't have fundamentals
+    info=86400,               # N/A
+    options_chain=90,         # 1.5 minutes - Tiger is priority for options, keep fresh
+    options_expirations=180,  # 3 minutes - expiry dates
+    earnings=3600,            # N/A
+    macro=60,                 # 1 minute
+)
+
+ALPHA_VANTAGE_CACHE_TTL = ProviderCacheTTL(
+    quote=300,                # 5 minutes - rate limited, cache longer
+    history=900,              # 15 minutes - rate limited, cache longer
+    fundamentals=7200,        # 2 hours - rate limited
+    info=172800,              # 48 hours - rate limited, cache very long
+    options_chain=300,        # N/A
+    options_expirations=300,  # N/A
+    earnings=7200,            # N/A
+    macro=300,                # N/A
+)
+
+TUSHARE_CACHE_TTL = ProviderCacheTTL(
+    quote=120,                # 2 minutes - Tushare daily data (not real-time)
+    history=600,              # 10 minutes - historical data
+    fundamentals=3600,        # 1 hour - PE, PB, ROE etc.
+    info=86400,               # 24 hours - company info
+    options_chain=300,        # N/A - no options
+    options_expirations=300,  # N/A
+    earnings=3600,            # 1 hour - earnings
+    macro=120,                # 2 minutes - index data
+)
 
 # Default provider configurations
 PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
@@ -70,6 +172,7 @@ PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
         supported_markets=[Market.US, Market.HK],
         cooldown_on_error_seconds=60,
         max_consecutive_failures=3,
+        cache_ttl=YFINANCE_CACHE_TTL,
     ),
     "defeatbeta": ProviderConfig(
         name="defeatbeta",
@@ -86,6 +189,7 @@ PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
         supported_markets=[Market.US],  # Only US stocks
         cooldown_on_error_seconds=30,
         max_consecutive_failures=5,
+        cache_ttl=DEFEATBETA_CACHE_TTL,
     ),
     "tiger": ProviderConfig(
         name="tiger",
@@ -101,6 +205,7 @@ PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
         supported_markets=[Market.US, Market.HK, Market.CN],
         cooldown_on_error_seconds=60,
         max_consecutive_failures=3,
+        cache_ttl=TIGER_CACHE_TTL,
     ),
     "alpha_vantage": ProviderConfig(
         name="alpha_vantage",
@@ -117,8 +222,45 @@ PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
         supported_markets=[Market.US],
         cooldown_on_error_seconds=120,
         max_consecutive_failures=2,
+        cache_ttl=ALPHA_VANTAGE_CACHE_TTL,
+    ),
+    "tushare": ProviderConfig(
+        name="tushare",
+        enabled=True,  # Enabled - will auto-disable if no API token
+        priority=10,   # Primary provider for A-shares
+        requests_per_minute=200,  # Tushare Pro rate limit
+        requests_per_day=10000,
+        supported_data_types=[
+            DataType.QUOTE,
+            DataType.HISTORY,
+            DataType.INFO,
+            DataType.FUNDAMENTALS,
+        ],
+        supported_markets=[Market.CN],  # A-share only
+        cooldown_on_error_seconds=60,
+        max_consecutive_failures=3,
+        cache_ttl=TUSHARE_CACHE_TTL,
     ),
 }
+
+
+def get_provider_cache_ttl(provider_name: str, data_type: DataType) -> int:
+    """
+    Get cache TTL for a provider and data type.
+
+    Args:
+        provider_name: Name of the provider
+        data_type: Type of data
+
+    Returns:
+        TTL in seconds
+    """
+    config = PROVIDER_CONFIGS.get(provider_name)
+    if config and config.cache_ttl:
+        return config.cache_ttl.get_ttl(data_type)
+    # Fall back to default CacheConfig TTLs
+    default_config = CacheConfig()
+    return default_config.get_default_ttl(data_type)
 
 
 # Symbols that are indices/futures/macro (special handling needed)

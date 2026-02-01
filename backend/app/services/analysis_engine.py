@@ -1,32 +1,18 @@
 import pandas as pd
 import numpy as np
-import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import time
 import logging
 
-# 导入yfinance的异常类
-try:
-    from yfinance.exceptions import YFRateLimitError
-except ImportError:
-    # 如果导入失败，定义一个占位符
-    YFRateLimitError = type('YFRateLimitError', (Exception,), {})
-
-# 导入DataProvider (yfinance + defeatbeta fallback)
-try:
-    from .data_provider import DataProvider, data_provider_download
-except ImportError:
-    DataProvider = None
-    data_provider_download = None
+# Use DataProvider for unified data access with metrics tracking
+from .data_provider import DataProvider, data_provider_download
 
 
 def _create_ticker(symbol: str):
-    """Create a ticker object using DataProvider (with defeatbeta fallback) or yfinance."""
-    if DataProvider is not None:
-        return DataProvider(symbol)
-    return yf.Ticker(symbol)
+    """Create a ticker object using DataProvider (unified data access)."""
+    return DataProvider(symbol)
 
 # 导入配置参数
 # 导入配置参数
@@ -2186,12 +2172,8 @@ def calculate_market_correlation(ticker, benchmark='SPY', period='6mo'):
         normalized_ticker = normalize_ticker(ticker)
 
         # 下载股票和基准数据 (with defeatbeta fallback)
-        if data_provider_download is not None:
-            stock_data = data_provider_download(normalized_ticker, period=period, progress=False)
-            benchmark_data = data_provider_download(benchmark, period=period, progress=False)
-        else:
-            stock_data = yf.download(normalized_ticker, period=period, progress=False)
-            benchmark_data = yf.download(benchmark, period=period, progress=False)
+        stock_data = data_provider_download(normalized_ticker, period=period, progress=False)
+        benchmark_data = data_provider_download(benchmark, period=period, progress=False)
 
         if stock_data.empty or benchmark_data.empty:
             print(f"[相关性] {ticker}: 无法获取数据")

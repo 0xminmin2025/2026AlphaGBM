@@ -6,18 +6,14 @@ Based on the original app.py calculate_daily_profit_loss() function.
 """
 
 import logging
-import yfinance as yf
 import requests
 from datetime import datetime, date
 from apscheduler.schedulers.background import BackgroundScheduler
 from .models import db, PortfolioHolding, DailyProfitLoss, StyleProfit
 from .utils.serialization import convert_numpy_types
 
-# Import DataProvider (yfinance + defeatbeta fallback)
-try:
-    from .services.data_provider import DataProvider
-except ImportError:
-    DataProvider = None
+# Use DataProvider for unified data access with metrics tracking
+from .services.data_provider import DataProvider
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +57,9 @@ def get_exchange_rates():
     return exchange_rates_cache
 
 def get_current_stock_price(ticker):
-    """Get current stock price using DataProvider (yfinance + defeatbeta fallback)"""
+    """Get current stock price using DataProvider (unified data access)"""
     try:
-        stock = DataProvider(ticker) if DataProvider is not None else yf.Ticker(ticker)
+        stock = DataProvider(ticker)
         info = stock.info
 
         # Try different price fields in order of preference

@@ -26,6 +26,7 @@ from .config import (
 )
 from .cache import MultiLevelCache
 from .deduplicator import RequestDeduplicator
+from .metrics import metrics_collector
 
 logger = logging.getLogger(__name__)
 
@@ -79,12 +80,16 @@ class MarketDataService:
 
     def _register_default_adapters(self):
         """Register all available data provider adapters."""
-        from .adapters import YFinanceAdapter, DefeatBetaAdapter, TigerAdapter, AlphaVantageAdapter
+        from .adapters import (
+            YFinanceAdapter, DefeatBetaAdapter, TigerAdapter,
+            AlphaVantageAdapter, TushareAdapter
+        )
 
         self.register_adapter(YFinanceAdapter())
         self.register_adapter(DefeatBetaAdapter())
         self.register_adapter(TigerAdapter())
         self.register_adapter(AlphaVantageAdapter())
+        self.register_adapter(TushareAdapter())
 
     def register_adapter(self, adapter: DataProviderAdapter):
         """Register a new data provider adapter."""
@@ -146,30 +151,70 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = symbol.upper()
+        start_time = time.time()
 
         # Check cache first
         cached = self._cache.get(cache_key, DataType.QUOTE)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.QUOTE,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         # Use deduplicator to prevent duplicate API calls
         def fetch():
             providers = self._get_providers_for_data_type(DataType.QUOTE, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
-            for adapter in providers:
+            for i, adapter in enumerate(providers):
+                providers_tried.append(adapter.name)
                 try:
-                    start = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_quote(symbol)
-                    elapsed = (time.time() - start) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result:
                         logger.debug(f"[MarketData] Quote {symbol}: {adapter.name} ({elapsed:.0f}ms)")
                         self._cache.set(cache_key, result, DataType.QUOTE, source=adapter.name)
+
+                        # Record success metrics
+                        metrics_collector.record_call(
+                            data_type=DataType.QUOTE,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for quote {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True  # Next provider (if any) is a fallback
                     continue
 
+            # All providers failed
+            metrics_collector.record_call(
+                data_type=DataType.QUOTE,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -193,28 +238,66 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = f"{symbol.upper()}:{period}:{start}:{end}"
+        start_time = time.time()
 
         cached = self._cache.get(cache_key, DataType.HISTORY)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.HISTORY,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         def fetch():
             providers = self._get_providers_for_data_type(DataType.HISTORY, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
             for adapter in providers:
+                providers_tried.append(adapter.name)
                 try:
-                    start_time = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_history(symbol, period, start, end)
-                    elapsed = (time.time() - start_time) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result and not result.empty:
                         logger.debug(f"[MarketData] History {symbol}: {adapter.name} ({elapsed:.0f}ms, {len(result.df)} rows)")
                         self._cache.set(cache_key, result, DataType.HISTORY, source=adapter.name)
+
+                        metrics_collector.record_call(
+                            data_type=DataType.HISTORY,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for history {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True
                     continue
 
+            metrics_collector.record_call(
+                data_type=DataType.HISTORY,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -236,28 +319,66 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = symbol.upper()
+        start_time = time.time()
 
         cached = self._cache.get(cache_key, DataType.FUNDAMENTALS)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.FUNDAMENTALS,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         def fetch():
             providers = self._get_providers_for_data_type(DataType.FUNDAMENTALS, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
             for adapter in providers:
+                providers_tried.append(adapter.name)
                 try:
-                    start = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_fundamentals(symbol)
-                    elapsed = (time.time() - start) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result:
                         logger.debug(f"[MarketData] Fundamentals {symbol}: {adapter.name} ({elapsed:.0f}ms)")
                         self._cache.set(cache_key, result, DataType.FUNDAMENTALS, source=adapter.name)
+
+                        metrics_collector.record_call(
+                            data_type=DataType.FUNDAMENTALS,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for fundamentals {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True
                     continue
 
+            metrics_collector.record_call(
+                data_type=DataType.FUNDAMENTALS,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -276,28 +397,66 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = symbol.upper()
+        start_time = time.time()
 
         cached = self._cache.get(cache_key, DataType.INFO)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.INFO,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         def fetch():
             providers = self._get_providers_for_data_type(DataType.INFO, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
             for adapter in providers:
+                providers_tried.append(adapter.name)
                 try:
-                    start = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_info(symbol)
-                    elapsed = (time.time() - start) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result:
                         logger.debug(f"[MarketData] Info {symbol}: {adapter.name} ({elapsed:.0f}ms)")
                         self._cache.set(cache_key, result, DataType.INFO, source=adapter.name)
+
+                        metrics_collector.record_call(
+                            data_type=DataType.INFO,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for info {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True
                     continue
 
+            metrics_collector.record_call(
+                data_type=DataType.INFO,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -316,28 +475,66 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = symbol.upper()
+        start_time = time.time()
 
         cached = self._cache.get(cache_key, DataType.OPTIONS_EXPIRATIONS)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.OPTIONS_EXPIRATIONS,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         def fetch():
             providers = self._get_providers_for_data_type(DataType.OPTIONS_EXPIRATIONS, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
             for adapter in providers:
+                providers_tried.append(adapter.name)
                 try:
-                    start = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_options_expirations(symbol)
-                    elapsed = (time.time() - start) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result:
                         logger.debug(f"[MarketData] Options expirations {symbol}: {adapter.name} ({elapsed:.0f}ms, {len(result)} dates)")
                         self._cache.set(cache_key, result, DataType.OPTIONS_EXPIRATIONS, source=adapter.name)
+
+                        metrics_collector.record_call(
+                            data_type=DataType.OPTIONS_EXPIRATIONS,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for options expirations {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True
                     continue
 
+            metrics_collector.record_call(
+                data_type=DataType.OPTIONS_EXPIRATIONS,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -357,30 +554,68 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = f"{symbol.upper()}:{expiry}"
+        start_time = time.time()
 
         cached = self._cache.get(cache_key, DataType.OPTIONS_CHAIN)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.OPTIONS_CHAIN,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         def fetch():
             providers = self._get_providers_for_data_type(DataType.OPTIONS_CHAIN, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
             for adapter in providers:
+                providers_tried.append(adapter.name)
                 try:
-                    start = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_options_chain(symbol, expiry)
-                    elapsed = (time.time() - start) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result and not result.empty:
                         calls_count = len(result.calls) if result.calls is not None else 0
                         puts_count = len(result.puts) if result.puts is not None else 0
                         logger.debug(f"[MarketData] Options chain {symbol} {expiry}: {adapter.name} ({elapsed:.0f}ms, {calls_count} calls, {puts_count} puts)")
                         self._cache.set(cache_key, result, DataType.OPTIONS_CHAIN, source=adapter.name)
+
+                        metrics_collector.record_call(
+                            data_type=DataType.OPTIONS_CHAIN,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for options chain {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True
                     continue
 
+            metrics_collector.record_call(
+                data_type=DataType.OPTIONS_CHAIN,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -400,28 +635,66 @@ class MarketDataService:
             market = get_market_for_symbol(symbol)
 
         cache_key = symbol.upper()
+        start_time = time.time()
 
         cached = self._cache.get(cache_key, DataType.EARNINGS)
         if cached is not None:
+            metrics_collector.record_call(
+                data_type=DataType.EARNINGS,
+                symbol=symbol,
+                providers_tried=[],
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=True,
+                success=True,
+            )
             return cached
 
         def fetch():
             providers = self._get_providers_for_data_type(DataType.EARNINGS, market, symbol)
+            providers_tried = []
+            fallback_used = False
+            last_error = None
 
             for adapter in providers:
+                providers_tried.append(adapter.name)
                 try:
-                    start = time.time()
+                    fetch_start = time.time()
                     result = adapter.get_earnings(symbol)
-                    elapsed = (time.time() - start) * 1000
+                    elapsed = (time.time() - fetch_start) * 1000
 
                     if result and not result.empty:
                         logger.debug(f"[MarketData] Earnings {symbol}: {adapter.name} ({elapsed:.0f}ms)")
                         self._cache.set(cache_key, result, DataType.EARNINGS, source=adapter.name)
+
+                        metrics_collector.record_call(
+                            data_type=DataType.EARNINGS,
+                            symbol=symbol,
+                            providers_tried=providers_tried,
+                            provider_used=adapter.name,
+                            latency_ms=(time.time() - start_time) * 1000,
+                            cache_hit=False,
+                            success=True,
+                            fallback_used=fallback_used,
+                        )
                         return result
                 except Exception as e:
                     logger.warning(f"[MarketData] {adapter.name} failed for earnings {symbol}: {e}")
+                    last_error = str(e)
+                    fallback_used = True
                     continue
 
+            metrics_collector.record_call(
+                data_type=DataType.EARNINGS,
+                symbol=symbol,
+                providers_tried=providers_tried,
+                provider_used=None,
+                latency_ms=(time.time() - start_time) * 1000,
+                cache_hit=False,
+                success=False,
+                error_type='all_providers_failed',
+                error_message=last_error,
+            )
             return None
 
         return self._deduplicator.execute(
@@ -429,6 +702,35 @@ class MarketDataService:
             symbol=symbol,
             fetch_fn=fetch
         )
+
+    def get_margin_rate(
+        self,
+        symbol: str,
+        market: Optional[Market] = None
+    ) -> Optional[float]:
+        """
+        Get margin requirement rate for a symbol.
+
+        Returns:
+            Margin rate as a decimal (e.g., 0.25 for 25% margin requirement),
+            or None if unavailable.
+        """
+        if market is None:
+            market = get_market_for_symbol(symbol)
+
+        # Try Tiger adapter first (it's the primary source for margin data)
+        tiger_adapter = self._adapters.get('tiger')
+        if tiger_adapter:
+            try:
+                result = tiger_adapter.get_margin_rate(symbol, market)
+                if result is not None:
+                    return result
+            except Exception as e:
+                logger.warning(f"[MarketData] Tiger get_margin_rate failed for {symbol}: {e}")
+
+        # Margin rate is currently only available from Tiger API
+        # Return None if not available
+        return None
 
     # ─────────────────────────────────────────────────────────────
     # Backward Compatibility Methods
@@ -498,12 +800,46 @@ class MarketDataService:
         return status
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get service statistics."""
+        """Get service statistics including metrics."""
         return {
             'cache': self._cache.stats,
             'deduplication': self._deduplicator.stats,
             'providers': self.get_provider_status(),
+            'metrics': metrics_collector.get_stats(),
         }
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get detailed metrics from the MetricsCollector."""
+        return metrics_collector.get_stats()
+
+    def get_provider_health(self, provider_name: str) -> Dict[str, Any]:
+        """Get health status for a specific provider."""
+        return metrics_collector.get_provider_health(provider_name)
+
+    def get_latency_percentiles(
+        self,
+        provider: Optional[str] = None,
+        data_type: Optional[DataType] = None,
+    ) -> Dict[str, float]:
+        """Get latency percentiles (p50, p90, p95, p99)."""
+        return metrics_collector.get_latency_percentiles(provider, data_type)
+
+    def get_recent_calls(
+        self,
+        limit: int = 100,
+        data_type: Optional[DataType] = None,
+        provider: Optional[str] = None,
+        symbol: Optional[str] = None,
+        errors_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Get recent call records with optional filtering."""
+        return metrics_collector.get_recent_calls(
+            limit=limit,
+            data_type=data_type,
+            provider=provider,
+            symbol=symbol,
+            errors_only=errors_only,
+        )
 
 
 # Singleton instance

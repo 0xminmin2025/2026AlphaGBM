@@ -61,6 +61,26 @@ class AlphaVantageAdapter(BaseAdapter, DataProviderAdapter):
     def supported_markets(self) -> List[Market]:
         return [Market.US]  # Alpha Vantage primarily supports US stocks
 
+    def supports_symbol(self, symbol: str) -> bool:
+        """
+        Alpha Vantage supports regular stocks but has limited support for indices/futures.
+
+        Returns False for:
+        - Index tickers (^VIX, ^GSPC, ^DJI, etc.)
+        - Futures (GC=F, CL=F, etc.)
+        - Forex pairs (DX-Y.NYB)
+        """
+        # Index tickers start with ^
+        if symbol.startswith('^'):
+            return False
+        # Futures end with =F
+        if symbol.endswith('=F'):
+            return False
+        # Special forex/commodity tickers
+        if symbol.endswith('.NYB'):
+            return False
+        return True
+
     def _is_available(self) -> bool:
         """Check if API key is configured."""
         return bool(self._api_key)

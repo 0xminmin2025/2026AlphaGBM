@@ -1,6 +1,11 @@
 """
 Option Service Backend Logic
 Ported from new_options_module/option_service.py and consolidated with Flask logic
+
+All data access goes through DataProvider (which uses MarketDataService) for:
+- Unified metrics tracking
+- Multi-provider failover
+- Automatic caching
 """
 
 from datetime import datetime, timedelta
@@ -10,12 +15,14 @@ from typing import List, Optional, Union
 import random
 import time
 import numpy as np
+import logging
 
-# Internal services
-from .tiger_client import get_client_manager
-from tigeropen.common.consts import Market
+# Internal services - use DataProvider for all data access
+from .data_provider import DataProvider
 from .option_models import OptionData, OptionChainResponse, ExpirationDate, ExpirationResponse, StockQuote, EnhancedAnalysisResponse, VRPResult as VRPResultModel, RiskAnalysis as RiskAnalysisModel
 from .option_scorer import OptionScorer
+
+logger = logging.getLogger(__name__)
 
 # Try importing Phase 1 modules
 try:
@@ -170,38 +177,50 @@ class OptionsService:
 
     @staticmethod
     def get_expirations(symbol: str) -> ExpirationResponse:
+        """Get option expiration dates using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
             if not USE_MOCK_DATA:
                 try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
+                    # Use DataProvider for unified data access with metrics tracking
+                    provider = DataProvider(symbol)
+                    expiry_dates = provider.options  # Returns tuple of date strings
 
-                    if client.quote_client:
-                        market = Market.US if not symbol.endswith('.HK') else Market.HK
-                        expirations_df = client.get_option_expirations(symbol, market)
+                    if expiry_dates:
                         expirations = []
-                        for _, row in expirations_df.iterrows():
-                            expirations.append(ExpirationDate(
-                                date=row['date'],
-                                timestamp=int(row['timestamp']),
-                                period_tag=row['period_tag']
-                            ))
-                        return ExpirationResponse(symbol=symbol, expirations=expirations)
-                except Exception as e:
-                    print(f"⚠️ Tiger API failed: {e}")
+                        for date_str in expiry_dates:
+                            try:
+                                # Parse date and create ExpirationDate
+                                exp_date = datetime.strptime(date_str, "%Y-%m-%d")
+                                # Determine period tag (weekly/monthly)
+                                is_monthly = exp_date.day >= 15 and exp_date.day <= 21 and exp_date.weekday() == 4
+                                period_tag = "m" if is_monthly else "w"
 
+                                expirations.append(ExpirationDate(
+                                    date=date_str,
+                                    timestamp=int(exp_date.timestamp() * 1000),
+                                    period_tag=period_tag
+                                ))
+                            except ValueError:
+                                continue
+
+                        if expirations:
+                            return ExpirationResponse(symbol=symbol, expirations=expirations)
+                except Exception as e:
+                    logger.warning(f"DataProvider options failed for {symbol}: {e}")
+
+            # Fallback to mock data
             expirations = mock_generator.generate_expirations(symbol)
             return ExpirationResponse(symbol=symbol, expirations=expirations)
         except Exception as e:
-             raise e
+            raise e
 
     @staticmethod
     def get_option_chain(symbol: str, expiry_date: str) -> OptionChainResponse:
+        """Get option chain using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
-            
+
             # Validate format
             try:
                 datetime.strptime(expiry_date, "%Y-%m-%d")
@@ -210,108 +229,134 @@ class OptionsService:
 
             if not USE_MOCK_DATA:
                 try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
+                    # Use DataProvider for unified data access with metrics tracking
+                    provider = DataProvider(symbol)
 
-                    if client.quote_client:
-                        market = Market.US if not symbol.endswith('.HK') else Market.HK
-                        option_chain_df = client.get_option_chain(symbol, expiry_date, market)
+                    # Get stock price first
+                    info = provider.info
+                    real_stock_price = info.get('regularMarketPrice') or info.get('currentPrice') or 150.0
 
-                        # Debug: log DataFrame columns and sample data
-                        import logging
-                        _logger = logging.getLogger(__name__)
-                        _logger.info(f"[OptionChain] Tiger API returned {len(option_chain_df)} rows for {symbol} {expiry_date}")
-                        _logger.info(f"[OptionChain] Columns: {list(option_chain_df.columns)}")
-                        if len(option_chain_df) > 0:
-                            sample = option_chain_df.iloc[0]
-                            _logger.info(f"[OptionChain] Sample row greeks - delta: {sample.get('delta', 'MISSING')}, "
-                                        f"gamma: {sample.get('gamma', 'MISSING')}, "
-                                        f"theta: {sample.get('theta', 'MISSING')}, "
-                                        f"vega: {sample.get('vega', 'MISSING')}, "
-                                        f"latest_price: {sample.get('latest_price', 'MISSING')}")
+                    # Get option chain
+                    chain = provider.option_chain(expiry_date)
 
+                    if chain and chain.calls is not None and chain.puts is not None:
                         calls = []
                         puts = []
-                        real_stock_price = 150.0  # Default price
-                        try:
-                            stock_data = client.get_stock_quote([symbol])
-                            if len(stock_data) > 0:
-                                real_stock_price = float(stock_data['latest_price'].iloc[0])
-                        except:
-                            pass  # Keep default price
 
-                        for _, row in option_chain_df.iterrows():
-                            option_data = OptionData(
-                                identifier=row['identifier'],
-                                symbol=row['symbol'],
-                                strike=float(row['strike']),
-                                put_call=row['put_call'],
-                                expiry_date=expiry_date,
-                                bid_price=float(row.get('bid_price', 0)) if pd.notna(row.get('bid_price', 0)) else None,
-                                ask_price=float(row.get('ask_price', 0)) if pd.notna(row.get('ask_price', 0)) else None,
-                                latest_price=float(row.get('latest_price', 0)) if pd.notna(row.get('latest_price', 0)) else None,
-                                volume=int(row.get('volume', 0)) if pd.notna(row.get('volume', 0)) else None,
-                                open_interest=int(row.get('open_interest', 0)) if pd.notna(row.get('open_interest', 0)) else None,
-                                implied_vol=float(row.get('implied_vol', 0)) if pd.notna(row.get('implied_vol', 0)) else None,
-                                delta=float(row.get('delta', 0)) if pd.notna(row.get('delta', 0)) else None,
-                                gamma=float(row.get('gamma', 0)) if pd.notna(row.get('gamma', 0)) else None,
-                                theta=float(row.get('theta', 0)) if pd.notna(row.get('theta', 0)) else None,
-                                vega=float(row.get('vega', 0)) if pd.notna(row.get('vega', 0)) else None
-                            )
+                        # Get margin rate for scoring
+                        margin_rate = provider.get_margin_rate()
 
-                            margin_rate = client.get_margin_rate(symbol, market)
-                            option_data.scores = option_scorer.score_option(option_data, real_stock_price, margin_rate)
+                        logger.info(f"[OptionChain] DataProvider returned chain for {symbol} {expiry_date}")
 
-                            if row['put_call'] == 'CALL':
+                        # Process calls
+                        if not chain.calls.empty:
+                            for _, row in chain.calls.iterrows():
+                                option_data = OptionsService._row_to_option_data(row, symbol, expiry_date, 'CALL')
+                                option_data.scores = option_scorer.score_option(option_data, real_stock_price, margin_rate)
                                 calls.append(option_data)
-                            else:
+
+                        # Process puts
+                        if not chain.puts.empty:
+                            for _, row in chain.puts.iterrows():
+                                option_data = OptionsService._row_to_option_data(row, symbol, expiry_date, 'PUT')
+                                option_data.scores = option_scorer.score_option(option_data, real_stock_price, margin_rate)
                                 puts.append(option_data)
 
-                        return OptionChainResponse(
-                            symbol=symbol,
-                            expiry_date=expiry_date,
-                            calls=calls,
-                            puts=puts,
-                            data_source="real",
-                            real_stock_price=real_stock_price
-                        )
+                        if calls or puts:
+                            return OptionChainResponse(
+                                symbol=symbol,
+                                expiry_date=expiry_date,
+                                calls=calls,
+                                puts=puts,
+                                data_source="real",
+                                real_stock_price=real_stock_price
+                            )
                 except Exception as e:
-                    print(f"⚠️ Tiger API failed: {e}")
-            
-            # Mock fallback
+                    logger.warning(f"DataProvider option_chain failed for {symbol}: {e}")
+
+            # Mock fallback - try to get real stock price first
+            real_price = None
             try:
-                 client = get_client_manager()
-                 if client.quote_client:
-                     stock_data = client.get_stock_quote([symbol])
-                     if len(stock_data) > 0:
-                         real_price = float(stock_data['latest_price'].iloc[0])
-                         return mock_generator.generate_option_chain(symbol, expiry_date, real_price)
+                provider = DataProvider(symbol)
+                info = provider.info
+                real_price = info.get('regularMarketPrice') or info.get('currentPrice')
             except:
                 pass
-            return mock_generator.generate_option_chain(symbol, expiry_date)
+
+            return mock_generator.generate_option_chain(symbol, expiry_date, real_price)
 
         except Exception as e:
             raise e
 
     @staticmethod
+    def _row_to_option_data(row: pd.Series, symbol: str, expiry_date: str, put_call: str) -> OptionData:
+        """Convert a DataFrame row to OptionData object."""
+        def safe_float(val, default=None):
+            if pd.notna(val):
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    pass
+            return default
+
+        def safe_int(val, default=None):
+            if pd.notna(val):
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+            return default
+
+        # Handle different column naming conventions
+        strike = safe_float(row.get('strike') or row.get('strike_price'))
+        latest_price = safe_float(row.get('lastPrice') or row.get('latest_price') or row.get('lastTradePrice'))
+        bid = safe_float(row.get('bid') or row.get('bid_price'))
+        ask = safe_float(row.get('ask') or row.get('ask_price'))
+        volume = safe_int(row.get('volume'))
+        open_interest = safe_int(row.get('openInterest') or row.get('open_interest'))
+        implied_vol = safe_float(row.get('impliedVolatility') or row.get('implied_vol') or row.get('volatility'))
+        delta = safe_float(row.get('delta'))
+        gamma = safe_float(row.get('gamma'))
+        theta = safe_float(row.get('theta'))
+        vega = safe_float(row.get('vega'))
+
+        # Generate identifier if not present
+        identifier = row.get('identifier') or row.get('contractSymbol') or f"{symbol}{expiry_date.replace('-', '')}{put_call[0]}{int((strike or 0)*1000):08d}"
+
+        return OptionData(
+            identifier=identifier,
+            symbol=symbol,
+            strike=strike or 0.0,
+            put_call=put_call,
+            expiry_date=expiry_date,
+            bid_price=bid,
+            ask_price=ask,
+            latest_price=latest_price,
+            volume=volume,
+            open_interest=open_interest,
+            implied_vol=implied_vol,
+            delta=delta,
+            gamma=gamma,
+            theta=theta,
+            vega=vega
+        )
+
+    @staticmethod
     def get_stock_history(symbol: str, days: int = 60):
-        """Get stock OHLC history data using yfinance"""
+        """Get stock OHLC history data using DataProvider (unified data access)."""
         try:
-            import yfinance as yf
-
             symbol = symbol.upper()
-            print(f"Fetching {days} days of history for {symbol} using yfinance...")
+            logger.info(f"Fetching {days} days of history for {symbol} using DataProvider...")
 
-            # Use yfinance to get real OHLC data
-            stock = yf.Ticker(symbol)
+            # Use DataProvider with automatic multi-provider fallback
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days + 10)  # Extra days to ensure enough data
 
+            stock = DataProvider(symbol)
             hist = stock.history(start=start_date, end=end_date)
 
             if hist.empty:
-                print(f"No history data returned for {symbol}")
+                logger.warning(f"No history data returned for {symbol}")
                 return {"symbol": symbol, "data": [], "error": "No data available"}
 
             # Convert to candlestick format for lightweight-charts
@@ -334,35 +379,46 @@ class OptionsService:
             if len(candlestick_data) > days:
                 candlestick_data = candlestick_data[-days:]
 
-            print(f"Successfully fetched {len(candlestick_data)} days of OHLC data for {symbol}")
+            logger.info(f"Successfully fetched {len(candlestick_data)} days of OHLC data for {symbol}")
             return {"symbol": symbol, "data": candlestick_data}
 
         except Exception as e:
-            print(f"Error fetching stock history for {symbol}: {e}")
+            logger.error(f"Error fetching stock history for {symbol}: {e}")
             return {"symbol": symbol, "data": [], "error": str(e)}
 
     @staticmethod
     def get_stock_quote(symbol):
+        """Get stock quote using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
             if not USE_MOCK_DATA:
                 try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
-                    quote_df = client.get_stock_quote([symbol])
-                    if len(quote_df) > 0:
-                        row = quote_df.iloc[0]
-                        return StockQuote(
-                            symbol=symbol,
-                            latest_price=float(row['latest_price']),
-                            change=float(row.get('change', 0)),
-                            change_percent=float(row.get('change_percent', 0)),
-                            volume=int(row.get('volume', 0))
-                        )
-                except Exception:
-                    pass
-            
+                    provider = DataProvider(symbol)
+                    info = provider.info
+
+                    if info:
+                        current_price = info.get('regularMarketPrice') or info.get('currentPrice')
+                        prev_close = info.get('regularMarketPreviousClose') or info.get('previousClose')
+                        volume = info.get('regularMarketVolume') or info.get('volume') or 0
+
+                        if current_price:
+                            change = 0.0
+                            change_percent = 0.0
+                            if prev_close and prev_close > 0:
+                                change = current_price - prev_close
+                                change_percent = (change / prev_close) * 100
+
+                            return StockQuote(
+                                symbol=symbol,
+                                latest_price=float(current_price),
+                                change=float(change),
+                                change_percent=float(change_percent),
+                                volume=int(volume)
+                            )
+                except Exception as e:
+                    logger.warning(f"DataProvider get_stock_quote failed for {symbol}: {e}")
+
+            # Mock fallback
             return StockQuote(
                 symbol=symbol,
                 latest_price=150.25,
@@ -375,36 +431,34 @@ class OptionsService:
 
     @staticmethod
     def get_enhanced_analysis(symbol: str, option_identifier: str) -> EnhancedAnalysisResponse:
+        """Get enhanced options analysis using DataProvider (unified data access)."""
         if not PHASE1_AVAILABLE or not vrp_calculator or not risk_adjuster:
-             return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
-        
+            return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
+
         try:
             symbol = symbol.upper()
-            
-            # 1. Price History
-            client = get_client_manager()
-            if client.quote_client is None:
-                client.initialize_client()
-            
-            market = Market.US if not symbol.endswith('.HK') else Market.HK
-            price_history = client.get_stock_history(symbol, days=60, market=market)
-            
-            if not price_history or len(price_history) < 30:
+
+            # 1. Get price history using DataProvider
+            provider = DataProvider(symbol)
+            hist = provider.history(period='3mo')  # ~60 trading days
+
+            if hist.empty or len(hist) < 30:
                 return EnhancedAnalysisResponse(
                     symbol=symbol, option_identifier=option_identifier, vrp_result=None, risk_analysis=None, available=True
                 )
-            
-            # 2. VRP
-            import math
-            import numpy as np
+
+            # Extract close prices as a list
+            price_history = hist['Close'].tolist()
+
+            # 2. Calculate VRP
             returns = []
             for i in range(1, len(price_history)):
                 if price_history[i-1] > 0:
-                     returns.append(math.log(price_history[i] / price_history[i-1]))
-            
+                    returns.append(math.log(price_history[i] / price_history[i-1]))
+
             if returns:
                 hist_vol = np.std(returns) * math.sqrt(252)
-                estimated_iv = hist_vol # Placeholder
+                estimated_iv = hist_vol  # Placeholder
                 vrp_result_data = vrp_calculator.calculate_vrp_result(
                     current_iv=estimated_iv,
                     price_history=price_history
@@ -424,12 +478,12 @@ class OptionsService:
                 symbol=symbol,
                 option_identifier=option_identifier,
                 vrp_result=vrp_result,
-                risk_analysis=None, # Requires specific option data retrieval which is separate
+                risk_analysis=None,  # Requires specific option data retrieval which is separate
                 available=True
             )
         except Exception as e:
-             print(f"Error in enhanced analysis: {e}")
-             return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
+            logger.error(f"Error in enhanced analysis: {e}")
+            return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
 
     @staticmethod
     def reverse_score_option(symbol: str, option_type: str, strike: float,
@@ -450,15 +504,22 @@ class OptionsService:
             包含评分结果的字典
         """
         try:
-            import yfinance as yf
             from datetime import datetime
+
+            # Import DataProvider for multi-provider support
+            try:
+                from .data_provider import DataProvider
+            except ImportError:
+                DataProvider = None
 
             symbol = symbol.upper()
             option_type = option_type.upper()
 
-            # 1. 获取股票当前价格和数据（多重容错）
-            ticker = yf.Ticker(symbol)
+            # 1. 获取股票当前价格和数据（使用DataProvider统一数据访问）
+            ticker = DataProvider(symbol)
+
             current_price = None
+            info = {}
 
             # 方法1: 从 info 获取
             try:
@@ -468,7 +529,6 @@ class OptionsService:
                     current_price = float(current_price)
             except Exception as e:
                 print(f"从 ticker.info 获取 {symbol} 价格失败: {e}")
-                info = {}
 
             # 方法2: 从最近历史数据获取
             if not current_price:
@@ -479,8 +539,8 @@ class OptionsService:
                 except Exception as e:
                     print(f"从 ticker.history 获取 {symbol} 价格失败: {e}")
 
-            # 方法3: 从 fast_info 获取
-            if not current_price:
+            # 方法3: 从 fast_info 获取 (yfinance only)
+            if not current_price and hasattr(ticker, 'fast_info'):
                 try:
                     fast_info = ticker.fast_info
                     current_price = float(fast_info.get('lastPrice', 0) or fast_info.get('previousClose', 0))

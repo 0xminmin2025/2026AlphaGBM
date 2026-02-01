@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from collections import OrderedDict
 
 from .interfaces import DataType
-from .config import CacheConfig
+from .config import CacheConfig, get_provider_cache_ttl
 
 logger = logging.getLogger(__name__)
 
@@ -168,19 +168,23 @@ class MultiLevelCache:
             "l1_misses": 0,
         }
 
-    def _get_ttl(self, data_type: DataType) -> int:
-        """Get TTL in seconds for a data type."""
-        ttl_map = {
-            DataType.QUOTE: self._config.memory_ttl_quote,
-            DataType.HISTORY: self._config.memory_ttl_history,
-            DataType.FUNDAMENTALS: self._config.memory_ttl_fundamentals,
-            DataType.INFO: self._config.memory_ttl_info,
-            DataType.OPTIONS_CHAIN: self._config.memory_ttl_options,
-            DataType.OPTIONS_EXPIRATIONS: self._config.memory_ttl_options,
-            DataType.EARNINGS: self._config.memory_ttl_fundamentals,
-            DataType.MACRO: self._config.memory_ttl_quote,
-        }
-        return ttl_map.get(data_type, 300)  # Default 5 minutes
+    def _get_ttl(self, data_type: DataType, source: Optional[str] = None) -> int:
+        """
+        Get TTL in seconds for a data type.
+
+        Args:
+            data_type: Type of data being cached
+            source: Optional provider name for per-provider TTL
+
+        Returns:
+            TTL in seconds
+        """
+        # Use per-provider TTL if source is specified
+        if source:
+            return get_provider_cache_ttl(source, data_type)
+
+        # Fall back to default config
+        return self._config.get_default_ttl(data_type)
 
     def _make_key(self, cache_key: str, data_type: DataType) -> str:
         """Create internal cache key."""
@@ -226,14 +230,15 @@ class MultiLevelCache:
             cache_key: Cache key (usually "symbol" or "symbol:params")
             value: Value to cache
             data_type: Type of data being cached
-            source: Which provider returned this data
+            source: Which provider returned this data (used for per-provider TTL)
             ttl_override: Override default TTL for this data type
         """
         if not self._config.memory_enabled:
             return
 
         key = self._make_key(cache_key, data_type)
-        ttl = ttl_override if ttl_override is not None else self._get_ttl(data_type)
+        # Use per-provider TTL based on source, or override if specified
+        ttl = ttl_override if ttl_override is not None else self._get_ttl(data_type, source)
 
         self._memory_cache.set(
             key=key,

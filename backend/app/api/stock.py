@@ -9,7 +9,6 @@ from ..utils.serialization import convert_numpy_types
 from ..models import db, ServiceType, StockAnalysisHistory, TaskType, TaskStatus, AnalysisTask, DailyAnalysisCache
 from ..services.data_provider import DataProvider
 from ..constants import detect_market_from_ticker
-import yfinance as yf
 import logging
 import json
 from datetime import datetime, date

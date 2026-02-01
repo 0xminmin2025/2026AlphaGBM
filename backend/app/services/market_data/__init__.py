@@ -39,7 +39,8 @@ from .interfaces import (
     DataProviderAdapter,
     DataFetchResult,
 )
-from .config import ProviderConfig, CacheConfig, PROVIDER_CONFIGS
+from .config import ProviderConfig, CacheConfig, PROVIDER_CONFIGS, ProviderCacheTTL, get_provider_cache_ttl
+from .metrics import MetricsCollector, metrics_collector, CallRecord, CallResult
 
 __all__ = [
     # Main service
@@ -59,4 +60,11 @@ __all__ = [
     "ProviderConfig",
     "CacheConfig",
     "PROVIDER_CONFIGS",
+    "ProviderCacheTTL",
+    "get_provider_cache_ttl",
+    # Metrics
+    "MetricsCollector",
+    "metrics_collector",
+    "CallRecord",
+    "CallResult",
 ]

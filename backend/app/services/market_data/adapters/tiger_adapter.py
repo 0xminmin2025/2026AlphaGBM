@@ -71,6 +71,26 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
     def supported_markets(self) -> List[Market]:
         return [Market.US, Market.HK, Market.CN]
 
+    def supports_symbol(self, symbol: str) -> bool:
+        """
+        Tiger API supports regular stocks but not indices/futures.
+
+        Returns False for:
+        - Index tickers (^VIX, ^GSPC, ^DJI, etc.)
+        - Futures (GC=F, CL=F, etc.)
+        - Forex pairs (DX-Y.NYB)
+        """
+        # Index tickers start with ^
+        if symbol.startswith('^'):
+            return False
+        # Futures end with =F
+        if symbol.endswith('=F'):
+            return False
+        # Special forex/commodity tickers
+        if symbol.endswith('.NYB'):
+            return False
+        return True
+
     def _get_tiger_market(self, market: Market) -> object:
         """Convert our Market enum to Tiger's Market."""
         if not TIGER_AVAILABLE:
@@ -172,19 +192,16 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             return None
 
         try:
-            market = get_market_for_symbol(symbol)
-            tiger_market = self._get_tiger_market(market)
-
             # Calculate time range
             end_time = int(datetime.now().timestamp() * 1000)
             limit = self._period_to_limit(period) if period else 60
 
+            # Note: get_bars doesn't accept market param - it infers from symbol
             bars = self._quote_client.get_bars(
                 symbols=[symbol],
                 period=BarPeriod.DAY,
                 end_time=end_time,
                 limit=limit,
-                market=tiger_market
             )
 
             if bars is None or bars.empty:
@@ -665,9 +682,6 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             return None
 
         try:
-            market = get_market_for_symbol(symbol)
-            tiger_market = self._get_tiger_market(market)
-
             # Map period string to BarPeriod
             period_map = {
                 "1min": BarPeriod.ONE_MINUTE,
@@ -682,10 +696,10 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             }
             bar_period = period_map.get(period, BarPeriod.DAY)
 
+            # Note: get_bars_by_page doesn't accept market param - infers from symbol
             result = self._quote_client.get_bars_by_page(
                 symbol=symbol,
                 period=bar_period,
-                market=tiger_market,
                 page_token=page_token,
                 limit=min(limit, 1200)
             )
@@ -840,4 +854,41 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
 
         except Exception as e:
             logger.warning(f"[Tiger] get_all_symbols failed: {e}")
+            return None
+
+    def get_margin_rate(self, symbol: str, market: Optional[Market] = None) -> Optional[float]:
+        """
+        Get margin requirement rate for a symbol.
+
+        Returns:
+            Margin rate as a decimal (e.g., 0.25 for 25% margin requirement),
+            or None if unavailable.
+        """
+        if not self._ensure_initialized():
+            return None
+
+        if market is None:
+            market = get_market_for_symbol(symbol)
+
+        try:
+            stock_data = self._quote_client.get_stock_briefs([symbol])
+
+            if stock_data is not None and not stock_data.empty:
+                # Try margin_rate column first
+                if 'margin_rate' in stock_data.columns:
+                    margin_rate = stock_data['margin_rate'].iloc[0]
+                    if pd.notna(margin_rate) and margin_rate > 0:
+                        return float(margin_rate)
+                # Try margin_requirement column as fallback
+                elif 'margin_requirement' in stock_data.columns:
+                    margin_req = stock_data['margin_requirement'].iloc[0]
+                    if pd.notna(margin_req):
+                        # Convert percentage to decimal if needed
+                        if margin_req > 1:
+                            return float(margin_req) / 100.0
+                        return float(margin_req)
+            return None
+
+        except Exception as e:
+            logger.warning(f"[Tiger] get_margin_rate failed for {symbol}: {e}")
             return None

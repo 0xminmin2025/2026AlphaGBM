@@ -334,15 +334,10 @@ class SectorRotationAnalyzer:
                 if datetime.now() - cached_time < timedelta(minutes=5):
                     return cached_data
 
-            # 使用DataProvider或直接使用yfinance
-            if self.data_provider:
-                from ...services.data_provider import DataProvider
-                provider = DataProvider(ticker)
-                hist = provider.history(period="3mo", timeout=10)
-            else:
-                import yfinance as yf
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period="3mo")
+            # 使用DataProvider获取数据（统一数据访问）
+            from ....services.data_provider import DataProvider
+            provider = DataProvider(ticker)
+            hist = provider.history(period="3mo", timeout=10)
 
             if hist is None or hist.empty:
                 return None

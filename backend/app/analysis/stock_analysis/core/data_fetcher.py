@@ -5,7 +5,6 @@
 
 import pandas as pd
 import numpy as np
-import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -13,19 +12,8 @@ import time
 import logging
 from typing import Dict, Any, Optional
 
-# 导入yfinance的异常类
-try:
-    from yfinance.exceptions import YFRateLimitError
-except ImportError:
-    # 如果导入失败，定义一个占位符
-    YFRateLimitError = type('YFRateLimitError', (Exception,), {})
-
-# 导入DataProvider (yfinance + defeatbeta fallback)
-try:
-    from ....services.data_provider import DataProvider
-except ImportError:
-    # Fallback: use yfinance directly if DataProvider unavailable
-    DataProvider = None
+# Use DataProvider for unified data access with metrics tracking
+from ....services.data_provider import DataProvider
 
 # 导入配置参数
 try:
@@ -53,10 +41,8 @@ class StockDataFetcher:
 
     @staticmethod
     def _create_ticker(symbol: str):
-        """Create a ticker object using DataProvider (with defeatbeta fallback) or yfinance."""
-        if DataProvider is not None:
-            return DataProvider(symbol)
-        return yf.Ticker(symbol)
+        """Create a ticker object using DataProvider (unified data access)."""
+        return DataProvider(symbol)
 
     def normalize_ticker(self, ticker: str) -> str:
         """
