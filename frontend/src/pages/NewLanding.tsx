@@ -599,7 +599,7 @@ export default function NewLanding() {
                         </div>
                     </div>
                     <div className="mt-6 text-center text-[var(--text-muted)] text-xs">
-                        244 - 248 Des Voeux Rd Central, Central, Hong Kong
+                        FLAT 1503 15/F CARNIVAL COMMERCIAL BUILDING 18 JAVA ROAD NORTH POINT HK
                     </div>
                     <div className="mt-4 text-center text-[var(--text-muted)] text-xs">
                         {isZh

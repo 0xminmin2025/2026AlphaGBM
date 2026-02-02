@@ -1137,7 +1137,7 @@ export default function Landing() {
                         <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
                             <span className="font-bold text-lg sm:text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>GBM</span></span>
                         </div>
-                        <p className="text-slate-600 text-xs sm:text-sm mb-4">244 - 248 Des Voeux Rd Central, Central, Hong Kong</p>
+                        <p className="text-slate-600 text-xs sm:text-sm mb-4">FLAT 1503 15/F CARNIVAL COMMERCIAL BUILDING 18 JAVA ROAD NORTH POINT HK</p>
                         <p className="text-slate-600 text-xs sm:text-sm max-w-2xl mx-auto mb-4 leading-relaxed px-4 sm:px-0">{content.footer.disclaimer}</p>
                         <div className="flex items-center gap-4 flex-wrap justify-center">
                             <p className="text-slate-700 text-xs sm:text-sm">{content.footer.copy}</p>

@@ -198,7 +198,7 @@ export default function MainLayout() {
             <footer className="py-6 sm:py-8 border-t border-white/10 bg-[#09090B]">
                 <div className="container flex flex-col items-center justify-center gap-4 text-center px-4 sm:px-8 max-w-7xl mx-auto">
                     <p className="text-xs sm:text-sm text-slate-500">
-                        244 - 248 Des Voeux Rd Central, Central, Hong Kong
+                        FLAT 1503 15/F CARNIVAL COMMERCIAL BUILDING 18 JAVA ROAD NORTH POINT HK
                     </p>
                     <div className="flex items-center gap-6 flex-wrap justify-center">
                         <p className="text-xs sm:text-sm text-slate-500">
