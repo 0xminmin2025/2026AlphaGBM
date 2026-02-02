@@ -598,7 +598,10 @@ export default function NewLanding() {
                             <PrivacyPolicy />
                         </div>
                     </div>
-                    <div className="mt-8 text-center text-[var(--text-muted)] text-xs">
+                    <div className="mt-6 text-center text-[var(--text-muted)] text-xs">
+                        244 - 248 Des Voeux Rd Central, Central, Hong Kong
+                    </div>
+                    <div className="mt-4 text-center text-[var(--text-muted)] text-xs">
                         {isZh
                             ? '免责声明：本平台仅供学习和研究使用，不构成任何投资建议。投资有风险，入市需谨慎。'
                             : 'Disclaimer: This platform is for educational and research purposes only. Not financial advice. Invest responsibly.'}
