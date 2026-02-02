@@ -770,7 +770,11 @@ export default function Home() {
         return 'text-danger';
     };
 
-    const getRating = (score: number) => {
+    const getRating = (score: number, suggestedPosition?: number) => {
+        // 如果建议仓位为0，无论风险评分如何，都返回"观望"
+        if (suggestedPosition !== undefined && suggestedPosition <= 0) {
+            return { text: t('stock.rating.watch'), class: 'text-warning' };
+        }
         if (score >= 6) return { text: t('stock.rating.watch'), class: 'text-warning' };
         if (score >= 4) return { text: t('stock.rating.neutral'), class: 'text-warning' };
         if (score >= 2) return { text: t('stock.rating.add'), class: 'text-success' };
@@ -1069,7 +1073,7 @@ export default function Home() {
                     const d = result.data;
                     const r = result.risk;
                     const sentiment = d.market_sentiment ?? 5.0;
-                    const rating = getRating(r.score);
+                    const rating = getRating(r.score, r.suggested_position);
                     const styleName = style === 'quality' ? t('landing.styles.quality.name') : 
                                      style === 'value' ? t('landing.styles.value.name') :
                                      style === 'growth' ? t('landing.styles.growth.name') :
