@@ -41,6 +41,15 @@ from .interfaces import (
 )
 from .config import ProviderConfig, CacheConfig, PROVIDER_CONFIGS, ProviderCacheTTL, get_provider_cache_ttl
 from .metrics import MetricsCollector, metrics_collector, CallRecord, CallResult
+from .market_detector import (
+    detect_market,
+    detect_market_with_exchange,
+    normalize_symbol,
+    get_market_name,
+    is_a_share,
+    is_hk_stock,
+    is_us_stock,
+)
 
 __all__ = [
     # Main service
@@ -67,4 +76,12 @@ __all__ = [
     "metrics_collector",
     "CallRecord",
     "CallResult",
+    # Market Detection
+    "detect_market",
+    "detect_market_with_exchange",
+    "normalize_symbol",
+    "get_market_name",
+    "is_a_share",
+    "is_hk_stock",
+    "is_us_stock",
 ]

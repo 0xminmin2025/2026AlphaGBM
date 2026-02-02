@@ -293,15 +293,54 @@ def is_index_etf(symbol: str) -> bool:
     return symbol.upper() in INDEX_ETFS
 
 
+# A-share stock code prefix rules (for 6-digit codes without suffix)
+CN_STOCK_PREFIX_RULES = {
+    '60': 'SS',    # Shanghai Main Board
+    '68': 'SS',    # Shanghai STAR Market (科创板)
+    '00': 'SZ',    # Shenzhen Main Board
+    '30': 'SZ',    # Shenzhen ChiNext (创业板)
+}
+
+
 def get_market_for_symbol(symbol: str) -> Market:
-    """Determine market for a symbol based on suffix/pattern."""
-    symbol_upper = symbol.upper()
+    """
+    Determine market for a symbol based on suffix/pattern.
+
+    Detection rules:
+    1. Suffix-based: .HK → HK, .SS/.SZ → CN
+    2. Prefix-based: 6-digit codes starting with 60/68/00/30 → CN
+    3. Default: US market
+
+    Examples:
+        AAPL → US
+        0700.HK → HK
+        600519 → CN (Shanghai, Moutai)
+        000001 → CN (Shenzhen, Ping An)
+        600519.SS → CN
+
+    Args:
+        symbol: Stock ticker symbol
+
+    Returns:
+        Market enum (US, HK, or CN)
+    """
+    symbol_upper = symbol.upper().strip()
+
+    # 1. Check suffix first
     if symbol_upper.endswith(".HK"):
         return Market.HK
     elif symbol_upper.endswith(".SS") or symbol_upper.endswith(".SZ"):
         return Market.CN
-    else:
-        return Market.US
+
+    # 2. Check if it's a 6-digit A-share code (without suffix)
+    base_ticker = symbol_upper.split('.')[0]
+    if base_ticker.isdigit() and len(base_ticker) == 6:
+        prefix = base_ticker[:2]
+        if prefix in CN_STOCK_PREFIX_RULES:
+            return Market.CN
+
+    # 3. Default to US market
+    return Market.US
 
 
 def get_timezone_for_market(market: Market) -> str:

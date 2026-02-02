@@ -1,25 +1,30 @@
 """
-系统配置参数 - 向后兼容模块
+Parameters Module
 
-DEPRECATED: This module is maintained for backward compatibility.
-New code should import directly from app.params:
+Centralized configuration parameters for the AlphaGBM backend.
+All configuration parameters are organized into logical modules:
 
-    from app.params import GROWTH_DISCOUNT_FACTOR, get_market_config
-    from app.params.valuation import PE_PERCENTILE_SENTIMENT
+- valuation: Stock valuation parameters (growth, PEG, PE percentiles)
+- risk_management: Risk and stop loss parameters (ATR, Beta, VIX)
+- market: Market-specific configurations (US, CN, HK)
+- sector_rotation: Sector rotation analysis parameters
+- capital_structure: Capital flow and structure analysis
+
+Usage:
+    # Import specific parameters
+    from app.params.valuation import GROWTH_DISCOUNT_FACTOR
     from app.params.risk_management import ATR_PERIOD
+    from app.params.market import get_market_config
 
-All parameters are now organized in app/params/:
-- valuation.py: Growth, PEG, PE parameters
-- risk_management.py: ATR, Beta, VIX parameters
-- market.py: Market-specific configurations
-- sector_rotation.py: Sector rotation config
-- capital_structure.py: Capital structure config
+    # Or import from this module (all re-exported)
+    from app.params import GROWTH_DISCOUNT_FACTOR, get_market_config
+
+    # Or use backward-compatible constants.py
+    from app.constants import GROWTH_DISCOUNT_FACTOR
 """
 
-# ==================== Re-export from params modules ====================
-
-# Valuation Parameters
-from .params.valuation import (
+# ==================== Valuation Parameters ====================
+from .valuation import (
     GROWTH_DISCOUNT_FACTOR,
     TECHNICAL_SENTIMENT_BOOST,
     PRICE_POSITION_LOW,
@@ -37,8 +42,8 @@ from .params.valuation import (
     WEIGHT_EARNINGS_LAG,
 )
 
-# Risk Management Parameters
-from .params.risk_management import (
+# ==================== Risk Management Parameters ====================
+from .risk_management import (
     ATR_PERIOD,
     ATR_MULTIPLIER_BASE,
     ATR_MULTIPLIER_MIN,
@@ -68,8 +73,8 @@ from .params.risk_management import (
     VOLUME_ANOMALY_LOW,
 )
 
-# Market Configuration
-from .params.market import (
+# ==================== Market Configuration ====================
+from .market import (
     MARKET_CONFIG,
     MARKET_STYLE_WEIGHTS,
     TICKER_SUFFIX_TO_MARKET,
@@ -79,51 +84,21 @@ from .params.market import (
     adjust_parameter_for_market,
 )
 
-# Sector Rotation Configuration
-from .params.sector_rotation import (
+# ==================== Sector Rotation Configuration ====================
+from .sector_rotation import (
     SECTOR_ROTATION_CONFIG,
     get_sector_rotation_config,
     get_market_rotation_adjustment,
 )
 
-# Capital Structure Configuration
-from .params.capital_structure import (
+# ==================== Capital Structure Configuration ====================
+from .capital_structure import (
     CAPITAL_STRUCTURE_CONFIG,
     get_capital_structure_config,
     get_propagation_stage_factor,
     get_persistence_probability,
 )
 
-
-# ==================== Market Detection (Backward Compatibility) ====================
-
-def detect_market_from_ticker(ticker: str) -> str:
-    """
-    根据股票代码识别市场
-
-    NOTE: This function delegates to the unified market detector.
-    Consider using `from app.services.market_data import detect_market` directly.
-
-    Args:
-        ticker: 股票代码
-
-    Returns:
-        市场代码 ('US', 'CN', 'HK')
-
-    Examples:
-        >>> detect_market_from_ticker("AAPL")
-        'US'
-        >>> detect_market_from_ticker("600519")
-        'CN'
-        >>> detect_market_from_ticker("0700.HK")
-        'HK'
-    """
-    from app.services.market_data import detect_market
-    market = detect_market(ticker)
-    return market.value.upper()
-
-
-# ==================== Module Exports ====================
 
 __all__ = [
     # Valuation
@@ -178,7 +153,6 @@ __all__ = [
     'get_market_config',
     'get_market_style_weights',
     'adjust_parameter_for_market',
-    'detect_market_from_ticker',
     # Sector Rotation
     'SECTOR_ROTATION_CONFIG',
     'get_sector_rotation_config',

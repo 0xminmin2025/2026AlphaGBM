@@ -9,7 +9,6 @@ from datetime import datetime
 import traceback
 
 from .data_fetcher import OptionsDataFetcher
-from .tiger_client import TigerOptionsClient
 from ..scoring.sell_put import SellPutScorer
 from ..scoring.sell_call import SellCallScorer
 from ..scoring.buy_put import BuyPutScorer
@@ -27,7 +26,6 @@ class OptionsAnalysisEngine:
     def __init__(self):
         """初始化期权分析引擎"""
         self.data_fetcher = OptionsDataFetcher()
-        self.tiger_client = TigerOptionsClient()
 
         # 期权策略计分器
         self.scorers = {
