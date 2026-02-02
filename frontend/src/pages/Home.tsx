@@ -625,6 +625,30 @@ export default function Home() {
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('analysis');
+
+    // Ref for left column to sync AI Report height
+    const leftColumnRef = useRef<HTMLDivElement>(null);
+    const [aiCardHeight, setAiCardHeight] = useState<number | undefined>(undefined);
+
+    // Sync AI Report card height with left column
+    useEffect(() => {
+        if (!leftColumnRef.current) return;
+
+        const updateHeight = () => {
+            if (leftColumnRef.current) {
+                setAiCardHeight(leftColumnRef.current.offsetHeight);
+            }
+        };
+
+        // Initial measurement
+        updateHeight();
+
+        // Use ResizeObserver for dynamic updates
+        const resizeObserver = new ResizeObserver(updateHeight);
+        resizeObserver.observe(leftColumnRef.current);
+
+        return () => resizeObserver.disconnect();
+    }, [result]); // Re-run when result changes
     // 叙事雷达功能暂时隐藏
     // const [searchParams] = useSearchParams();
     // const initialMode = searchParams.get('mode') === 'narrative' ? 'narrative' : 'manual';
@@ -1102,9 +1126,9 @@ export default function Home() {
                             </div>
 
                             {/* Second Row: Chart + Risk | AI Report */}
-                            <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6 items-start">
                                 {/* Left Column */}
-                                <div className="space-y-4">
+                                <div ref={leftColumnRef} className="space-y-4">
                                     {/* Price Chart */}
                                     <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                         <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
@@ -1166,13 +1190,14 @@ export default function Home() {
                                 </div>
 
                                 {/* Right Column: AI Report */}
-                                <div className="card shadow-md" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div className="card shadow-md" style={{ display: 'flex', flexDirection: 'column', height: aiCardHeight ? `${aiCardHeight}px` : 'auto' }}>
                                     <div style={{
                                         padding: '1.5rem',
                                         display: 'flex',
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
-                                        borderBottom: '1px solid var(--border)'
+                                        borderBottom: '1px solid var(--border)',
+                                        flexShrink: 0
                                     }}>
                                         <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
                                             <i className="bi bi-stars"></i>
@@ -1180,7 +1205,7 @@ export default function Home() {
                                         </h5>
                                         <span className="badge-primary">{t('stock.aiReport.generated')}</span>
                                     </div>
-                                    <div className="overflow-auto" style={{ maxHeight: '650px', padding: '1.5rem' }}>
+                                    <div className="overflow-auto" style={{ flex: 1, padding: '1.5rem', minHeight: 0 }}>
                                         <div
                                             className="ai-summary"
                                             dangerouslySetInnerHTML={{ __html: renderMarkdown(result.report || t('stock.report.noDataAvailable')) }}

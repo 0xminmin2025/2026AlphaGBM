@@ -20,6 +20,7 @@ python-dateutil==2.9.0
 requests==2.32.3
 akshare==1.17.26
 alpha_vantage==3.0.0
+tushare==1.4.19
 apscheduler==3.11.2
 stripe==14.1.0
 supabase==2.25.1

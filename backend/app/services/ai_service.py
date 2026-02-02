@@ -231,6 +231,12 @@ def _compute_alphagbm_recommendation(data, risk_result, style):
     else:
         upside_pct = 0
 
+    # 防护：如果建议仓位为0，强制 upside_pct = 0，避免推荐买入与0%仓位矛盾
+    if suggested_position is None or float(suggested_position) <= 0:
+        suggested_position = 0
+        upside_pct = 0
+        target_price = current_price
+
     # 趋势方向：基于价格 vs MA50 vs MA200
     ma50 = data.get('ma50', 0)
     ma200 = data.get('ma200', 0)
