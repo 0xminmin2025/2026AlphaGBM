@@ -747,6 +747,7 @@ export default function Options() {
     const [selectedRiskStyle, setSelectedRiskStyle] = useState<string | null>(null);
     const [tickerFilter, setTickerFilter] = useState<string[]>([]);  // Multi-stock filter
     const [expiryFilter, setExpiryFilter] = useState<string[]>([]);  // Multi-expiry filter
+    const [activeExpiryTab, setActiveExpiryTab] = useState<'near' | 'weekly' | 'monthly'>('monthly');  // 到期日标签页
 
     // View mode state (analysis vs income)
     const [viewMode, setViewMode] = useState<'analysis' | 'income'>('analysis');
@@ -1771,123 +1772,160 @@ export default function Options() {
                     </div>
                 </div>
 
-                {/* Step 3 & 4: Load Dates + Select Expiry */}
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                    <div className="flex-1 min-w-[200px] flex items-center gap-3">
-                        <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (tickers.length > 0 && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step3')}</span> {t('options.form.step3Label')}
+                {/* Step 3: 选择到期日 */}
+                <div className="mb-4">
+                    {/* 步骤标签 - 与步骤2对齐 */}
+                    <div className="flex items-center gap-3 mb-2">
+                        <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            <span style={{ color: selectedExpiries.length > 0 ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step3')}</span> {t('options.form.selectExpiryTitle')}
                         </label>
-                        <Button
-                            onClick={fetchExpirations}
-                            disabled={expirationsLoading || tickers.length === 0 || !strategy}
-                            className="btn-primary flex-1"
-                        >
-                            {expirationsLoading ? (
-                                <i className="bi bi-arrow-clockwise mr-2"></i>
-                            ) : expirations.length > 0 ? (
-                                <i className="bi bi-check-circle mr-2"></i>
-                            ) : (
-                                <i className="bi bi-arrow-clockwise mr-2"></i>
-                            )}
-                            {expirationsLoading ? t('options.form.loading') : t('options.form.loadDates')}
-                        </Button>
-                    </div>
-
-                    <div className="flex-1 min-w-[200px] flex items-center gap-3">
-                        <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: selectedExpiries.length > 0 ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step4')}</span> {t('options.form.step4Label')}
-                        </label>
-                    </div>
-                </div>
-
-                {/* Multi-Date Selection Tags */}
-                {expirations.length > 0 && (
-                    <div className="mb-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <span style={{ fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
-                                {t('options.form.selectExpiry')} ({t('options.form.maxDates', { max: 2 })})
-                            </span>
+                        {selectedExpiries.length > 0 && (
                             <span style={{
                                 fontSize: '0.75rem',
                                 padding: '0.15rem 0.5rem',
-                                borderRadius: '0.25rem',
-                                backgroundColor: selectedExpiries.length === 2 ? 'var(--primary)' : 'var(--muted)',
-                                color: selectedExpiries.length === 2 ? 'white' : 'var(--muted-foreground)'
+                                borderRadius: '1rem',
+                                backgroundColor: 'var(--primary)',
+                                color: 'white'
                             }}>
                                 {t('options.form.selectedCount', { count: selectedExpiries.length, max: 2 })}
                             </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {expirations.map(exp => {
-                                const isSelected = selectedExpiries.includes(exp.date);
-                                const isDisabled = !isSelected && selectedExpiries.length >= 2;
-                                return (
-                                    <button
-                                        key={exp.date}
-                                        onClick={() => !isDisabled && handleExpiryToggle(exp.date)}
-                                        disabled={isDisabled}
-                                        className="transition-all"
-                                        style={{
-                                            padding: '0.5rem 1rem',
-                                            borderRadius: '0.5rem',
-                                            border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
-                                            backgroundColor: isSelected ? 'rgba(13, 155, 151, 0.2)' : 'var(--muted)',
-                                            color: isSelected ? 'var(--primary)' : isDisabled ? 'var(--muted-foreground)' : 'var(--foreground)',
-                                            opacity: isDisabled ? 0.5 : 1,
-                                            cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                            fontWeight: isSelected ? 600 : 400,
-                                            fontSize: '0.875rem'
-                                        }}
-                                    >
-                                        {isSelected && <i className="bi bi-check-circle-fill mr-1"></i>}
-                                        {exp.date}
-                                        <span style={{
-                                            marginLeft: '0.5rem',
-                                            fontSize: '0.7rem',
-                                            padding: '0.1rem 0.3rem',
-                                            borderRadius: '0.2rem',
-                                            backgroundColor: exp.period_tag === 'm' ? 'rgba(13, 155, 151, 0.3)' : 'rgba(245, 158, 11, 0.3)',
-                                            color: exp.period_tag === 'm' ? 'var(--primary)' : 'var(--warning)'
-                                        }}>
-                                            {exp.period_tag === 'm' ? t('options.form.monthly') : t('options.form.weekly')}
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        )}
                     </div>
-                )}
 
-                {/* Start Analysis Button */}
-                {selectedExpiries.length > 0 && strategy && tickers.length > 0 && (
-                    <div className="flex items-center gap-4">
-                        <Button
-                            onClick={handleStartAnalysis}
-                            disabled={loading}
-                            className="btn-primary"
-                            style={{ minWidth: '200px' }}
-                        >
-                            {loading ? (
-                                <>
-                                    <i className="bi bi-arrow-clockwise mr-2 animate-spin"></i>
-                                    {t('options.form.analyzing')}
-                                </>
-                            ) : (
-                                <>
-                                    <i className="bi bi-search mr-2"></i>
-                                    {t('options.form.startAnalysis')}
-                                </>
+                {(() => {
+                    const now = new Date();
+                    const twoWeeksLater = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+                    const nearTerm: typeof expirations = [];
+                    const weekly: typeof expirations = [];
+                    const monthly: typeof expirations = [];
+
+                    expirations.forEach(exp => {
+                        const expDate = new Date(exp.date);
+                        if (expDate <= twoWeeksLater) {
+                            nearTerm.push(exp);
+                        } else if (exp.period_tag === 'm') {
+                            monthly.push(exp);
+                        } else {
+                            weekly.push(exp);
+                        }
+                    });
+
+                    const tabs = [
+                        { key: 'near' as const, label: t('options.form.nearTerm'), icon: 'bi-lightning-charge', data: nearTerm, color: 'var(--warning)' },
+                        { key: 'weekly' as const, label: t('options.form.weeklyOptions'), icon: 'bi-calendar-week', data: weekly, color: 'var(--muted-foreground)' },
+                        { key: 'monthly' as const, label: t('options.form.monthlyOptions'), icon: 'bi-calendar-month', data: monthly, color: 'var(--primary)' },
+                    ].filter(tab => tab.data.length > 0);
+
+                    const currentTab = tabs.find(t => t.key === activeExpiryTab) || tabs[0];
+                    const activeTabData = currentTab?.data || [];
+
+                    return (
+                        <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                            {/* 标签页头部 */}
+                            <div className="flex items-center justify-between" style={{ backgroundColor: 'var(--muted)', padding: '0.25rem' }}>
+                                <div className="flex gap-0.5">
+                                    {expirations.length > 0 ? tabs.map(tab => (
+                                        <button
+                                            key={tab.key}
+                                            onClick={() => setActiveExpiryTab(tab.key)}
+                                            className="px-3 py-1.5 text-sm transition-all rounded"
+                                            style={{
+                                                backgroundColor: activeExpiryTab === tab.key ? 'var(--card)' : 'transparent',
+                                                color: activeExpiryTab === tab.key ? tab.color : 'var(--muted-foreground)',
+                                                fontWeight: activeExpiryTab === tab.key ? 500 : 400
+                                            }}
+                                        >
+                                            <i className={`bi ${tab.icon} mr-1`}></i>
+                                            {tab.label}
+                                            <span className="ml-1 opacity-60">({tab.data.length})</span>
+                                        </button>
+                                    )) : (
+                                        <span className="px-3 py-1.5 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                            {t('options.form.clickLoad')}
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={fetchExpirations}
+                                    disabled={expirationsLoading || tickers.length === 0 || !strategy}
+                                    className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-40 mr-1"
+                                    style={{ color: 'var(--muted-foreground)' }}
+                                >
+                                    <i className={`bi ${expirationsLoading ? 'bi-arrow-clockwise animate-spin' : 'bi-arrow-repeat'}`}></i>
+                                </button>
+                            </div>
+
+                            {/* 日期内容 */}
+                            <div className="px-3 py-2.5" style={{ backgroundColor: 'var(--card)' }}>
+                                {expirations.length === 0 ? (
+                                    <div className="text-center py-2" style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>
+                                        {tickers.length === 0 || !strategy ? t('options.form.completeSteps') : t('options.form.clickLoad')}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {activeTabData.map(exp => {
+                                            const isSelected = selectedExpiries.includes(exp.date);
+                                            const isDisabled = !isSelected && selectedExpiries.length >= 2;
+                                            return (
+                                                <button
+                                                    key={exp.date}
+                                                    onClick={() => !isDisabled && handleExpiryToggle(exp.date)}
+                                                    disabled={isDisabled}
+                                                    className="transition-all"
+                                                    style={{
+                                                        padding: '0.3rem 0.6rem',
+                                                        borderRadius: '0.375rem',
+                                                        border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                                        backgroundColor: isSelected ? 'rgba(13, 155, 151, 0.15)' : 'var(--muted)',
+                                                        color: isSelected ? 'var(--primary)' : isDisabled ? 'var(--muted-foreground)' : 'var(--foreground)',
+                                                        opacity: isDisabled ? 0.4 : 1,
+                                                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                                        fontWeight: isSelected ? 600 : 400,
+                                                        fontSize: '0.85rem'
+                                                    }}
+                                                >
+                                                    {isSelected && <i className="bi bi-check-lg mr-1"></i>}
+                                                    {exp.date}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 底部操作栏 */}
+                            {expirations.length > 0 && (
+                                <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
+                                        {selectedExpiries.length > 0 ? (
+                                            t('options.form.queryCount', {
+                                                count: tickers.length * selectedExpiries.length,
+                                                symbols: tickers.length,
+                                                dates: selectedExpiries.length
+                                            })
+                                        ) : (
+                                            t('options.form.selectToStart')
+                                        )}
+                                    </span>
+                                    <Button
+                                        onClick={handleStartAnalysis}
+                                        disabled={loading || selectedExpiries.length === 0}
+                                        className="btn-primary"
+                                        size="sm"
+                                    >
+                                        {loading ? (
+                                            <><i className="bi bi-arrow-clockwise mr-1 animate-spin"></i>{t('options.form.analyzing')}</>
+                                        ) : (
+                                            <><i className="bi bi-search mr-1"></i>{t('options.form.startAnalysis')}</>
+                                        )}
+                                    </Button>
+                                </div>
                             )}
-                        </Button>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
-                            {t('options.form.queryCount', {
-                                count: tickers.length * selectedExpiries.length,
-                                symbols: tickers.length,
-                                dates: selectedExpiries.length
-                            })}
-                        </span>
-                    </div>
-                )}
+                        </div>
+                    );
+                })()}
+                </div>
             </div>
 
             {/* 分析依据 - 单行图标版 */}
@@ -3115,7 +3153,7 @@ export default function Options() {
                             setTickers([symbol]);
                         }
                         if (expiryDate) {
-                            setSelectedExpiry(expiryDate);
+                            setSelectedExpiries([expiryDate]);
                         }
                         if (chainData?.real_stock_price) {
                             setStockPrice(chainData.real_stock_price);
