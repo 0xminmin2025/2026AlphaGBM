@@ -36,12 +36,15 @@ class PaymentService:
         }
     }
     
-    # 类属性：每日免费额度配置（统一为10次）
+    # 类属性：每日免费额度配置（统一为2次）
     DAILY_FREE_QUOTA = {
-        ServiceType.STOCK_ANALYSIS.value: 10,
-        ServiceType.OPTION_ANALYSIS.value: 10,
+        ServiceType.STOCK_ANALYSIS.value: 2,
+        ServiceType.OPTION_ANALYSIS.value: 2,
         ServiceType.DEEP_REPORT.value: 0,
     }
+
+    # 免费用户每日总查询次数（所有服务共享）
+    FREE_USER_DAILY_QUOTA = 2
     
     # Remove __init__ dependency injection, use imported models directly
     
@@ -561,7 +564,7 @@ class PaymentService:
     @classmethod
     def check_daily_free_quota(cls, user_id, service_type, amount=1):
         """
-        检查每日免费额度是否足够（所有服务共享10次）
+        检查每日免费额度是否足够（所有服务共享2次）
         Args:
             user_id: 用户ID
             service_type: 服务类型
@@ -569,8 +572,8 @@ class PaymentService:
         Returns:
             bool: 是否有足够的免费额度
         """
-        # 统一使用10次免费额度，所有服务共享
-        free_quota = 10
+        # 统一使用2次免费额度，所有服务共享
+        free_quota = cls.FREE_USER_DAILY_QUOTA
 
         today = datetime.now().date()
         daily_count = DailyQueryCount.query.filter_by(
@@ -590,8 +593,8 @@ class PaymentService:
         Returns:
             dict: {quota: 总额度, used: 已使用, remaining: 剩余}
         """
-        # 统一使用10次免费额度
-        free_quota = 10
+        # 统一使用2次免费额度
+        free_quota = cls.FREE_USER_DAILY_QUOTA
 
         today = datetime.now().date()
         daily_count = DailyQueryCount.query.filter_by(
