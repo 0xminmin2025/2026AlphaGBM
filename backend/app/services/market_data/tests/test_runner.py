@@ -80,6 +80,32 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass, field
 
+# Import market detection for dynamic provider ordering
+from ..config import get_market_for_symbol
+from ..interfaces import Market
+
+
+def get_adapter_order_for_symbol(symbol: str, include_options: bool = False) -> List[str]:
+    """
+    Get the provider order based on market type.
+    A-shares use tushare as primary, others use yfinance.
+    """
+    market = get_market_for_symbol(symbol)
+
+    if include_options:
+        # Options: only tiger and yfinance support options
+        return ['tiger', 'yfinance']
+
+    if market == Market.CN:
+        # A-share: tushare first, then tiger (also supports CN)
+        return ['tushare', 'tiger', 'yfinance', 'defeatbeta', 'alpha_vantage']
+    elif market == Market.HK:
+        # Hong Kong: tiger first, then yfinance
+        return ['tiger', 'yfinance', 'defeatbeta', 'alpha_vantage', 'tushare']
+    else:
+        # US market: yfinance first
+        return ['yfinance', 'tiger', 'defeatbeta', 'alpha_vantage', 'tushare']
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Logging Control - Suppress noisy output during tests
@@ -411,8 +437,8 @@ def test_quote(service, symbol: str, adapters: Dict) -> TestResult:
     """Test quote data from all providers."""
     result = TestResult(data_type="Quote", emoji=E_QUOTE)
 
-    # Test each adapter in priority order
-    adapter_order = ['yfinance', 'tiger', 'defeatbeta', 'alpha_vantage']
+    # Test each adapter in priority order (market-aware)
+    adapter_order = get_adapter_order_for_symbol(symbol)
     first_success = None
 
     for provider_name in adapter_order:
@@ -463,7 +489,8 @@ def test_history(service, symbol: str, adapters: Dict) -> TestResult:
     """Test history data from all providers."""
     result = TestResult(data_type="History (1mo)", emoji=E_HISTORY)
 
-    adapter_order = ['yfinance', 'tiger', 'defeatbeta', 'alpha_vantage']
+    # Market-aware provider ordering
+    adapter_order = get_adapter_order_for_symbol(symbol)
     first_success = None
 
     for provider_name in adapter_order:
@@ -512,7 +539,8 @@ def test_fundamentals(service, symbol: str, adapters: Dict) -> TestResult:
     """Test fundamentals data from all providers."""
     result = TestResult(data_type="Fundamentals", emoji=E_FUND)
 
-    adapter_order = ['yfinance', 'tiger', 'defeatbeta', 'alpha_vantage']
+    # Market-aware provider ordering
+    adapter_order = get_adapter_order_for_symbol(symbol)
     first_success = None
 
     for provider_name in adapter_order:
@@ -565,8 +593,8 @@ def test_options(service, symbol: str, adapters: Dict) -> TestResult:
 
     result = TestResult(data_type="Options", emoji=E_OPTIONS)
 
-    # Options priority: tiger first (better options data), then yfinance
-    adapter_order = ['tiger', 'yfinance']
+    # Options: only tiger and yfinance support options data
+    adapter_order = get_adapter_order_for_symbol(symbol, include_options=True)
     first_success = None
 
     for provider_name in adapter_order:
@@ -628,8 +656,8 @@ def test_macro(service, symbol: str, adapters: Dict) -> TestResult:
     """Test macro ticker (^VIX, etc.)."""
     result = TestResult(data_type=f"Macro ({symbol})", emoji=E_MACRO)
 
-    # Macro tickers: only yfinance supports them
-    adapter_order = ['yfinance', 'tiger', 'defeatbeta', 'alpha_vantage']
+    # Macro tickers: market-aware provider ordering
+    adapter_order = get_adapter_order_for_symbol(symbol)
     first_success = None
 
     for provider_name in adapter_order:

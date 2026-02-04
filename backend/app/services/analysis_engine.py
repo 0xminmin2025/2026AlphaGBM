@@ -2876,10 +2876,10 @@ def is_etf_or_fund(data):
     判断是否为ETF或基金
     返回：是否为ETF/基金，类型（ETF/Fund/Stock）
     """
-    sector = data.get('sector', '').lower()
-    industry = data.get('industry', '').lower()
-    name = data.get('name', '').lower()
-    symbol = data.get('symbol', '').lower()
+    sector = (data.get('sector') or '').lower()
+    industry = (data.get('industry') or '').lower()
+    name = (data.get('name') or '').lower()
+    symbol = (data.get('symbol') or '').lower()
     
     # 关键词检测（扩展关键词列表）
     etf_keywords = [
@@ -2933,8 +2933,8 @@ def classify_company(data):
             'industry': data.get('industry', 'Fund')
         }
     
-    sector = data.get('sector', 'Unknown').lower()
-    industry = data.get('industry', 'Unknown').lower()
+    sector = (data.get('sector') or 'Unknown').lower()
+    industry = (data.get('industry') or 'Unknown').lower()
     growth = data.get('growth', 0)
     pe = data.get('pe', 0)
     market_cap = data.get('market_cap', 0)  # 市值（美元）
