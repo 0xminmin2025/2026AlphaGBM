@@ -613,6 +613,117 @@ def reverse_score_option():
         return jsonify({'success': False, 'error': f'反向查分失败: {str(e)}'}), 500
 
 
+@options_bp.route('/chain/batch', methods=['POST'])
+@require_auth
+def get_option_chain_batch():
+    """
+    批量获取期权链 - 支持多symbol + 多expiry
+
+    Request Body:
+    {
+        "symbols": ["AAPL", "TSLA"],
+        "expiries": ["2024-02-16", "2024-02-23"],
+        "priority": 100  // optional
+    }
+
+    计费: symbols数 × expiries数
+
+    Returns:
+    {
+        "success": true,
+        "task_ids": [
+            {"symbol": "AAPL", "expiry": "2024-02-16", "task_id": "uuid1"},
+            {"symbol": "AAPL", "expiry": "2024-02-23", "task_id": "uuid2"},
+            ...
+        ],
+        "total_queries": 4
+    }
+    """
+    try:
+        from ..utils.decorators import check_and_deduct_quota
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        symbols = data.get('symbols', [])
+        expiries = data.get('expiries', [])
+        priority = data.get('priority', 100)
+
+        # Validate inputs
+        if not symbols or not isinstance(symbols, list):
+            return jsonify({'error': 'symbols array is required'}), 400
+
+        if not expiries or not isinstance(expiries, list):
+            return jsonify({'error': 'expiries array is required'}), 400
+
+        # Limit: max 2 expiry dates
+        if len(expiries) > 2:
+            return jsonify({'error': 'Maximum 2 expiry dates allowed'}), 400
+
+        # Limit: max 3 symbols (consistent with existing limit)
+        if len(symbols) > 3:
+            return jsonify({'error': 'Maximum 3 symbols allowed'}), 400
+
+        user_id = get_user_id()
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        # Calculate total queries = symbols × expiries
+        total_queries = len(symbols) * len(expiries)
+
+        # Check and deduct quota in one go
+        quota_result = check_and_deduct_quota(
+            user_id=user_id,
+            service_type=ServiceType.OPTION_ANALYSIS.value,
+            amount=total_queries,
+            ticker=','.join(symbols)
+        )
+
+        if not quota_result['success']:
+            return jsonify({
+                'error': quota_result['message'],
+                'remaining_credits': quota_result['remaining'],
+                'free_remaining': quota_result['free_remaining'],
+                'free_quota': quota_result['free_quota'],
+                'code': 'INSUFFICIENT_CREDITS'
+            }), 402
+
+        # Create async tasks for each (symbol, expiry) combination
+        task_ids = []
+        for symbol in symbols:
+            for expiry in expiries:
+                task_id = create_analysis_task(
+                    user_id=user_id,
+                    task_type=TaskType.OPTION_ANALYSIS.value,
+                    input_params={
+                        'symbol': symbol.upper(),
+                        'expiry_date': expiry
+                    },
+                    priority=priority
+                )
+                task_ids.append({
+                    'symbol': symbol.upper(),
+                    'expiry': expiry,
+                    'task_id': task_id
+                })
+
+        return jsonify({
+            'success': True,
+            'task_ids': task_ids,
+            'total_queries': total_queries,
+            'quota_info': {
+                'is_free': quota_result['is_free'],
+                'free_remaining': quota_result['free_remaining'],
+                'free_quota': quota_result['free_quota']
+            }
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Failed to create batch options analysis tasks: {e}")
+        return jsonify({'error': f'Failed to create batch tasks: {str(e)}'}), 500
+
+
 @options_bp.route('/recognize-image', methods=['POST'])
 @require_auth
 def recognize_option_image():

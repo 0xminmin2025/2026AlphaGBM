@@ -667,7 +667,7 @@ type OptionData = {
     theta?: number;
     vega?: number;
     put_call: string;
-    expiry_date: string;
+    expiry_date?: string;  // Expiry date for multi-date mode
     days_to_expiry?: number;  // Days until expiration
     premium?: number;
     risk_return_profile?: RiskReturnProfile;  // 兼容旧格式
@@ -726,7 +726,7 @@ export default function Options() {
 
     const [tickers, setTickers] = useState<string[]>([]);
     const [expirations, setExpirations] = useState<ExpirationDate[]>([]);
-    const [selectedExpiry, setSelectedExpiry] = useState('');
+    const [selectedExpiries, setSelectedExpiries] = useState<string[]>([]);  // Multi-date support (max 2)
     const [chain, setChain] = useState<OptionChainResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [expirationsLoading, setExpirationsLoading] = useState(false);
@@ -746,6 +746,7 @@ export default function Options() {
     const [returnRange, setReturnRange] = useState<[number, number]>([0, 0]);
     const [selectedRiskStyle, setSelectedRiskStyle] = useState<string | null>(null);
     const [tickerFilter, setTickerFilter] = useState<string[]>([]);  // Multi-stock filter
+    const [expiryFilter, setExpiryFilter] = useState<string[]>([]);  // Multi-expiry filter
 
     // View mode state (analysis vs income)
     const [viewMode, setViewMode] = useState<'analysis' | 'income'>('analysis');
@@ -775,7 +776,7 @@ export default function Options() {
         paidCredits: number;
         amountNeeded: number;
     } | null>(null);
-    const [pendingExpiry, setPendingExpiry] = useState<string | null>(null);
+    const [pendingExpiries, setPendingExpiries] = useState<string[] | null>(null);
 
     const toast = useToastHelpers();
 
@@ -798,7 +799,7 @@ export default function Options() {
             // 重置所有状态到初始值
             setTickers([]);
             setExpirations([]);
-            setSelectedExpiry('');
+            setSelectedExpiries([]);
             setChain(null);
             setLoading(false);
             setError('');
@@ -813,6 +814,7 @@ export default function Options() {
             setReturnRange([0, 0]);
             setSelectedRiskStyle(null);
             setTickerFilter([]);
+            setExpiryFilter([]);
             setViewMode('analysis');
             setTaskProgress(0);
             setTaskStep('');
@@ -833,7 +835,7 @@ export default function Options() {
     const completedResultsRef = useRef<Map<string, OptionChainResponse>>(new Map());
     const expectedTickersRef = useRef<string[]>([]);
 
-    // Helper function to merge multiple chain results
+    // Helper function to merge multiple chain results (supports multi-symbol + multi-expiry)
     const mergeChainResults = (results: Map<string, OptionChainResponse>): OptionChainResponse => {
         const allCalls: OptionData[] = [];
         const allPuts: OptionData[] = [];
@@ -841,19 +843,37 @@ export default function Options() {
         let firstExpiry = '';
         let avgStockPrice = 0;
         let priceCount = 0;
+        const uniqueSymbols = new Set<string>();
+        const uniqueExpiries = new Set<string>();
 
-        results.forEach((chainData, symbol) => {
+        results.forEach((chainData, taskKey) => {
+            // taskKey format: symbol_expiry
+            const [symbol, expiry] = taskKey.includes('_')
+                ? taskKey.split('_')
+                : [chainData.symbol, chainData.expiry_date];
+
+            uniqueSymbols.add(symbol);
+            uniqueExpiries.add(expiry);
+
             if (!firstSymbol) {
-                firstSymbol = chainData.symbol;
-                firstExpiry = chainData.expiry_date;
+                firstSymbol = symbol;
+                firstExpiry = expiry;
             }
 
-            // Add symbol to each option
-            const callsWithSymbol = (chainData.calls || []).map(opt => ({ ...opt, symbol }));
-            const putsWithSymbol = (chainData.puts || []).map(opt => ({ ...opt, symbol }));
+            // Add symbol AND expiry_date to each option for filtering/display
+            const callsWithMeta = (chainData.calls || []).map(opt => ({
+                ...opt,
+                symbol: symbol,
+                expiry_date: expiry
+            }));
+            const putsWithMeta = (chainData.puts || []).map(opt => ({
+                ...opt,
+                symbol: symbol,
+                expiry_date: expiry
+            }));
 
-            allCalls.push(...callsWithSymbol);
-            allPuts.push(...putsWithSymbol);
+            allCalls.push(...callsWithMeta);
+            allPuts.push(...putsWithMeta);
 
             if (chainData.real_stock_price) {
                 avgStockPrice += chainData.real_stock_price;
@@ -872,8 +892,8 @@ export default function Options() {
         allPuts.sort(sortByScore);
 
         return {
-            symbol: results.size > 1 ? Array.from(results.keys()).join(', ') : firstSymbol,
-            expiry_date: firstExpiry,
+            symbol: uniqueSymbols.size > 1 ? Array.from(uniqueSymbols).join(', ') : firstSymbol,
+            expiry_date: uniqueExpiries.size > 1 ? Array.from(uniqueExpiries).sort().join(', ') : firstExpiry,
             calls: allCalls,
             puts: allPuts,
             real_stock_price: priceCount > 0 ? avgStockPrice / priceCount : undefined,
@@ -881,20 +901,20 @@ export default function Options() {
         };
     };
 
-    // Handle task completion for multi-stock mode
-    const handleTaskComplete = (taskResult: OptionChainResponse, symbol: string) => {
-        console.log(`Task completed for ${symbol}:`, taskResult);
+    // Handle task completion for multi-stock/multi-expiry mode
+    const handleTaskComplete = (taskResult: OptionChainResponse, taskKey: string) => {
+        console.log(`Task completed for ${taskKey}:`, taskResult);
 
-        // Store the result
-        completedResultsRef.current.set(symbol, taskResult);
+        // Store the result with taskKey (symbol_expiry)
+        completedResultsRef.current.set(taskKey, taskResult);
 
         // Remove from pending tasks
-        pendingTasksRef.current.delete(symbol);
+        pendingTasksRef.current.delete(taskKey);
 
         // Check if all tasks are complete
-        const expectedTickers = expectedTickersRef.current;
+        const expectedTasks = expectedTickersRef.current;
         const completedCount = completedResultsRef.current.size;
-        const totalCount = expectedTickers.length;
+        const totalCount = expectedTasks.length;
 
         setTaskProgress(Math.round((completedCount / totalCount) * 100));
         setTaskStep(t('options.multiStock.progress', { completed: completedCount, total: totalCount }));
@@ -912,10 +932,10 @@ export default function Options() {
             setTaskProgress(100);
             setTaskStep(t('options.taskComplete'));
 
-            // Save to browser history
+            // Save to browser history (use first expiry for backwards compat)
             HistoryStorage.saveOptionAnalysis({
-                symbol: expectedTickers.join(', '),
-                expiryDate: selectedExpiry,
+                symbol: tickers.join(', '),
+                expiryDate: selectedExpiries[0] || '',
                 analysisType: 'chain',
                 data: mergedChain
             });
@@ -927,8 +947,15 @@ export default function Options() {
         }
     };
 
-    // Helper function to poll a single task
+    // Helper function to poll a single task (legacy - for single expiry)
     const pollTask = async (taskId: string, symbol: string) => {
+        const expiry = selectedExpiries[0] || '';
+        pollTaskWithExpiry(taskId, symbol, expiry);
+    };
+
+    // Helper function to poll a single task with expiry info
+    const pollTaskWithExpiry = async (taskId: string, symbol: string, expiry: string) => {
+        const taskKey = `${symbol}_${expiry}`;
         const poll = async () => {
             try {
                 const response = await api.get(`/tasks/${taskId}/status`);
@@ -936,28 +963,33 @@ export default function Options() {
 
                 if (status.status === 'completed') {
                     const resultResponse = await api.get(`/tasks/${taskId}/result`);
-                    handleTaskComplete(resultResponse.data.result_data, symbol);
+                    // Attach expiry_date to result for display purposes
+                    const resultData = {
+                        ...resultResponse.data.result_data,
+                        expiry_date: expiry
+                    };
+                    handleTaskComplete(resultData, taskKey);
                 } else if (status.status === 'failed') {
-                    console.error(`Task failed for ${symbol}:`, status.error_message);
+                    console.error(`Task failed for ${taskKey}:`, status.error_message);
                     // Still mark as complete but with empty data
                     handleTaskComplete({
                         symbol,
-                        expiry_date: selectedExpiry,
+                        expiry_date: expiry,
                         calls: [],
                         puts: [],
-                    }, symbol);
+                    }, taskKey);
                 } else {
                     // Continue polling
                     setTimeout(poll, 2000);
                 }
             } catch (error) {
-                console.error(`Polling error for ${symbol}:`, error);
+                console.error(`Polling error for ${taskKey}:`, error);
                 handleTaskComplete({
                     symbol,
-                    expiry_date: selectedExpiry,
+                    expiry_date: expiry,
                     calls: [],
                     puts: [],
-                }, symbol);
+                }, taskKey);
             }
         };
 
@@ -984,7 +1016,7 @@ export default function Options() {
             // Save to browser history
             HistoryStorage.saveOptionAnalysis({
                 symbol: tickers[0] || '',
-                expiryDate: selectedExpiry,
+                expiryDate: selectedExpiries[0] || '',
                 analysisType: 'chain',
                 data: taskResult
             });
@@ -1011,7 +1043,7 @@ export default function Options() {
         setExpirationsLoading(true);
         setError('');
         setExpirations([]);
-        setSelectedExpiry('');
+        setSelectedExpiries([]);
         setChain(null);
 
         try {
@@ -1062,9 +1094,9 @@ export default function Options() {
         }
     };
 
-    // Fetch Chain for multiple stocks
-    const fetchChain = async (expiry: string) => {
-        if (tickers.length === 0 || !expiry) return;
+    // Fetch Chain for multiple stocks and multiple expiries
+    const fetchChain = async (expiries: string[]) => {
+        if (tickers.length === 0 || expiries.length === 0) return;
         setLoading(true);
         setError('');
         setTaskProgress(0);
@@ -1077,61 +1109,43 @@ export default function Options() {
         // Clear previous results
         completedResultsRef.current.clear();
         pendingTasksRef.current.clear();
-        expectedTickersRef.current = [...tickers];
+
+        // Track expected tasks by symbol_expiry key
+        const expectedTasks: string[] = [];
+        tickers.forEach(symbol => {
+            expiries.forEach(expiry => {
+                expectedTasks.push(`${symbol}_${expiry}`);
+            });
+        });
+        expectedTickersRef.current = expectedTasks;
 
         try {
-            if (tickers.length === 1) {
-                // Single stock mode - use existing polling
-                const response = await api.post(`/options/chain/${tickers[0]}/${expiry}`, {
-                    async: true
-                });
+            const totalQueries = tickers.length * expiries.length;
 
-                if (response.data.success && response.data.task_id) {
-                    console.log('Options task created:', response.data.task_id);
-                    setTaskStep(t('options.taskCreated'));
-                    startPolling(response.data.task_id);
-                } else {
-                    setError(response.data.error || 'Failed to create options analysis task');
-                    setLoading(false);
-                }
+            // Use batch API for all cases (supports multi-symbol + multi-expiry)
+            setTaskStep(t('options.multiStock.startingTasks', { count: totalQueries }));
+
+            const response = await api.post('/options/chain/batch', {
+                symbols: tickers,
+                expiries: expiries
+            });
+
+            if (response.data.success && response.data.task_ids) {
+                console.log('Batch options tasks created:', response.data.task_ids);
+
+                // Start polling for each task
+                response.data.task_ids.forEach((taskInfo: { symbol: string; expiry: string; task_id: string }) => {
+                    const taskKey = `${taskInfo.symbol}_${taskInfo.expiry}`;
+                    pendingTasksRef.current.set(taskKey, {
+                        symbol: taskKey,
+                        taskId: taskInfo.task_id
+                    });
+                    // Start polling for this task
+                    pollTaskWithExpiry(taskInfo.task_id, taskInfo.symbol, taskInfo.expiry);
+                });
             } else {
-                // Multi-stock mode - parallel requests
-                setTaskStep(t('options.multiStock.startingTasks', { count: tickers.length }));
-
-                const taskPromises = tickers.map(async (symbol) => {
-                    try {
-                        const response = await api.post(`/options/chain/${symbol}/${expiry}`, {
-                            async: true
-                        });
-
-                        if (response.data.success && response.data.task_id) {
-                            pendingTasksRef.current.set(symbol, {
-                                symbol,
-                                taskId: response.data.task_id
-                            });
-                            // Start polling for this task
-                            pollTask(response.data.task_id, symbol);
-                            return { symbol, taskId: response.data.task_id, success: true };
-                        } else {
-                            return { symbol, success: false, error: response.data.error };
-                        }
-                    } catch (err: any) {
-                        return { symbol, success: false, error: err.response?.data?.error || err.message };
-                    }
-                });
-
-                const results = await Promise.all(taskPromises);
-                const failedTasks = results.filter(r => !r.success);
-
-                if (failedTasks.length === tickers.length) {
-                    // All tasks failed
-                    setError(t('options.multiStock.allTasksFailed'));
-                    setLoading(false);
-                } else if (failedTasks.length > 0) {
-                    // Some tasks failed - continue with successful ones
-                    console.warn('Some tasks failed:', failedTasks);
-                    expectedTickersRef.current = results.filter(r => r.success).map(r => r.symbol);
-                }
+                setError(response.data.error || 'Failed to create options analysis tasks');
+                setLoading(false);
             }
         } catch (err: any) {
             console.error(err);
@@ -1140,19 +1154,20 @@ export default function Options() {
         }
     };
 
-    // Check quota before analysis
-    const checkQuotaAndConfirm = async (expiry: string) => {
+    // Check quota before analysis (supports multiple expiries)
+    const checkQuotaAndConfirm = async (expiries: string[]) => {
         if (!user) {
             navigate('/login');
             return;
         }
 
-        const symbolCount = tickers.length;
+        // Calculate total queries = symbols × expiries
+        const totalQueries = tickers.length * expiries.length;
 
         try {
             const response = await api.post('/payment/check-quota', {
                 service_type: 'option_analysis',
-                amount: symbolCount
+                amount: totalQueries
             });
 
             const data = response.data;
@@ -1161,7 +1176,7 @@ export default function Options() {
             if (!data.has_enough) {
                 toast.error(
                     t('options.quota.insufficient'),
-                    t('options.quota.insufficientDesc', { needed: symbolCount, remaining: data.free_remaining })
+                    t('options.quota.insufficientDesc', { needed: totalQueries, remaining: data.free_remaining })
                 );
                 navigate('/pricing');
                 return;
@@ -1174,23 +1189,23 @@ export default function Options() {
                 freeRemaining: data.free_remaining,
                 freeQuota: data.free_quota,
                 paidCredits: data.paid_credits,
-                amountNeeded: symbolCount
+                amountNeeded: totalQueries
             });
-            setPendingExpiry(expiry);
+            setPendingExpiries(expiries);
             setShowQuotaConfirm(true);
 
         } catch (err) {
             console.error('Quota check failed:', err);
             // 如果检查失败，仍然允许继续（后端会做最终检查）
-            fetchChain(expiry);
+            fetchChain(expiries);
         }
     };
 
     // Confirm and proceed with analysis
     const confirmAndAnalyze = () => {
         setShowQuotaConfirm(false);
-        if (pendingExpiry) {
-            fetchChain(pendingExpiry);
+        if (pendingExpiries && pendingExpiries.length > 0) {
+            fetchChain(pendingExpiries);
             // 分析完成后显示剩余额度的 toast
             if (quotaInfo?.willUseFree) {
                 const newRemaining = quotaInfo.freeRemaining - quotaInfo.amountNeeded;
@@ -1200,16 +1215,29 @@ export default function Options() {
                 );
             }
         }
-        setPendingExpiry(null);
+        setPendingExpiries(null);
         setQuotaInfo(null);
     };
 
-    // When expiry selected, check quota first
-    const handleExpirySelect = (expiry: string) => {
-        setSelectedExpiry(expiry);
-        // 选择到期日后先检查额度
-        if (expiry && strategy && tickers.length > 0) {
-            checkQuotaAndConfirm(expiry);
+    // Toggle expiry date selection (max 2)
+    const handleExpiryToggle = (expiry: string) => {
+        setSelectedExpiries(prev => {
+            if (prev.includes(expiry)) {
+                // Deselect
+                return prev.filter(e => e !== expiry);
+            } else if (prev.length < 2) {
+                // Add if under limit
+                return [...prev, expiry].sort();
+            }
+            // At limit, don't add
+            return prev;
+        });
+    };
+
+    // Start analysis with selected expiries
+    const handleStartAnalysis = () => {
+        if (selectedExpiries.length > 0 && strategy && tickers.length > 0) {
+            checkQuotaAndConfirm(selectedExpiries);
         }
     };
 
@@ -1286,6 +1314,14 @@ export default function Options() {
                     return tickerFilter.includes(optSymbol);
                 });
             }
+
+            // Apply expiry filter (multi-date mode)
+            if (expiryFilter.length > 0) {
+                options = options.filter(opt => {
+                    const optExpiry = opt.expiry_date || displayChain?.expiry_date || '';
+                    return expiryFilter.includes(optExpiry);
+                });
+            }
         } catch (error) {
             console.error('Error applying filters:', error);
         }
@@ -1297,6 +1333,14 @@ export default function Options() {
                 const symbolA = (a.symbol || displayChain?.symbol || '').toUpperCase();
                 const symbolB = (b.symbol || displayChain?.symbol || '').toUpperCase();
                 const diff = symbolA.localeCompare(symbolB);
+                return sortDirection === 'asc' ? diff : -diff;
+            }
+
+            // Handle expiry_date sorting (string comparison)
+            if (sortColumn === 'expiry_date') {
+                const expiryA = a.expiry_date || displayChain?.expiry_date || '';
+                const expiryB = b.expiry_date || displayChain?.expiry_date || '';
+                const diff = expiryA.localeCompare(expiryB);
                 return sortDirection === 'asc' ? diff : -diff;
             }
 
@@ -1751,23 +1795,99 @@ export default function Options() {
 
                     <div className="flex-1 min-w-[200px] flex items-center gap-3">
                         <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: selectedExpiry ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step4')}</span> {t('options.form.step4Label')}
+                            <span style={{ color: selectedExpiries.length > 0 ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step4')}</span> {t('options.form.step4Label')}
                         </label>
-                        <select
-                            value={selectedExpiry}
-                            onChange={(e) => handleExpirySelect(e.target.value)}
-                            className="form-select flex-1"
-                            disabled={expirations.length === 0}
-                        >
-                            <option value="">{expirations.length > 0 ? t('options.form.selectExpiry') : t('options.form.completeStep3')}</option>
-                            {expirations.map(exp => (
-                                <option key={exp.date} value={exp.date}>
-                                    {exp.date} {exp.period_tag === 'm' ? t('options.form.monthly') : t('options.form.weekly')}
-                                </option>
-                            ))}
-                        </select>
                     </div>
                 </div>
+
+                {/* Multi-Date Selection Tags */}
+                {expirations.length > 0 && (
+                    <div className="mb-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span style={{ fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                {t('options.form.selectExpiry')} ({t('options.form.maxDates', { max: 2 })})
+                            </span>
+                            <span style={{
+                                fontSize: '0.75rem',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '0.25rem',
+                                backgroundColor: selectedExpiries.length === 2 ? 'var(--primary)' : 'var(--muted)',
+                                color: selectedExpiries.length === 2 ? 'white' : 'var(--muted-foreground)'
+                            }}>
+                                {t('options.form.selectedCount', { count: selectedExpiries.length, max: 2 })}
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {expirations.map(exp => {
+                                const isSelected = selectedExpiries.includes(exp.date);
+                                const isDisabled = !isSelected && selectedExpiries.length >= 2;
+                                return (
+                                    <button
+                                        key={exp.date}
+                                        onClick={() => !isDisabled && handleExpiryToggle(exp.date)}
+                                        disabled={isDisabled}
+                                        className="transition-all"
+                                        style={{
+                                            padding: '0.5rem 1rem',
+                                            borderRadius: '0.5rem',
+                                            border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                            backgroundColor: isSelected ? 'rgba(13, 155, 151, 0.2)' : 'var(--muted)',
+                                            color: isSelected ? 'var(--primary)' : isDisabled ? 'var(--muted-foreground)' : 'var(--foreground)',
+                                            opacity: isDisabled ? 0.5 : 1,
+                                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                            fontWeight: isSelected ? 600 : 400,
+                                            fontSize: '0.875rem'
+                                        }}
+                                    >
+                                        {isSelected && <i className="bi bi-check-circle-fill mr-1"></i>}
+                                        {exp.date}
+                                        <span style={{
+                                            marginLeft: '0.5rem',
+                                            fontSize: '0.7rem',
+                                            padding: '0.1rem 0.3rem',
+                                            borderRadius: '0.2rem',
+                                            backgroundColor: exp.period_tag === 'm' ? 'rgba(13, 155, 151, 0.3)' : 'rgba(245, 158, 11, 0.3)',
+                                            color: exp.period_tag === 'm' ? 'var(--primary)' : 'var(--warning)'
+                                        }}>
+                                            {exp.period_tag === 'm' ? t('options.form.monthly') : t('options.form.weekly')}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Start Analysis Button */}
+                {selectedExpiries.length > 0 && strategy && tickers.length > 0 && (
+                    <div className="flex items-center gap-4">
+                        <Button
+                            onClick={handleStartAnalysis}
+                            disabled={loading}
+                            className="btn-primary"
+                            style={{ minWidth: '200px' }}
+                        >
+                            {loading ? (
+                                <>
+                                    <i className="bi bi-arrow-clockwise mr-2 animate-spin"></i>
+                                    {t('options.form.analyzing')}
+                                </>
+                            ) : (
+                                <>
+                                    <i className="bi bi-search mr-2"></i>
+                                    {t('options.form.startAnalysis')}
+                                </>
+                            )}
+                        </Button>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                            {t('options.form.queryCount', {
+                                count: tickers.length * selectedExpiries.length,
+                                symbols: tickers.length,
+                                dates: selectedExpiries.length
+                            })}
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* 分析依据 - 单行图标版 */}
@@ -1886,7 +2006,7 @@ export default function Options() {
                             <div style={{ color: 'var(--muted-foreground)' }}>
                                 {t('options.results.currentPrice')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
                                 <span className="mx-3">|</span>
-                                {t('options.results.expiry')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
+                                {t('options.results.expiry')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{selectedExpiries.length > 1 ? selectedExpiries.join(', ') : (displayChain.expiry_date || selectedExpiries[0] || '')}</span>
                                 <span className="mx-3">|</span>
                                 {t('options.results.strategy')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{strategyLabels[strategy]}</span>
                                 {isHistoricalView && (
@@ -2420,7 +2540,7 @@ export default function Options() {
                                                 <i className="bi bi-funnel" style={{ color: 'var(--primary)', fontSize: '0.9rem' }}></i>
                                                 <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{t('options.filter.title')}</span>
                                                 {/* 显示当前筛选条件摘要 */}
-                                                {(selectedRiskStyle || tickerFilter.length > 0) && (
+                                                {(selectedRiskStyle || tickerFilter.length > 0 || expiryFilter.length > 0) && (
                                                     <span style={{
                                                         fontSize: '0.7rem',
                                                         padding: '0.15rem 0.4rem',
@@ -2461,6 +2581,7 @@ export default function Options() {
                                                         e.stopPropagation();
                                                         setSelectedRiskStyle(null);
                                                         setTickerFilter([]);
+                                                        setExpiryFilter([]);
                                                         setStrikeRange([strikeMin, strikeMax]);
                                                         setReturnRange([returnMin, returnMax]);
                                                     }}
@@ -2521,6 +2642,50 @@ export default function Options() {
                                                                     }}
                                                                 >
                                                                     {ticker}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Expiry Filter (Multi-date mode only) */}
+                                                {selectedExpiries.length > 1 && (
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.byExpiry')}
+                                                        </label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                onClick={() => setExpiryFilter([])}
+                                                                className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                style={{
+                                                                    backgroundColor: expiryFilter.length === 0 ? 'var(--primary)' : 'transparent',
+                                                                    color: expiryFilter.length === 0 ? 'white' : 'var(--muted-foreground)',
+                                                                    borderColor: expiryFilter.length === 0 ? 'var(--primary)' : 'var(--border)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                {t('options.filter.allDates')}
+                                                            </button>
+                                                            {selectedExpiries.map(expiry => (
+                                                                <button
+                                                                    key={expiry}
+                                                                    onClick={() => {
+                                                                        if (expiryFilter.includes(expiry)) {
+                                                                            setExpiryFilter(expiryFilter.filter(e => e !== expiry));
+                                                                        } else {
+                                                                            setExpiryFilter([...expiryFilter, expiry]);
+                                                                        }
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                    style={{
+                                                                        backgroundColor: expiryFilter.includes(expiry) ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                                                                        color: expiryFilter.includes(expiry) ? 'var(--warning)' : 'var(--muted-foreground)',
+                                                                        borderColor: expiryFilter.includes(expiry) ? 'var(--warning)' : 'var(--border)',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {expiry}
                                                                 </button>
                                                             ))}
                                                         </div>
@@ -2697,6 +2862,16 @@ export default function Options() {
                                             <div>{t('options.table.symbol')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Symbol{getSortIndicator('symbol')}</div>
                                         </th>
+                                        {/* 到期日 - 仅在多日期模式下显示 */}
+                                        {selectedExpiries.length > 1 && (
+                                            <th
+                                                onClick={() => handleSort('expiry_date')}
+                                                style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            >
+                                                <div>{t('options.table.expiry')}</div>
+                                                <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Expiry{getSortIndicator('expiry_date')}</div>
+                                            </th>
+                                        )}
                                         <th
                                             onClick={() => handleSort('strike')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -2776,7 +2951,7 @@ export default function Options() {
                                 <tbody>
                                     {filteredOptions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={showAdvancedColumns ? 12 : 9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
+                                            <td colSpan={showAdvancedColumns ? (selectedExpiries.length > 1 ? 13 : 12) : (selectedExpiries.length > 1 ? 10 : 9)} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
                                                 {t('options.table.noData')}
                                             </td>
                                         </tr>
@@ -2821,6 +2996,12 @@ export default function Options() {
                                                     <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
                                                         {opt.symbol || displayChain?.symbol}
                                                     </td>
+                                                    {/* 到期日 - 仅在多日期模式下显示 */}
+                                                    {selectedExpiries.length > 1 && (
+                                                        <td style={{ fontSize: '0.85rem', color: 'var(--warning)' }}>
+                                                            {opt.expiry_date || displayChain?.expiry_date}
+                                                        </td>
+                                                    )}
                                                     <td style={{ fontWeight: 600 }}>
                                                         ${opt.strike}
                                                     </td>
@@ -2879,8 +3060,8 @@ export default function Options() {
                         setActiveTab('analysis');
                         // Try to load the expiry date if it matches available expirations
                         if (expiryDate && expirations.find(exp => exp.date === expiryDate)) {
-                            setSelectedExpiry(expiryDate);
-                            fetchChain(expiryDate);
+                            setSelectedExpiries([expiryDate]);
+                            fetchChain([expiryDate]);
                         }
                     }}
                     onViewFullReport={(optionData) => {
@@ -2972,7 +3153,7 @@ export default function Options() {
                         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                         onClick={() => {
                             setShowQuotaConfirm(false);
-                            setPendingExpiry(null);
+                            setPendingExpiries(null);
                             setQuotaInfo(null);
                         }}
                     />
@@ -2998,7 +3179,7 @@ export default function Options() {
                                 variant="outline"
                                 onClick={() => {
                                     setShowQuotaConfirm(false);
-                                    setPendingExpiry(null);
+                                    setPendingExpiries(null);
                                     setQuotaInfo(null);
                                 }}
                                 className="border-white/20"
