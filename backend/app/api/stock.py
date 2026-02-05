@@ -108,7 +108,7 @@ def _normalize_search_queries(query: str) -> list:
     Generate normalized search query variants for better matching.
 
     Handles:
-    - HK stocks: 700, 0700, 00700 -> search for 700.HK
+    - HK stocks: 700, 0700, 00700 -> search for 0700.HK (4-digit padded)
     - A-shares: 600519 -> search for 600519.SS
     - US stocks: AAPL -> search as-is
 
@@ -121,46 +121,36 @@ def _normalize_search_queries(query: str) -> list:
     if query.isdigit():
         stripped = query.lstrip('0') or '0'
         original_len = len(query)
-        stripped_len = len(stripped)
-
-        # HK stock patterns: 1-5 digit numbers (after stripping leading zeros)
-        # User might input: 700, 0700, 00700 for Tencent (0700.HK)
-        if stripped_len >= 1 and stripped_len <= 5:
-            # Try HK format (Yahoo uses stripped version)
-            hk_ticker = f"{stripped}.HK"
-            if hk_ticker not in variants:
-                variants.append(hk_ticker)
-            # Also try padded HK format (some APIs expect 4-digit)
-            hk_padded = f"{stripped.zfill(4)}.HK"
-            if hk_padded not in variants:
-                variants.append(hk_padded)
 
         # A-share patterns: 6 digits starting with 60/68/00/30
-        if original_len == 6 or stripped_len == 6:
-            code = query.zfill(6) if original_len < 6 else query
-            prefix = code[:2]
+        if original_len == 6:
+            prefix = query[:2]
             if prefix in ('60', '68'):
-                ss_ticker = f"{code}.SS"
+                ss_ticker = f"{query}.SS"
                 if ss_ticker not in variants:
                     variants.append(ss_ticker)
             elif prefix in ('00', '30'):
-                sz_ticker = f"{code}.SZ"
+                sz_ticker = f"{query}.SZ"
                 if sz_ticker not in variants:
                     variants.append(sz_ticker)
-
-        # Also try just the stripped number (Yahoo might handle it)
-        if stripped != query and stripped not in variants:
-            variants.append(stripped)
+        # HK stock patterns: 1-5 digit numbers (after stripping leading zeros)
+        # Yahoo Finance uses 4-digit padded format: 0700.HK, 0179.HK
+        elif len(stripped) >= 1 and len(stripped) <= 5:
+            # Primary format: 4-digit padded (Yahoo Finance standard)
+            hk_padded = f"{stripped.zfill(4)}.HK"
+            if hk_padded not in variants:
+                variants.insert(1, hk_padded)  # Insert as high priority
 
     # If query already has suffix, normalize HK format
     elif '.HK' in query:
-        # Ensure we try both padded and stripped versions
         base = query.replace('.HK', '')
         if base.isdigit():
             stripped = base.lstrip('0') or '0'
-            variants.append(f"{stripped}.HK")
-            if stripped != base:
-                variants.append(f"{base}.HK")
+            # Pad to 4 digits for Yahoo Finance
+            padded = stripped.zfill(4)
+            normalized = f"{padded}.HK"
+            if normalized not in variants:
+                variants.insert(0, normalized)  # Highest priority
 
     return variants
 

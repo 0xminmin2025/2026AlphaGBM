@@ -1742,10 +1742,10 @@ export default function Options() {
                             maxCount={3}
                             placeholder={t('options.multiStock.placeholder')}
                         />
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-xs mt-1.5" style={{ color: '#f59e0b' }}>
                             {i18n.language.startsWith('zh')
-                                ? '每次分析消耗 1 次查询额度'
-                                : 'Each analysis uses 1 query credit'}
+                                ? '⚡ 每次分析消耗 1 次查询额度'
+                                : '⚡ Each analysis uses 1 query credit'}
                         </p>
                     </div>
                 </div>

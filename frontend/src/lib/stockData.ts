@@ -195,7 +195,7 @@ export const ALL_STOCKS: StockInfo[] = [...US_STOCKS, ...HK_STOCKS, ...CN_STOCKS
 /**
  * Normalize user input ticker to standard format for API calls
  * Handles:
- * - HK stocks: 700, 0700, 00700, 0700.HK -> 700.HK (Yahoo Finance format)
+ * - HK stocks: 700, 0700, 00700 -> 0700.HK (Yahoo Finance 4-digit format)
  * - A-shares: 600519 -> 600519.SS, 000001 -> 000001.SZ
  * - US stocks: AAPL -> AAPL (unchanged)
  */
@@ -204,12 +204,13 @@ export function normalizeTickerForApi(ticker: string): string {
 
     // Handle existing suffix - need to normalize HK stocks
     if (t.includes('.')) {
-        // HK stocks: strip leading zeros (Yahoo Finance needs 179.HK not 0179.HK)
+        // HK stocks: pad to 4 digits (Yahoo Finance needs 0179.HK not 179.HK)
         if (t.endsWith('.HK')) {
             const base = t.slice(0, -3); // Remove .HK
             if (/^\d+$/.test(base)) {
                 const stripped = base.replace(/^0+/, '') || '0';
-                return `${stripped}.HK`;
+                const padded = stripped.padStart(4, '0');
+                return `${padded}.HK`;
             }
         }
         // A-shares and US stocks: return as-is
@@ -244,9 +245,10 @@ export function normalizeTickerForApi(ticker: string): string {
         }
 
         // 1-5 digit numbers (after stripping zeros): assume HK stock
-        // Yahoo Finance uses stripped version for HK (e.g., 700.HK not 0700.HK)
+        // Yahoo Finance uses 4-digit padded format (e.g., 0700.HK, 0179.HK)
         if (stripped.length >= 1 && stripped.length <= 5) {
-            return `${stripped}.HK`;
+            const padded = stripped.padStart(4, '0');
+            return `${padded}.HK`;
         }
     }
 

@@ -572,51 +572,45 @@ def normalize_ticker(ticker):
     """
     标准化股票代码格式
     自动识别市场并添加后缀
-    支持模糊搜索，包括港股前面补0的情况（如02525 -> 2525.HK）
+
+    港股代码规则（Yahoo Finance 格式）：
+    - 使用 4 位数字格式，不足 4 位前面补 0
+    - 例如：179 -> 0179.HK，700 -> 0700.HK，9988 -> 9988.HK
     """
     ticker = ticker.strip().upper()
 
-    # 如果已经包含市场后缀，需要特殊处理港股前导零
+    # 如果已经包含市场后缀，需要特殊处理港股格式
     if '.' in ticker:
-        # 港股：去掉前导零（Yahoo Finance 需要 179.HK 而不是 0179.HK）
+        # 港股：补齐到 4 位数字（Yahoo Finance 需要 0179.HK 而不是 179.HK）
         if ticker.endswith('.HK'):
             base = ticker[:-3]  # 去掉 .HK
             if base.isdigit():
-                stripped = base.lstrip('0') or '0'
-                return f"{stripped}.HK"
+                # 补齐到 4 位数字
+                normalized = base.lstrip('0').zfill(4)
+                return f"{normalized}.HK"
         # A股和美股保持原样
         return ticker
 
     # 判断市场类型
-    # 港股：支持4-5位数字，包括前面有0的情况（如09988 -> 9988.HK，02525 -> 2525.HK）
     if ticker.isdigit():
-            # 去除前导0，得到有效数字
-            ticker_digits = ticker.lstrip('0') or '0'  # 如果全是0，保留一个0
-            original_length = len(ticker)
-            digits_length = len(ticker_digits)
-            
-            # 优先判断港股：如果原始是4-5位数字（包括前导0），优先识别为港股
-            # 港股代码规则：yfinance需要去掉前导0，例如09988 -> 9988.HK，02525 -> 2525.HK
-            if original_length == 4 or original_length == 5:
-                # 原始4-5位数字，优先识别为港股（去掉前导0）
-                normalized_hk = ticker_digits
-                return f"{normalized_hk}.HK"
-            
-            # A股判断：如果原始是6位或补足到6位后符合A股规则
-            if original_length == 6 or (original_length < 6 and digits_length <= 6):
-                normalized_6 = ticker_digits.zfill(6)
-                if normalized_6.startswith(('600', '601', '603', '688')):
-                    return f"{normalized_6}.SS"  # 上海
-                elif normalized_6.startswith(('000', '001', '002', '300')):
-                    return f"{normalized_6}.SZ"  # 深圳
-            
-            # 其他情况：如果去0后是1-5位，可能是港股代码
-            if digits_length >= 1 and digits_length <= 5:
-                # 港股：使用去掉前导0的数字（yfinance格式）
-                normalized_hk = ticker_digits
-                return f"{normalized_hk}.HK"
-    
-    # 美股：默认不加后缀，或者已经是标准格式
+        # 去除前导 0，得到有效数字
+        ticker_digits = ticker.lstrip('0') or '0'
+        original_length = len(ticker)
+
+        # A股判断：6 位数字，且符合 A 股代码规则
+        if original_length == 6:
+            if ticker.startswith(('600', '601', '603', '688')):
+                return f"{ticker}.SS"  # 上海
+            elif ticker.startswith(('000', '001', '002', '300')):
+                return f"{ticker}.SZ"  # 深圳
+
+        # 港股判断：1-5 位数字（去掉前导零后）
+        # Yahoo Finance 格式：补齐到 4 位，如 179 -> 0179.HK
+        if len(ticker_digits) >= 1 and len(ticker_digits) <= 5:
+            normalized_hk = ticker_digits.zfill(4)
+            return f"{normalized_hk}.HK"
+
+    # 美股：默认不加后缀
     return ticker
 
 
