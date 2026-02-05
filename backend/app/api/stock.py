@@ -102,12 +102,79 @@ def _map_exchange_to_market(exchange: str, symbol: str) -> str:
         return 'CN'
     return 'US'
 
+
+def _normalize_search_queries(query: str) -> list:
+    """
+    Generate normalized search query variants for better matching.
+
+    Handles:
+    - HK stocks: 700, 0700, 00700 -> search for 700.HK
+    - A-shares: 600519 -> search for 600519.SS
+    - US stocks: AAPL -> search as-is
+
+    Returns list of query variants to try.
+    """
+    query = query.strip().upper()
+    variants = [query]  # Always try original
+
+    # If it's purely numeric, handle market-specific formats
+    if query.isdigit():
+        stripped = query.lstrip('0') or '0'
+        original_len = len(query)
+        stripped_len = len(stripped)
+
+        # HK stock patterns: 1-5 digit numbers (after stripping leading zeros)
+        # User might input: 700, 0700, 00700 for Tencent (0700.HK)
+        if stripped_len >= 1 and stripped_len <= 5:
+            # Try HK format (Yahoo uses stripped version)
+            hk_ticker = f"{stripped}.HK"
+            if hk_ticker not in variants:
+                variants.append(hk_ticker)
+            # Also try padded HK format (some APIs expect 4-digit)
+            hk_padded = f"{stripped.zfill(4)}.HK"
+            if hk_padded not in variants:
+                variants.append(hk_padded)
+
+        # A-share patterns: 6 digits starting with 60/68/00/30
+        if original_len == 6 or stripped_len == 6:
+            code = query.zfill(6) if original_len < 6 else query
+            prefix = code[:2]
+            if prefix in ('60', '68'):
+                ss_ticker = f"{code}.SS"
+                if ss_ticker not in variants:
+                    variants.append(ss_ticker)
+            elif prefix in ('00', '30'):
+                sz_ticker = f"{code}.SZ"
+                if sz_ticker not in variants:
+                    variants.append(sz_ticker)
+
+        # Also try just the stripped number (Yahoo might handle it)
+        if stripped != query and stripped not in variants:
+            variants.append(stripped)
+
+    # If query already has suffix, normalize HK format
+    elif '.HK' in query:
+        # Ensure we try both padded and stripped versions
+        base = query.replace('.HK', '')
+        if base.isdigit():
+            stripped = base.lstrip('0') or '0'
+            variants.append(f"{stripped}.HK")
+            if stripped != base:
+                variants.append(f"{base}.HK")
+
+    return variants
+
 @stock_bp.route('/search', methods=['GET'])
 def search_stocks():
     """
     Fuzzy stock search via Yahoo Finance.
     GET /api/stock/search?q=QUERY&limit=8
     No auth required — must be fast for autocomplete.
+
+    Supports multiple ticker formats:
+    - US: AAPL, MSFT
+    - HK: 700, 0700, 00700, 0700.HK (all find Tencent)
+    - A-shares: 600519, 600519.SS
     """
     query = request.args.get('q', '').strip()
     limit = min(request.args.get('limit', 8, type=int), 20)
@@ -120,39 +187,65 @@ def search_stocks():
     if cached is not None:
         return jsonify({'success': True, 'results': cached, 'source': 'cache'})
 
-    try:
-        resp = requests.get(
-            'https://query2.finance.yahoo.com/v1/finance/search',
-            params={
-                'q': query,
-                'quotesCount': limit,
-                'newsCount': 0,
-                'listsCount': 0,
-                'enableFuzzyQuery': True,
-            },
-            headers={'User-Agent': 'Mozilla/5.0'},
-            timeout=4,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    # Generate search query variants for better matching
+    search_variants = _normalize_search_queries(query)
+    logger.debug(f"Search variants for '{query}': {search_variants}")
 
+    try:
         ALLOWED_TYPES = {'EQUITY', 'ETF', 'FUND', 'MUTUALFUND'}
+        seen_symbols = set()
         results = []
-        for quote in data.get('quotes', []):
-            qtype = quote.get('quoteType', '').upper()
-            if qtype not in ALLOWED_TYPES:
+
+        # Try each variant until we have enough results
+        for variant in search_variants:
+            if len(results) >= limit:
+                break
+
+            try:
+                resp = requests.get(
+                    'https://query2.finance.yahoo.com/v1/finance/search',
+                    params={
+                        'q': variant,
+                        'quotesCount': limit,
+                        'newsCount': 0,
+                        'listsCount': 0,
+                        'enableFuzzyQuery': True,
+                    },
+                    headers={'User-Agent': 'Mozilla/5.0'},
+                    timeout=4,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                for quote in data.get('quotes', []):
+                    if len(results) >= limit:
+                        break
+
+                    qtype = quote.get('quoteType', '').upper()
+                    if qtype not in ALLOWED_TYPES:
+                        continue
+
+                    symbol = quote.get('symbol', '')
+                    # Deduplicate by normalized symbol
+                    symbol_key = symbol.upper()
+                    if symbol_key in seen_symbols:
+                        continue
+                    seen_symbols.add(symbol_key)
+
+                    exchange = quote.get('exchange', '')
+                    name_en = quote.get('shortname') or quote.get('longname') or ''
+                    market = _map_exchange_to_market(exchange, symbol)
+                    results.append({
+                        'ticker': symbol,
+                        'nameCn': '',
+                        'nameEn': name_en,
+                        'pinyin': '',
+                        'market': market,
+                    })
+
+            except Exception as e:
+                logger.debug(f"Yahoo search variant '{variant}' failed: {e}")
                 continue
-            symbol = quote.get('symbol', '')
-            exchange = quote.get('exchange', '')
-            name_en = quote.get('shortname') or quote.get('longname') or ''
-            market = _map_exchange_to_market(exchange, symbol)
-            results.append({
-                'ticker': symbol,
-                'nameCn': '',
-                'nameEn': name_en,
-                'pinyin': '',
-                'market': market,
-            })
 
         _search_cache.set(cache_key, results)
         return jsonify({'success': True, 'results': results})

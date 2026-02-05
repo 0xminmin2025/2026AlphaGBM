@@ -132,6 +132,7 @@ def normalize_symbol(symbol: str) -> str:
     Normalize a symbol to its canonical form with proper suffix.
 
     For A-share stocks without suffix, adds the appropriate exchange suffix.
+    For HK stocks, strips leading zeros (Yahoo Finance format).
     For other markets, returns the symbol as-is (uppercase).
 
     Args:
@@ -148,11 +149,22 @@ def normalize_symbol(symbol: str) -> str:
         >>> normalize_symbol("AAPL")
         'AAPL'
         >>> normalize_symbol("0700.HK")
-        '0700.HK'
+        '700.HK'
+        >>> normalize_symbol("700")
+        '700.HK'
     """
     symbol_upper = symbol.upper().strip()
 
-    # Already has a known suffix
+    # Handle existing suffix
+    if '.HK' in symbol_upper:
+        # HK stocks: strip leading zeros (Yahoo Finance needs 179.HK not 0179.HK)
+        base = symbol_upper.replace('.HK', '')
+        if base.isdigit():
+            stripped = base.lstrip('0') or '0'
+            return f"{stripped}.HK"
+        return symbol_upper
+
+    # Check other known suffixes
     for suffix in TICKER_SUFFIX_TO_MARKET.keys():
         if symbol_upper.endswith(suffix):
             return symbol_upper
@@ -164,6 +176,12 @@ def normalize_symbol(symbol: str) -> str:
         exchange = CN_STOCK_PREFIX_RULES.get(prefix)
         if exchange:
             return f"{base_ticker}.{exchange}"
+
+    # Check if it's a HK stock (1-5 digit number without suffix)
+    if base_ticker.isdigit():
+        stripped = base_ticker.lstrip('0') or '0'
+        if len(stripped) <= 5:
+            return f"{stripped}.HK"
 
     # Return as-is for US stocks
     return symbol_upper

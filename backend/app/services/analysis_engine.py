@@ -575,11 +575,18 @@ def normalize_ticker(ticker):
     支持模糊搜索，包括港股前面补0的情况（如02525 -> 2525.HK）
     """
     ticker = ticker.strip().upper()
-    
-    # 如果已经包含市场后缀，直接返回
+
+    # 如果已经包含市场后缀，需要特殊处理港股前导零
     if '.' in ticker:
+        # 港股：去掉前导零（Yahoo Finance 需要 179.HK 而不是 0179.HK）
+        if ticker.endswith('.HK'):
+            base = ticker[:-3]  # 去掉 .HK
+            if base.isdigit():
+                stripped = base.lstrip('0') or '0'
+                return f"{stripped}.HK"
+        # A股和美股保持原样
         return ticker
-    
+
     # 判断市场类型
     # 港股：支持4-5位数字，包括前面有0的情况（如09988 -> 9988.HK，02525 -> 2525.HK）
     if ticker.isdigit():

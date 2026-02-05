@@ -6,6 +6,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { StockInfo } from '@/lib/stockData';
+import { normalizeTickerForApi } from '@/lib/stockData';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useStockSearch } from '@/hooks/useStockSearch';
@@ -71,8 +72,15 @@ export default function MultiStockInput({
         setShowSuggestions(true);
     };
 
-    const handleAddStock = useCallback((ticker: string) => {
-        const normalizedTicker = ticker.trim().toUpperCase();
+    const handleAddStock = useCallback((ticker: string, fromSuggestion: boolean = false) => {
+        let normalizedTicker = ticker.trim().toUpperCase();
+
+        // If user typed directly (not from suggestion), normalize the ticker format
+        // This handles cases like "700" -> "700.HK", "600519" -> "600519.SS"
+        if (!fromSuggestion && !normalizedTicker.includes('.')) {
+            normalizedTicker = normalizeTickerForApi(normalizedTicker);
+        }
+
         if (!normalizedTicker) return;
         if (values.includes(normalizedTicker)) return;
         if (values.length >= maxCount) return;
@@ -84,7 +92,8 @@ export default function MultiStockInput({
     }, [values, maxCount, onChange]);
 
     const handleSelectStock = (stock: StockInfo) => {
-        handleAddStock(stock.ticker);
+        // From suggestion list, ticker is already in correct format
+        handleAddStock(stock.ticker, true);
     };
 
     const handleRemoveStock = (ticker: string) => {
@@ -290,10 +299,12 @@ export default function MultiStockInput({
                         >
                             <div className="text-slate-400 text-xs sm:text-sm">
                                 {isZh
-                                    ? '未找到匹配的股票，点击直接添加：'
-                                    : 'No match found, click to add:'}
+                                    ? '未找到匹配的股票，点击直接使用代码：'
+                                    : 'No match found, click to use code:'}
                             </div>
-                            <div className="text-[#0D9B97] font-mono font-semibold mt-1 text-sm sm:text-base">{inputValue}</div>
+                            <div className="text-[#0D9B97] font-mono font-semibold mt-1 text-sm sm:text-base">
+                                {normalizeTickerForApi(inputValue.trim().toUpperCase())}
+                            </div>
                         </div>
                     )}
                 </div>

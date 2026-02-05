@@ -193,7 +193,117 @@ export const CN_STOCKS: StockInfo[] = [
 export const ALL_STOCKS: StockInfo[] = [...US_STOCKS, ...HK_STOCKS, ...CN_STOCKS];
 
 /**
+ * Normalize user input ticker to standard format for API calls
+ * Handles:
+ * - HK stocks: 700, 0700, 00700, 0700.HK -> 700.HK (Yahoo Finance format)
+ * - A-shares: 600519 -> 600519.SS, 000001 -> 000001.SZ
+ * - US stocks: AAPL -> AAPL (unchanged)
+ */
+export function normalizeTickerForApi(ticker: string): string {
+    const t = ticker.trim().toUpperCase();
+
+    // Handle existing suffix - need to normalize HK stocks
+    if (t.includes('.')) {
+        // HK stocks: strip leading zeros (Yahoo Finance needs 179.HK not 0179.HK)
+        if (t.endsWith('.HK')) {
+            const base = t.slice(0, -3); // Remove .HK
+            if (/^\d+$/.test(base)) {
+                const stripped = base.replace(/^0+/, '') || '0';
+                return `${stripped}.HK`;
+            }
+        }
+        // A-shares and US stocks: return as-is
+        return t;
+    }
+
+    // Pure numeric - determine market
+    if (/^\d+$/.test(t)) {
+        const stripped = t.replace(/^0+/, '') || '0';
+        const padded6 = t.padStart(6, '0');
+
+        // 6-digit codes: check A-share patterns
+        if (t.length === 6) {
+            const prefix = t.slice(0, 2);
+            if (['60', '68'].includes(prefix)) {
+                return `${t}.SS`; // Shanghai
+            }
+            if (['00', '30'].includes(prefix)) {
+                return `${t}.SZ`; // Shenzhen
+            }
+        }
+
+        // If padded to 6 digits matches A-share pattern
+        if (t.length < 6) {
+            const prefix6 = padded6.slice(0, 2);
+            if (['60', '68'].includes(prefix6)) {
+                return `${padded6}.SS`;
+            }
+            if (['00', '30'].includes(prefix6)) {
+                return `${padded6}.SZ`;
+            }
+        }
+
+        // 1-5 digit numbers (after stripping zeros): assume HK stock
+        // Yahoo Finance uses stripped version for HK (e.g., 700.HK not 0700.HK)
+        if (stripped.length >= 1 && stripped.length <= 5) {
+            return `${stripped}.HK`;
+        }
+    }
+
+    // Default: return as US stock (no suffix)
+    return t;
+}
+
+/**
+ * Normalize ticker for matching
+ * Handles HK stock codes with leading zeros (e.g., 700, 0700, 00700 all match 0700.HK)
+ */
+function normalizeTickerForMatch(ticker: string): string[] {
+    const t = ticker.toUpperCase().trim();
+    const variants: string[] = [t];
+
+    // If it's a HK stock ticker
+    if (t.endsWith('.HK')) {
+        const base = t.replace('.HK', '');
+        if (/^\d+$/.test(base)) {
+            // Add stripped version without leading zeros
+            const stripped = base.replace(/^0+/, '') || '0';
+            variants.push(stripped);
+            // Add padded versions
+            variants.push(stripped.padStart(4, '0'));
+            variants.push(stripped.padStart(5, '0'));
+        }
+    }
+
+    return variants;
+}
+
+/**
+ * Normalize query for matching HK stocks
+ * User input: 700, 0700, 00700 -> all should match 0700.HK
+ */
+function normalizeQueryVariants(query: string): string[] {
+    const q = query.toUpperCase().trim();
+    const variants: string[] = [q];
+
+    // If query is purely numeric, generate HK-style variants
+    if (/^\d+$/.test(q)) {
+        const stripped = q.replace(/^0+/, '') || '0';
+        // Try different padding levels for HK stocks
+        variants.push(stripped);
+        variants.push(stripped.padStart(4, '0'));
+        variants.push(stripped.padStart(5, '0'));
+        // Also add .HK suffix variants
+        variants.push(`${stripped}.HK`);
+        variants.push(`${stripped.padStart(4, '0')}.HK`);
+    }
+
+    return [...new Set(variants)]; // Remove duplicates
+}
+
+/**
  * Search stocks by query (supports ticker, Chinese name, English name, pinyin)
+ * Enhanced to handle HK stock codes with varying leading zeros
  */
 export function searchStocks(query: string, limit: number = 10): StockInfo[] {
     if (!query || query.trim().length === 0) {
@@ -201,50 +311,65 @@ export function searchStocks(query: string, limit: number = 10): StockInfo[] {
     }
 
     const q = query.toLowerCase().trim();
+    const queryVariants = normalizeQueryVariants(query);
 
     // Score each stock based on match quality
     const scored = ALL_STOCKS.map(stock => {
         let score = 0;
-        const tickerLower = stock.ticker.toLowerCase();
         const nameCnLower = stock.nameCn.toLowerCase();
         const nameEnLower = stock.nameEn.toLowerCase();
         const pinyinLower = stock.pinyin.toLowerCase();
 
-        // Exact ticker match (highest priority)
-        if (tickerLower === q) {
-            score = 100;
+        // Get all ticker variants for matching (handles HK leading zeros)
+        const tickerVariants = normalizeTickerForMatch(stock.ticker).map(t => t.toLowerCase());
+
+        // Check ticker matches (including variants)
+        for (const qv of queryVariants.map(v => v.toLowerCase())) {
+            for (const tv of tickerVariants) {
+                // Exact ticker match (highest priority)
+                if (tv === qv) {
+                    score = Math.max(score, 100);
+                }
+                // Ticker starts with query
+                else if (tv.startsWith(qv)) {
+                    score = Math.max(score, 90);
+                }
+                // Query starts with ticker base (e.g., "700" matches "0700.HK")
+                else if (qv.startsWith(tv.replace('.hk', ''))) {
+                    score = Math.max(score, 88);
+                }
+                // Ticker contains query
+                else if (tv.includes(qv)) {
+                    score = Math.max(score, 70);
+                }
+            }
         }
-        // Ticker starts with query
-        else if (tickerLower.startsWith(q)) {
-            score = 90;
-        }
-        // Ticker contains query
-        else if (tickerLower.includes(q)) {
-            score = 70;
-        }
+
         // Chinese name exact match
-        else if (nameCnLower === q) {
-            score = 85;
+        if (nameCnLower === q) {
+            score = Math.max(score, 85);
         }
         // Chinese name contains query
         else if (nameCnLower.includes(q)) {
-            score = 65;
+            score = Math.max(score, 65);
         }
+
         // Pinyin exact match
-        else if (pinyinLower === q) {
-            score = 80;
+        if (pinyinLower === q) {
+            score = Math.max(score, 80);
         }
         // Pinyin starts with query
         else if (pinyinLower.startsWith(q)) {
-            score = 75;
+            score = Math.max(score, 75);
         }
         // Pinyin contains query
         else if (pinyinLower.includes(q)) {
-            score = 55;
+            score = Math.max(score, 55);
         }
+
         // English name contains query
-        else if (nameEnLower.includes(q)) {
-            score = 50;
+        if (nameEnLower.includes(q)) {
+            score = Math.max(score, 50);
         }
 
         return { stock, score };
