@@ -140,7 +140,7 @@ def get_option_market_config(symbol: str) -> OptionMarketConfig:
         from ...services.market_data.market_detector import detect_market
         market = detect_market(symbol)
         market_key = market.value if hasattr(market, 'value') else str(market)
-        config = _MARKET_CONFIG_MAP.get(market_key, US_OPTIONS_CONFIG)
+        config = _MARKET_CONFIG_MAP.get(market_key.upper(), US_OPTIONS_CONFIG)
         logger.debug(f"期权市场配置: {symbol} → {config.market}")
         return config
     except Exception as e:

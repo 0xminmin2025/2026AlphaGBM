@@ -20,7 +20,10 @@ interface Recommendation {
     premium_yield: string;
     reason: string;
     risk_color?: string;
-    // 新增字段 - 期权评分系统优化
+    // 市场信息
+    market?: string;               // 'US' | 'HK' | 'CN'
+    currency?: string;             // 'USD' | 'HKD' | 'CNY'
+    // 期权评分系统优化
     symbol_quality?: number;       // 标的质量评分 (0-100)
     symbol_tier?: number;          // 标的等级 (1-5)
     symbol_description?: string;   // 标的描述
@@ -377,6 +380,20 @@ const styles = `
         color: #10B981;
         margin-left: 0.25rem;
     }
+
+    /* 市场标签 */
+    .market-badge {
+        display: inline-block;
+        font-size: 0.6rem;
+        font-weight: 600;
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.2rem;
+        margin-left: 0.375rem;
+        vertical-align: middle;
+        background-color: rgba(245, 158, 11, 0.2);
+        color: #FBBF24;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
 `;
 
 // Strategy name mapping
@@ -393,6 +410,15 @@ const trendNames: Record<string, { en: string; zh: string }> = {
     'downtrend': { en: 'Downtrend', zh: '下降趋势' },
     'sideways': { en: 'Sideways', zh: '横盘震荡' },
     'mixed': { en: 'Mixed', zh: '混合' },
+};
+
+// Currency symbol helper
+const getCurrencySymbol = (currency?: string): string => {
+    switch (currency) {
+        case 'HKD': return 'HK$';
+        case 'CNY': return '¥';
+        default: return '$';
+    }
 };
 
 interface HotRecommendationsProps {
@@ -466,6 +492,21 @@ const FALLBACK_RECOMMENDATIONS: Recommendation[] = [
         premium_yield: '2.1%',
         reason: 'AI芯片需求旺盛，估值合理',
         risk_color: '#10B981',
+    },
+    {
+        symbol: '0700.HK',
+        strategy: 'sell_put',
+        strike: 380,
+        expiry: '2025-03-27',
+        score: 74,
+        style_label: '稳健收益',
+        trend: 'sideways',
+        current_price: 412.60,
+        premium_yield: '1.6%',
+        reason: '港股科技龙头，估值处于合理区间',
+        risk_color: '#10B981',
+        market: 'HK',
+        currency: 'HKD',
     },
 ];
 
@@ -732,6 +773,10 @@ export default function HotRecommendations({
                                     <div className="symbol-info">
                                         <span className="symbol">
                                             {rec.symbol}
+                                            {/* 市场标签（非US市场显示） */}
+                                            {rec.market && rec.market !== 'US' && (
+                                                <span className="market-badge">{rec.market}</span>
+                                            )}
                                             {/* 标的质量等级徽章 */}
                                             {rec.symbol_tier && rec.symbol_tier <= 2 && (
                                                 <span className={`quality-badge quality-tier-${rec.symbol_tier}`}>
@@ -739,7 +784,7 @@ export default function HotRecommendations({
                                                 </span>
                                             )}
                                         </span>
-                                        <span className="current-price">${rec.current_price?.toFixed(2)}</span>
+                                        <span className="current-price">{getCurrencySymbol(rec.currency)}{rec.current_price?.toFixed(2)}</span>
                                     </div>
                                     <div className={`score-circle ${getScoreClass(rec.score)}`}>
                                         {showScore ? (
@@ -766,8 +811,8 @@ export default function HotRecommendations({
                                     <div className="detail-item">
                                         <span className="detail-label">{isZh ? '执行价' : 'Strike'}</span>
                                         <span className="detail-value">
-                                            {showDetails ? `$${rec.strike}` : (
-                                                <BlurText text={`$${rec.strike}`} placeholder="$???" requiredTier="plus" />
+                                            {showDetails ? `${getCurrencySymbol(rec.currency)}${rec.strike}` : (
+                                                <BlurText text={`${getCurrencySymbol(rec.currency)}${rec.strike}`} placeholder={`${getCurrencySymbol(rec.currency)}???`} requiredTier="plus" />
                                             )}
                                         </span>
                                     </div>
