@@ -215,6 +215,12 @@ def calculate_daily_profit_loss():
         db.session.rollback()
         raise
 
+def _send_feishu_report():
+    """Wrapper to send daily Feishu operations report"""
+    from .services.feishu_bot import send_daily_report
+    send_daily_report()
+
+
 # Global scheduler instance
 scheduler = None
 
@@ -239,8 +245,19 @@ def init_scheduler(app):
             replace_existing=True
         )
 
+        # Add the daily Feishu report job - runs every day at 8:00 PM
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _send_feishu_report),
+            trigger='cron',
+            hour=20,
+            minute=0,
+            id='daily_feishu_report',
+            name='Daily Feishu Operations Report',
+            replace_existing=True
+        )
+
         scheduler.start()
-        logger.info("Scheduler initialized successfully - Daily P/L calculation will run at 6:12 PM")
+        logger.info("Scheduler initialized successfully - Daily P/L calculation will run at 6:12 PM, Feishu report at 8:00 PM")
 
     except Exception as e:
         logger.error(f"Failed to initialize scheduler: {e}")

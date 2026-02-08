@@ -108,6 +108,18 @@ def create_app(config_class=Config):
         except Exception as e:
             return {'success': False, 'error': str(e)}, 500
 
+    @app.route('/api/admin/trigger-feishu-report')
+    def trigger_feishu_report():
+        try:
+            from .services.feishu_bot import send_daily_report
+            success = send_daily_report()
+            if success:
+                return {'success': True, 'message': 'Feishu report sent'}
+            else:
+                return {'success': False, 'message': 'Report not sent, check FEISHU_WEBHOOK_URL and logs'}, 500
+        except Exception as e:
+            return {'success': False, 'error': str(e)}, 500
+
     # Flask CLI command to update holding dates
     @app.cli.command('update-holding-dates')
     def update_holding_dates_command():
