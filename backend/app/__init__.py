@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 import os
 import logging
@@ -98,27 +98,39 @@ def create_app(config_class=Config):
     def health():
         return {'status': 'ok'}
 
-    # Add manual scheduler trigger endpoint for testing
+    # Add manual scheduler trigger endpoint for testing (requires auth)
     @app.route('/api/admin/trigger-profit-calculation')
     def trigger_profit_calculation():
+        # Require a secret admin key to prevent unauthorized access
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = os.environ.get('ADMIN_SECRET_KEY', '')
+        if not expected_key or admin_key != expected_key:
+            return {'error': 'Unauthorized'}, 401
         try:
             from .scheduler import calculate_daily_profit_loss
             calculate_daily_profit_loss()
             return {'success': True, 'message': 'Profit/loss calculation completed'}
         except Exception as e:
-            return {'success': False, 'error': str(e)}, 500
+            logging.getLogger(__name__).error(f"Admin trigger-profit error: {e}")
+            return {'success': False, 'error': 'Internal server error'}, 500
 
     @app.route('/api/admin/trigger-feishu-report')
     def trigger_feishu_report():
+        # Require a secret admin key to prevent unauthorized access
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = os.environ.get('ADMIN_SECRET_KEY', '')
+        if not expected_key or admin_key != expected_key:
+            return {'error': 'Unauthorized'}, 401
         try:
             from .services.feishu_bot import send_daily_report
             success = send_daily_report()
             if success:
                 return {'success': True, 'message': 'Feishu report sent'}
             else:
-                return {'success': False, 'message': 'Report not sent, check FEISHU_WEBHOOK_URL and logs'}, 500
+                return {'success': False, 'message': 'Report not sent'}, 500
         except Exception as e:
-            return {'success': False, 'error': str(e)}, 500
+            logging.getLogger(__name__).error(f"Admin trigger-feishu error: {e}")
+            return {'success': False, 'error': 'Internal server error'}, 500
 
     # Flask CLI command to update holding dates
     @app.cli.command('update-holding-dates')

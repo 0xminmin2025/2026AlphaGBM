@@ -160,7 +160,7 @@ class PaymentService:
                     stripe_sub = stripe.Subscription.retrieve(subscription_id)
                     current_period_end = datetime.fromtimestamp(stripe_sub.current_period_end)
                     current_period_start = datetime.fromtimestamp(stripe_sub.current_period_start)
-                except:
+                except Exception:
                     current_period_end = datetime.utcnow() + timedelta(days=days_valid)
                     current_period_start = datetime.utcnow()
 

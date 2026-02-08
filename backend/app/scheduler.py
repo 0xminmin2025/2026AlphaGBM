@@ -27,7 +27,7 @@ def get_exchange_rates():
 
     try:
         # Use cached rates if less than 1 hour old
-        if cache_timestamp and (datetime.now() - cache_timestamp).seconds < 3600:
+        if cache_timestamp and (datetime.now() - cache_timestamp).total_seconds() < 3600:
             return exchange_rates_cache
 
         # Fetch new rates from exchangerate-api.com (free tier)
