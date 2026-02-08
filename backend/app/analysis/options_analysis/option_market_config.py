@@ -46,6 +46,15 @@ class OptionMarketConfig:
         if not self.whitelist_enforced:
             return True
         normalized = symbol.upper()
+        # 商品期权：提取品种代码进行匹配 (au2604 → AU, SHFE.au2604 → AU)
+        if self.market == 'COMMODITY':
+            s = symbol.lower().strip()
+            if '.' in s:
+                parts = s.split('.')
+                if parts[0] in ('shfe', 'dce', 'czce', 'ine'):
+                    s = parts[1]
+            product = ''.join(c for c in s if c.isalpha())
+            return product in self.whitelist
         return normalized in self.whitelist
 
     def get_allowed_symbols(self) -> frozenset:
@@ -115,11 +124,33 @@ CN_OPTIONS_CONFIG = OptionMarketConfig(
     cash_settlement=True,
 )
 
+# ========================
+# COMMODITY (商品期货) 期权配置
+# ========================
+COMMODITY_OPTIONS_CONFIG = OptionMarketConfig(
+    market='COMMODITY',
+    currency='CNY',
+    contract_multiplier=1000,       # 默认值(黄金)，其他品种用 per_symbol_multiplier
+    risk_free_rate=0.018,
+    trading_days_per_year=240,
+    default_margin_rate=0.10,
+    min_volume=5,                   # 商品期权流动性较低
+    min_open_interest=20,
+    max_bid_ask_spread_pct=0.15,
+    monthly_expiry_rule='exchange_specific',
+    whitelist_enforced=True,
+    whitelist=frozenset({'au', 'ag', 'cu', 'al', 'm'}),
+    cash_settlement=False,          # 实物交割
+    per_symbol_multiplier={'AU': 1000, 'AG': 15, 'CU': 5, 'AL': 5, 'M': 10},
+)
+
+
 # 市场配置映射
 _MARKET_CONFIG_MAP: Dict[str, OptionMarketConfig] = {
     'US': US_OPTIONS_CONFIG,
     'HK': HK_OPTIONS_CONFIG,
     'CN': CN_OPTIONS_CONFIG,
+    'COMMODITY': COMMODITY_OPTIONS_CONFIG,
 }
 
 
@@ -131,7 +162,7 @@ def get_option_market_config(symbol: str) -> OptionMarketConfig:
     检测失败时默认返回 US 配置。
 
     Args:
-        symbol: 股票代码（如 'AAPL', '0700.HK', '510050.SS'）
+        symbol: 股票代码（如 'AAPL', '0700.HK', '510050.SS', 'au', 'au2604'）
 
     Returns:
         OptionMarketConfig 实例

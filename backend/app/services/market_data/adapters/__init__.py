@@ -10,6 +10,7 @@ from .defeatbeta_adapter import DefeatBetaAdapter
 from .tiger_adapter import TigerAdapter
 from .alphavantage_adapter import AlphaVantageAdapter
 from .tushare_adapter import TushareAdapter
+from .akshare_commodity_adapter import AkShareCommodityAdapter
 
 __all__ = [
     "YFinanceAdapter",
@@ -17,4 +18,5 @@ __all__ = [
     "TigerAdapter",
     "AlphaVantageAdapter",
     "TushareAdapter",
+    "AkShareCommodityAdapter",
 ]

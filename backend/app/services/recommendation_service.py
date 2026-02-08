@@ -39,6 +39,9 @@ HK_HOT_SYMBOLS = ['0700.HK', '9988.HK', '3690.HK']
 # A股ETF期权标的
 CN_HOT_SYMBOLS = ['510050.SS', '510300.SS']
 
+# 商品期货期权标的（流动性最好的3个）
+COMMODITY_HOT_SYMBOLS = ['au', 'ag', 'cu']
+
 # 期权策略类型
 STRATEGIES = ['sell_put', 'sell_call', 'buy_call', 'buy_put']
 
@@ -83,6 +86,13 @@ SYMBOL_QUALITY = {
     # CN A股ETF期权标的
     '510050.SS': {'tier': 1, 'quality': 90, 'description': '上证50ETF，A股蓝筹'},
     '510300.SS': {'tier': 1, 'quality': 88, 'description': '沪深300ETF，大盘指数'},
+
+    # 商品期货期权标的
+    'au': {'tier': 1, 'quality': 88, 'description': '黄金期权，避险资产'},
+    'ag': {'tier': 2, 'quality': 80, 'description': '白银期权，贵金属'},
+    'cu': {'tier': 2, 'quality': 78, 'description': '沪铜期权，工业金属'},
+    'al': {'tier': 3, 'quality': 70, 'description': '沪铝期权，工业金属'},
+    'm': {'tier': 3, 'quality': 72, 'description': '豆粕期权，农产品'},
 }
 
 
@@ -255,8 +265,8 @@ class RecommendationService:
                 'total_options_scanned': 0,
             }
 
-            # 合并 US + HK + CN 标的池
-            all_symbols = HOT_SYMBOLS[:8] + HK_HOT_SYMBOLS + CN_HOT_SYMBOLS
+            # 合并 US + HK + CN + COMMODITY 标的池
+            all_symbols = HOT_SYMBOLS[:8] + HK_HOT_SYMBOLS + CN_HOT_SYMBOLS + COMMODITY_HOT_SYMBOLS
 
             for symbol in all_symbols:
                 try:

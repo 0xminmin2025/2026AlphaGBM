@@ -163,11 +163,20 @@ class BuyCallScorer:
                 for factor in scores.keys()
             )
 
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = call_option.get('contract') or call_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 计算盈亏平衡点
             breakeven = strike + mid_price
             required_move = ((breakeven - current_price) / current_price) * 100
 
-            return {
+            result = {
                 'option_symbol': call_option.get('symbol', f"CALL_{strike}_{call_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': call_option.get('expiry'),
@@ -191,6 +200,11 @@ class BuyCallScorer:
                 'leverage_ratio': round((delta if delta else 0.5) * current_price / mid_price, 2),
                 'strategy_notes': self._generate_call_notes(current_price, strike, moneyness, time_value, days_to_expiry)
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")

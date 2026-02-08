@@ -163,11 +163,20 @@ class BuyPutScorer:
                 for factor in scores.keys()
             )
 
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = put_option.get('contract') or put_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 计算盈亏平衡点
             breakeven = strike - mid_price
             max_profit = (breakeven * multiplier) if breakeven > 0 else 0  # 1份合约
 
-            return {
+            result = {
                 'option_symbol': put_option.get('symbol', f"PUT_{strike}_{put_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': put_option.get('expiry'),
@@ -190,6 +199,11 @@ class BuyPutScorer:
                 'profit_potential': round(max_profit, 0),
                 'strategy_notes': self._generate_put_notes(current_price, strike, moneyness, time_value, days_to_expiry)
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")

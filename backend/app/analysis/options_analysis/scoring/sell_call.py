@@ -273,6 +273,15 @@ class SellCallScorer:
                 for factor in scores.keys()
             )
 
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = call_option.get('contract') or call_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 构建趋势警告信息
             trend_warning = None
             if trend_info and trend_info.get('display_info'):
@@ -280,7 +289,7 @@ class SellCallScorer:
                 if not display.get('is_ideal_trend'):
                     trend_warning = display.get('warning')
 
-            return {
+            result = {
                 'option_symbol': call_option.get('symbol', f"CALL_{strike}_{call_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': call_option.get('expiry'),
@@ -312,6 +321,11 @@ class SellCallScorer:
                 # 新增：Covered Call标识
                 'is_covered': is_covered,
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")

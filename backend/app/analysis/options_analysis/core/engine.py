@@ -112,7 +112,7 @@ class OptionsAnalysisEngine:
                     trend_info = result['trend_info']
                     break
 
-            return {
+            result = {
                 'success': True,
                 'symbol': symbol,
                 'timestamp': datetime.now().isoformat(),
@@ -132,6 +132,28 @@ class OptionsAnalysisEngine:
                     'cash_settlement': market_config.cash_settlement,
                 },
             }
+
+            # 商品期权：附加商品特有信息
+            if market_config.market == 'COMMODITY':
+                from ..advanced.delivery_risk import DeliveryRiskCalculator
+                from ....services.market_data.adapters.akshare_commodity_adapter import AkShareCommodityAdapter
+
+                product = AkShareCommodityAdapter._extract_product(symbol)
+                # 取主力合约的交割风险
+                dominant_contract = options_data.get('expiry_dates', [''])[0] if options_data.get('expiry_dates') else ''
+                delivery_risk = DeliveryRiskCalculator().assess(dominant_contract).to_dict() if dominant_contract else {}
+
+                result['commodity_info'] = {
+                    'product': product,
+                    'product_name': AkShareCommodityAdapter.PRODUCT_DISPLAY_NAME.get(product, product),
+                    'exchange': AkShareCommodityAdapter.PRODUCT_EXCHANGE.get(product, ''),
+                    'dominant_contract': dominant_contract,
+                    'delivery_risk': delivery_risk,
+                    'has_night_session': product in ('au', 'ag', 'cu', 'al'),
+                    'product_multiplier': market_config.get_multiplier(symbol),
+                }
+
+            return result
 
         except Exception as e:
             logger.error(f"期权链分析失败: {e}")

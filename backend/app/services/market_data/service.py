@@ -82,7 +82,7 @@ class MarketDataService:
         """Register all available data provider adapters."""
         from .adapters import (
             YFinanceAdapter, DefeatBetaAdapter, TigerAdapter,
-            AlphaVantageAdapter, TushareAdapter
+            AlphaVantageAdapter, TushareAdapter, AkShareCommodityAdapter
         )
 
         self.register_adapter(YFinanceAdapter())
@@ -90,6 +90,7 @@ class MarketDataService:
         self.register_adapter(TigerAdapter())
         self.register_adapter(AlphaVantageAdapter())
         self.register_adapter(TushareAdapter())
+        self.register_adapter(AkShareCommodityAdapter())
 
     def register_adapter(self, adapter: DataProviderAdapter):
         """Register a new data provider adapter."""

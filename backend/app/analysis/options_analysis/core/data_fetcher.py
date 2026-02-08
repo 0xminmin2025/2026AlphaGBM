@@ -60,7 +60,9 @@ class OptionsDataFetcher:
             logger.info(f"获取期权链数据: {symbol}, 到期天数: {expiry_days}, 市场: {market_config.market}")
 
             # 根据市场选择数据源
-            if market_config.market in ('HK', 'CN'):
+            if market_config.market == 'COMMODITY':
+                result = self._get_commodity_options(symbol)
+            elif market_config.market in ('HK', 'CN'):
                 result = self._get_market_data_service_options(symbol)
                 # 如果 Tiger/MarketDataService 失败，fallback 到 yfinance
                 if not result.get('success'):
@@ -339,6 +341,74 @@ class OptionsDataFetcher:
             'theta': safe_get(row.get('theta')),
             'vega': safe_get(row.get('vega')),
         }
+
+    def _get_commodity_options(self, symbol: str) -> Dict[str, Any]:
+        """通过 MarketDataService (AkShare) 获取商品期货期权数据"""
+        try:
+            from ....services.market_data.service import MarketDataService
+            from ....services.market_data.interfaces import Market
+
+            service = MarketDataService()
+
+            # 获取合约列表
+            expirations = service.get_options_expirations(symbol, market=Market.COMMODITY)
+            if not expirations:
+                return {
+                    'success': False,
+                    'error': f"无商品期权合约数据: {symbol}"
+                }
+
+            calls_data = []
+            puts_data = []
+
+            # 取前2个合约（主力+次主力）
+            for contract in expirations[:2]:
+                try:
+                    chain = service.get_options_chain(symbol, contract, market=Market.COMMODITY)
+                    if chain is None:
+                        continue
+
+                    calls_df = chain.calls if isinstance(chain.calls, pd.DataFrame) else pd.DataFrame()
+                    puts_df = chain.puts if isinstance(chain.puts, pd.DataFrame) else pd.DataFrame()
+
+                    if isinstance(calls_df, pd.DataFrame) and not calls_df.empty:
+                        for _, row in calls_df.iterrows():
+                            entry = self._row_to_option_dict(row, contract)
+                            entry['contract'] = contract
+                            calls_data.append(entry)
+
+                    if isinstance(puts_df, pd.DataFrame) and not puts_df.empty:
+                        for _, row in puts_df.iterrows():
+                            entry = self._row_to_option_dict(row, contract)
+                            entry['contract'] = contract
+                            puts_data.append(entry)
+
+                except Exception as e:
+                    logger.warning(f"获取商品期权链失败 {contract}: {e}")
+                    continue
+
+            if not calls_data and not puts_data:
+                return {
+                    'success': False,
+                    'error': f"无有效商品期权数据: {symbol}"
+                }
+
+            return {
+                'success': True,
+                'source': 'akshare_commodity',
+                'symbol': symbol,
+                'timestamp': datetime.now().isoformat(),
+                'calls': calls_data,
+                'puts': puts_data,
+                'expiry_dates': list(expirations),
+            }
+
+        except Exception as e:
+            logger.error(f"商品期权数据获取失败: {e}")
+            return {
+                'success': False,
+                'error': f"商品期权数据获取失败: {str(e)}"
+            }
 
     def _get_yfinance_options_data(self, symbol: str) -> Dict[str, Any]:
         """使用yfinance获取期权数据（备用方案）"""

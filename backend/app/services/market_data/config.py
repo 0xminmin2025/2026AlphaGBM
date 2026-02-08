@@ -152,6 +152,17 @@ TUSHARE_CACHE_TTL = ProviderCacheTTL(
     macro=120,                # 2 minutes - index data
 )
 
+AKSHARE_COMMODITY_CACHE_TTL = ProviderCacheTTL(
+    quote=120,                # 2 minutes - Sina delayed ~15s
+    history=600,              # 10 minutes - historical data
+    fundamentals=3600,        # N/A
+    info=86400,               # N/A
+    options_chain=120,        # 2 minutes - options chain
+    options_expirations=300,  # 5 minutes - contract list
+    earnings=3600,            # N/A
+    macro=120,                # N/A
+)
+
 # Default provider configurations
 PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
     "yfinance": ProviderConfig(
@@ -241,6 +252,23 @@ PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
         max_consecutive_failures=3,
         cache_ttl=TUSHARE_CACHE_TTL,
     ),
+    "akshare_commodity": ProviderConfig(
+        name="akshare_commodity",
+        enabled=True,
+        priority=10,   # Primary (only) provider for commodity options
+        requests_per_minute=30,  # Sina API conservative limit
+        requests_per_day=5000,
+        supported_data_types=[
+            DataType.QUOTE,
+            DataType.HISTORY,
+            DataType.OPTIONS_CHAIN,
+            DataType.OPTIONS_EXPIRATIONS,
+        ],
+        supported_markets=[Market.COMMODITY],
+        cooldown_on_error_seconds=60,
+        max_consecutive_failures=3,
+        cache_ttl=AKSHARE_COMMODITY_CACHE_TTL,
+    ),
 }
 
 
@@ -293,54 +321,21 @@ def is_index_etf(symbol: str) -> bool:
     return symbol.upper() in INDEX_ETFS
 
 
-# A-share stock code prefix rules (for 6-digit codes without suffix)
-CN_STOCK_PREFIX_RULES = {
-    '60': 'SS',    # Shanghai Main Board
-    '68': 'SS',    # Shanghai STAR Market (科创板)
-    '00': 'SZ',    # Shenzhen Main Board
-    '30': 'SZ',    # Shenzhen ChiNext (创业板)
-}
-
 
 def get_market_for_symbol(symbol: str) -> Market:
     """
     Determine market for a symbol based on suffix/pattern.
 
-    Detection rules:
-    1. Suffix-based: .HK → HK, .SS/.SZ → CN
-    2. Prefix-based: 6-digit codes starting with 60/68/00/30 → CN
-    3. Default: US market
-
-    Examples:
-        AAPL → US
-        0700.HK → HK
-        600519 → CN (Shanghai, Moutai)
-        000001 → CN (Shenzhen, Ping An)
-        600519.SS → CN
+    Uses the canonical detect_market from market_detector module.
 
     Args:
         symbol: Stock ticker symbol
 
     Returns:
-        Market enum (US, HK, or CN)
+        Market enum (US, HK, CN, or COMMODITY)
     """
-    symbol_upper = symbol.upper().strip()
-
-    # 1. Check suffix first
-    if symbol_upper.endswith(".HK"):
-        return Market.HK
-    elif symbol_upper.endswith(".SS") or symbol_upper.endswith(".SZ"):
-        return Market.CN
-
-    # 2. Check if it's a 6-digit A-share code (without suffix)
-    base_ticker = symbol_upper.split('.')[0]
-    if base_ticker.isdigit() and len(base_ticker) == 6:
-        prefix = base_ticker[:2]
-        if prefix in CN_STOCK_PREFIX_RULES:
-            return Market.CN
-
-    # 3. Default to US market
-    return Market.US
+    from .market_detector import detect_market
+    return detect_market(symbol)
 
 
 def get_timezone_for_market(market: Market) -> str:
@@ -349,4 +344,5 @@ def get_timezone_for_market(market: Market) -> str:
         Market.US: "America/New_York",
         Market.HK: "Asia/Hong_Kong",
         Market.CN: "Asia/Shanghai",
+        Market.COMMODITY: "Asia/Shanghai",  # 国内商品期货
     }.get(market, "America/New_York")

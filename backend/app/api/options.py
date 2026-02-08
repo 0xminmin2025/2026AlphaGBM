@@ -550,6 +550,64 @@ def get_recommendations():
         return jsonify({'success': False, 'error': f'获取推荐失败: {str(e)}'}), 500
 
 
+@options_bp.route('/commodity/contracts/<product>', methods=['GET'])
+@require_auth
+def get_commodity_contracts(product):
+    """
+    获取商品期权合约列表（含主力合约标识）
+
+    Args:
+        product: 品种代码 (au/ag/cu/al/m)
+
+    Returns:
+    {
+        "success": true,
+        "product": "au",
+        "product_name": "黄金",
+        "exchange": "SHFE",
+        "contracts": ["au2604", "au2605", ...],
+        "dominant_contract": "au2604",
+        "multiplier": 1000
+    }
+    """
+    try:
+        from ..services.market_data.adapters.akshare_commodity_adapter import AkShareCommodityAdapter
+
+        product_lower = product.lower().strip()
+        if product_lower not in AkShareCommodityAdapter.PRODUCT_CN_MAP:
+            return jsonify({
+                'success': False,
+                'error': f'不支持的商品品种: {product}',
+                'supported': list(AkShareCommodityAdapter.PRODUCT_CN_MAP.keys())
+            }), 400
+
+        from ..services.market_data.service import MarketDataService
+        from ..services.market_data.interfaces import Market
+
+        service = MarketDataService()
+        contracts = service.get_options_expirations(product_lower, market=Market.COMMODITY)
+
+        if not contracts:
+            return jsonify({
+                'success': False,
+                'error': f'无法获取 {product} 合约列表'
+            }), 500
+
+        return jsonify({
+            'success': True,
+            'product': product_lower,
+            'product_name': AkShareCommodityAdapter.PRODUCT_DISPLAY_NAME.get(product_lower, product),
+            'exchange': AkShareCommodityAdapter.PRODUCT_EXCHANGE.get(product_lower, ''),
+            'contracts': contracts,
+            'dominant_contract': contracts[0] if contracts else None,
+            'multiplier': AkShareCommodityAdapter.PRODUCT_MULTIPLIER.get(product_lower, 1),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"获取商品合约列表失败: {e}")
+        return jsonify({'success': False, 'error': f'获取合约列表失败: {str(e)}'}), 500
+
+
 @options_bp.route('/reverse-score', methods=['POST'])
 @require_auth
 @check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)

@@ -21,7 +21,7 @@ interface Recommendation {
     reason: string;
     risk_color?: string;
     // 市场信息
-    market?: string;               // 'US' | 'HK' | 'CN'
+    market?: string;               // 'US' | 'HK' | 'CN' | 'COMMODITY'
     currency?: string;             // 'USD' | 'HKD' | 'CNY'
     // 期权评分系统优化
     symbol_quality?: number;       // 标的质量评分 (0-100)
@@ -508,6 +508,21 @@ const FALLBACK_RECOMMENDATIONS: Recommendation[] = [
         market: 'HK',
         currency: 'HKD',
     },
+    {
+        symbol: 'au',
+        strategy: 'sell_put',
+        strike: 680,
+        expiry: 'au2606',
+        score: 73,
+        style_label: '稳健收益',
+        trend: 'uptrend',
+        current_price: 715.80,
+        premium_yield: '1.4%',
+        reason: '黄金避险需求旺盛，支撑位稳固',
+        risk_color: '#10B981',
+        market: 'COMMODITY',
+        currency: 'CNY',
+    },
 ];
 
 const FALLBACK_MARKET_SUMMARY: MarketSummary = {
@@ -775,7 +790,7 @@ export default function HotRecommendations({
                                             {rec.symbol}
                                             {/* 市场标签（非US市场显示） */}
                                             {rec.market && rec.market !== 'US' && (
-                                                <span className="market-badge">{rec.market}</span>
+                                                <span className="market-badge">{rec.market === 'COMMODITY' ? '商品' : rec.market}</span>
                                             )}
                                             {/* 标的质量等级徽章 */}
                                             {rec.symbol_tier && rec.symbol_tier <= 2 && (

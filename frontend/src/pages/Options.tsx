@@ -709,6 +709,23 @@ type OptionChainResponse = {
         contract_multiplier: number;
         cash_settlement: boolean;
     };
+    commodity_info?: {
+        product: string;
+        product_name: string;
+        exchange: string;
+        dominant_contract: string;
+        delivery_risk: {
+            days_to_delivery: number;
+            is_red_zone: boolean;
+            is_warning_zone: boolean;
+            delivery_penalty: number;
+            warning: string;
+            recommendation: string;
+            delivery_month: string;
+        };
+        has_night_session: boolean;
+        product_multiplier: number;
+    };
 };
 
 const getCurrencySymbol = (currency?: string): string => {
@@ -2077,8 +2094,13 @@ export default function Options() {
                             <div style={{ color: 'var(--muted-foreground)' }}>
                                 {t('options.results.currentPrice')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{cs}{displayStockPrice?.toFixed(2) || '-'}</span>
                                 {displayChain?.market_info && displayChain.market_info.market !== 'US' && (
-                                    <span className="ml-2 px-2 py-0.5 text-xs rounded" style={{ background: displayChain.market_info.market === 'HK' ? '#f97316' : '#ef4444', color: '#fff' }}>
-                                        {t(`options.market.${displayChain.market_info.market.toLowerCase()}`)}
+                                    <span className="ml-2 px-2 py-0.5 text-xs rounded" style={{
+                                        background: displayChain.market_info.market === 'HK' ? '#f97316'
+                                            : displayChain.market_info.market === 'COMMODITY' ? '#d97706'
+                                            : '#ef4444',
+                                        color: '#fff'
+                                    }}>
+                                        {displayChain.market_info.market === 'COMMODITY' ? '商品' : t(`options.market.${displayChain.market_info.market.toLowerCase()}`)}
                                     </span>
                                 )}
                                 <span className="mx-3">|</span>
@@ -2096,6 +2118,25 @@ export default function Options() {
                                 <div className="text-xs text-muted-foreground mt-1">
                                     {t('options.info.multiplier', { multiplier: displayChain.market_info.contract_multiplier })}
                                     {displayChain.market_info.cash_settlement && ` · ${t('options.info.cashSettlement')}`}
+                                </div>
+                            )}
+                            {/* 商品期权：交割风险 + 夜盘提示 */}
+                            {displayChain?.commodity_info && (
+                                <div className="text-xs mt-1 flex items-center justify-center gap-2">
+                                    <span style={{ color: 'var(--muted-foreground)' }}>
+                                        {displayChain.commodity_info.product_name} · {displayChain.commodity_info.exchange}
+                                        {displayChain.commodity_info.has_night_session && ' · 有夜盘'}
+                                    </span>
+                                    {displayChain.commodity_info.delivery_risk?.is_red_zone && (
+                                        <span className="px-2 py-0.5 rounded text-xs" style={{ background: '#ef4444', color: '#fff' }}>
+                                            {displayChain.commodity_info.delivery_risk.warning}
+                                        </span>
+                                    )}
+                                    {displayChain.commodity_info.delivery_risk?.is_warning_zone && (
+                                        <span className="px-2 py-0.5 rounded text-xs" style={{ background: '#f59e0b', color: '#fff' }}>
+                                            {displayChain.commodity_info.delivery_risk.warning}
+                                        </span>
+                                    )}
                                 </div>
                             )}
                             {/* View Mode Toggle */}
