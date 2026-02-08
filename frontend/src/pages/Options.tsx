@@ -11,6 +11,7 @@ import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
 import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
 import { useToastHelpers } from '@/components/ui/toast';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 
 // Declare global types for Chart.js
 declare global {
@@ -702,6 +703,20 @@ type OptionChainResponse = {
     puts: OptionData[];
     real_stock_price?: number;
     data_source?: string;
+    market_info?: {
+        market: string;
+        currency: string;
+        contract_multiplier: number;
+        cash_settlement: boolean;
+    };
+};
+
+const getCurrencySymbol = (currency?: string): string => {
+    switch (currency) {
+        case 'HKD': return 'HK$';
+        case 'CNY': return '¥';
+        default: return '$';
+    }
 };
 
 // Strategy types
@@ -731,6 +746,7 @@ export default function Options() {
     const [loading, setLoading] = useState(false);
     const [expirationsLoading, setExpirationsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [allowedSymbols, setAllowedSymbols] = useState<string[]>([]);
     const [strategy, setStrategy] = useState<Strategy>('sell_put');
     const [stockPrice, setStockPrice] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState('analysis');
@@ -804,6 +820,7 @@ export default function Options() {
             setChain(null);
             setLoading(false);
             setError('');
+            setAllowedSymbols([]);
             setStrategy('sell_put');
             setStockPrice(null);
             setActiveTab('analysis');
@@ -1043,6 +1060,7 @@ export default function Options() {
         }
         setExpirationsLoading(true);
         setError('');
+        setAllowedSymbols([]);
         setExpirations([]);
         setSelectedExpiries([]);
         setChain(null);
@@ -1089,7 +1107,11 @@ export default function Options() {
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to fetch expirations');
+            const errorData = err.response?.data;
+            setError(errorData?.error || 'Failed to fetch expirations');
+            if (errorData?.allowed_symbols) {
+                setAllowedSymbols(errorData.allowed_symbols);
+            }
         } finally {
             setExpirationsLoading(false);
         }
@@ -1100,6 +1122,7 @@ export default function Options() {
         if (tickers.length === 0 || expiries.length === 0) return;
         setLoading(true);
         setError('');
+        setAllowedSymbols([]);
         setTaskProgress(0);
         setTaskStep('');
 
@@ -1150,7 +1173,11 @@ export default function Options() {
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to start options analysis');
+            const errorData = err.response?.data;
+            setError(errorData?.error || 'Failed to start options analysis');
+            if (errorData?.allowed_symbols) {
+                setAllowedSymbols(errorData.allowed_symbols);
+            }
             setLoading(false);
         }
     };
@@ -1427,6 +1454,7 @@ export default function Options() {
     // Use historical chain data if viewing history, otherwise use current chain
     const displayChain = isHistoricalView ? historicalChain : chain;
     const displayStockPrice = isHistoricalView ? (historicalChain?.real_stock_price || stockPrice) : stockPrice;
+    const cs = getCurrencySymbol(displayChain?.market_info?.currency);
 
     // Handle option click to show detail modal
     const handleOptionClick = async (option: OptionData) => {
@@ -1718,8 +1746,14 @@ export default function Options() {
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
             {/* Error Alert */}
             {error && (
-                <div className="mb-4 p-4 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--bear)', color: 'var(--bear)' }}>
-                    {error}
+                <div className="mb-4">
+                    <ErrorAlert
+                        error={error}
+                        onRetry={() => { if (tickers.length > 0) fetchExpirations(); }}
+                        onDismiss={() => { setError(''); setAllowedSymbols([]); }}
+                        allowedSymbols={allowedSymbols}
+                        onSelectSymbol={(sym) => { setTickers([sym]); setError(''); setAllowedSymbols([]); }}
+                    />
                 </div>
             )}
 
@@ -2047,7 +2081,12 @@ export default function Options() {
                                 {t('options.results.title')}: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
                             </h2>
                             <div style={{ color: 'var(--muted-foreground)' }}>
-                                {t('options.results.currentPrice')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
+                                {t('options.results.currentPrice')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{cs}{displayStockPrice?.toFixed(2) || '-'}</span>
+                                {displayChain?.market_info && displayChain.market_info.market !== 'US' && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs rounded" style={{ background: displayChain.market_info.market === 'HK' ? '#f97316' : '#ef4444', color: '#fff' }}>
+                                        {t(`options.market.${displayChain.market_info.market.toLowerCase()}`)}
+                                    </span>
+                                )}
                                 <span className="mx-3">|</span>
                                 {t('options.results.expiry')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{selectedExpiries.length > 1 ? selectedExpiries.join(', ') : (displayChain.expiry_date || selectedExpiries[0] || '')}</span>
                                 <span className="mx-3">|</span>
@@ -2059,6 +2098,12 @@ export default function Options() {
                                     </>
                                 )}
                             </div>
+                            {displayChain?.market_info && displayChain.market_info.contract_multiplier !== 100 && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    {t('options.info.multiplier', { multiplier: displayChain.market_info.contract_multiplier })}
+                                    {displayChain.market_info.cash_settlement && ` · ${t('options.info.cashSettlement')}`}
+                                </div>
+                            )}
                             {/* View Mode Toggle */}
                             <div className="flex justify-center gap-2 mt-4">
                                 <button
@@ -2197,17 +2242,17 @@ export default function Options() {
                                                     {tickers.length > 1 && opt.symbol && (
                                                         <span className="text-[#0D9B97] font-mono mr-1">{opt.symbol}</span>
                                                     )}
-                                                    {isPut ? 'Sell Put' : 'Sell Call'} ${opt.strike}
+                                                    {isPut ? 'Sell Put' : 'Sell Call'} {cs}{opt.strike}
                                                 </span>
 
                                                 {/* 收入 */}
                                                 <span className="text-green-400 font-semibold">
-                                                    +${premiumPerContract.toFixed(0)}
+                                                    +{cs}{premiumPerContract.toFixed(0)}
                                                 </span>
 
                                                 {/* 保证金 */}
                                                 <span className="text-slate-500 text-sm">
-                                                    {t('options.income.margin')} ${(margin/1000).toFixed(1)}k
+                                                    {t('options.income.margin')} {cs}{(margin/1000).toFixed(1)}k
                                                 </span>
 
                                                 {/* 收益率 */}
@@ -2372,7 +2417,7 @@ export default function Options() {
                                             <div className="flex justify-between mt-1">
                                                 <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.premiumPerContract')}</span>
                                                 <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.9rem' }}>
-                                                    ${(premium * 100).toFixed(0)}
+                                                    {cs}{(premium * 100).toFixed(0)}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
@@ -2775,7 +2820,7 @@ export default function Options() {
                                                     {/* Strike Price Filter */}
                                                     <div>
                                                         <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                            {t('options.filter.strikeRange')}: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
+                                                            {t('options.filter.strikeRange')}: {cs}{currentStrikeMin.toFixed(2)} - {cs}{currentStrikeMax.toFixed(2)}
                                                         </label>
                                                         <div className="flex items-center gap-1">
                                                             <input
@@ -3056,7 +3101,7 @@ export default function Options() {
                                                         {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
                                                     </td>
                                                     {/* 默认显示的重要列 */}
-                                                    <td>${formatNumber(opt.latest_price)}</td>
+                                                    <td>{cs}{formatNumber(opt.latest_price)}</td>
                                                     <td><small>{opt.volume} / {opt.open_interest}</small></td>
                                                     <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
                                                         {exerciseProb.toFixed(1)}%
@@ -3069,7 +3114,7 @@ export default function Options() {
                                                         <>
                                                             <td>{formatNumber(opt.delta, 3)}</td>
                                                             <td>{formatPercent(opt.implied_vol)}</td>
-                                                            <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
+                                                            <td><small>{cs}{formatNumber(opt.bid_price)} / {cs}{formatNumber(opt.ask_price)}</small></td>
                                                         </>
                                                     )}
                                                 </tr>
@@ -3186,6 +3231,8 @@ export default function Options() {
                     stockHistoryOHLC={stockHistoryOHLC}
                     loadingHistory={loadingHistory}
                     onClose={closeModal}
+                    currencySymbol={cs}
+                    marketInfo={displayChain?.market_info}
                 />
             )}
 
@@ -3252,6 +3299,8 @@ function OptionDetailModal({
     stockHistoryOHLC,
     loadingHistory,
     onClose,
+    currencySymbol: cs = '$',
+    marketInfo,
 }: {
     option: OptionData;
     stockPrice: number;
@@ -3260,6 +3309,8 @@ function OptionDetailModal({
     stockHistoryOHLC: OHLCData[] | null;
     loadingHistory: boolean;
     onClose: () => void;
+    currencySymbol?: string;
+    marketInfo?: { market: string; currency: string; contract_multiplier: number; cash_settlement: boolean };
 }) {
     const { t } = useTranslation();
     // Chart type - fixed to kline (line chart removed)
@@ -3462,7 +3513,7 @@ function OptionDetailModal({
                                 order: 4
                             },
                             {
-                                label: `★ ${t('options.modal.chartCurrentPrice')} $${stockPrice.toFixed(2)}`,
+                                label: `★ ${t('options.modal.chartCurrentPrice')} ${cs}${stockPrice.toFixed(2)}`,
                                 data: Array(dates.length).fill(stockPrice),
                                 borderColor: '#4ade80',
                                 backgroundColor: 'rgba(74, 222, 128, 0.1)',
@@ -3474,7 +3525,7 @@ function OptionDetailModal({
                                 order: 1
                             },
                             {
-                                label: t('options.modal.chartStrikePrice') + ` ($${option.strike.toFixed(2)})`,
+                                label: t('options.modal.chartStrikePrice') + ` (${cs}${option.strike.toFixed(2)})`,
                                 data: Array(dates.length).fill(option.strike),
                                 borderColor: '#f59e0b',
                                 borderDash: [8, 4],
@@ -3485,7 +3536,7 @@ function OptionDetailModal({
                                 order: 2
                             },
                             {
-                                label: t('options.modal.chartStopLoss') + ` ($${stopLossPrice.toFixed(2)})`,
+                                label: t('options.modal.chartStopLoss') + ` (${cs}${stopLossPrice.toFixed(2)})`,
                                 data: Array(dates.length).fill(stopLossPrice),
                                 borderColor: '#ef4444',
                                 borderDash: [4, 4],
@@ -3548,7 +3599,7 @@ function OptionDetailModal({
                                     font: { size: 8 },
                                     padding: 4,
                                     callback: function(value: number) {
-                                        return '$' + value.toFixed(2);
+                                        return cs + value.toFixed(2);
                                     }
                                 },
                                 grid: {
@@ -3577,7 +3628,7 @@ function OptionDetailModal({
             <div className="option-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="option-modal-header">
                     <div className="option-modal-title">
-                        {strategyLabels[strategy]} - ${option.strike}
+                        {strategyLabels[strategy]} - {cs}{option.strike}
                     </div>
                     <button className="option-modal-close" onClick={onClose}>
                         ×
@@ -3588,19 +3639,19 @@ function OptionDetailModal({
                     <div className="option-info-grid">
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.strike')}</div>
-                            <div className="option-info-value">${option.strike.toFixed(2)}</div>
+                            <div className="option-info-value">{cs}{option.strike.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.stockPrice')}</div>
-                            <div className="option-info-value">${stockPrice.toFixed(2)}</div>
+                            <div className="option-info-value">{cs}{stockPrice.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.optionPrice')}</div>
-                            <div className="option-info-value">${premium.toFixed(2)}</div>
+                            <div className="option-info-value">{cs}{premium.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.premium')}</div>
-                            <div className="option-info-value" style={{ color: 'var(--primary)', fontWeight: 600 }}>${(premium * 100).toFixed(0)}</div>
+                            <div className="option-info-value" style={{ color: 'var(--primary)', fontWeight: 600 }}>{cs}{(premium * 100).toFixed(0)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.iv')}</div>
@@ -3616,15 +3667,25 @@ function OptionDetailModal({
                         </div>
                     </div>
 
+                    {/* Contract multiplier info for non-US markets */}
+                    {marketInfo && marketInfo.contract_multiplier !== 100 && (
+                        <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
+                            <span>{t('options.info.multiplier', { multiplier: marketInfo.contract_multiplier })}</span>
+                            {marketInfo.cash_settlement && (
+                                <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t('options.info.cashSettlement')}</span>
+                            )}
+                        </div>
+                    )}
+
                     {/* Max Loss & Min Margin */}
                     <div className="option-risk-row">
                         <div className="option-risk-item loss">
                             <span className="option-risk-label">{t('options.modal.maxLoss')}</span>
-                            <span className="option-risk-value">${maxLoss.toFixed(0)}</span>
+                            <span className="option-risk-value">{cs}{maxLoss.toFixed(0)}</span>
                         </div>
                         <div className="option-risk-item margin">
                             <span className="option-risk-label">{t('options.modal.minMargin')}</span>
-                            <span className="option-risk-value">${minMargin.toFixed(0)}</span>
+                            <span className="option-risk-value">{cs}{minMargin.toFixed(0)}</span>
                         </div>
                     </div>
 

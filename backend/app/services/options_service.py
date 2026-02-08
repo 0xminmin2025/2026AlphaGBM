@@ -22,6 +22,9 @@ from .data_provider import DataProvider
 from .option_models import OptionData, OptionChainResponse, ExpirationDate, ExpirationResponse, StockQuote, EnhancedAnalysisResponse, VRPResult as VRPResultModel, RiskAnalysis as RiskAnalysisModel
 from .option_scorer import OptionScorer
 
+# Market-specific option configuration
+from ..analysis.options_analysis.option_market_config import get_option_market_config
+
 logger = logging.getLogger(__name__)
 
 # Try importing Phase 1 modules
@@ -82,8 +85,12 @@ class MockDataGenerator:
             date_str = exp_date.strftime("%Y-%m-%d")
             if date_str not in seen_dates:
                 seen_dates.add(date_str)
-                # Monthly options on 3rd Friday
-                is_monthly = exp_date.day >= 15 and exp_date.day <= 21
+                # Monthly options — market-aware detection
+                market_config = get_option_market_config(symbol)
+                if market_config.monthly_expiry_rule == 'fourth_wednesday':
+                    is_monthly = exp_date.day >= 22 and exp_date.day <= 28 and exp_date.weekday() == 2
+                else:
+                    is_monthly = exp_date.day >= 15 and exp_date.day <= 21
                 period_tag = "m" if is_monthly else "w"
 
                 expirations.append(ExpirationDate(
@@ -188,12 +195,18 @@ class OptionsService:
 
                     if expiry_dates:
                         expirations = []
+                        market_config = get_option_market_config(symbol)
                         for date_str in expiry_dates:
                             try:
                                 # Parse date and create ExpirationDate
                                 exp_date = datetime.strptime(date_str, "%Y-%m-%d")
-                                # Determine period tag (weekly/monthly)
-                                is_monthly = exp_date.day >= 15 and exp_date.day <= 21 and exp_date.weekday() == 4
+                                # Determine period tag (weekly/monthly) — market-aware
+                                if market_config.monthly_expiry_rule == 'fourth_wednesday':
+                                    # HK/CN: 第四个周三 (day 22-28, weekday=2)
+                                    is_monthly = exp_date.day >= 22 and exp_date.day <= 28 and exp_date.weekday() == 2
+                                else:
+                                    # US: 第三个周五 (day 15-21, weekday=4)
+                                    is_monthly = exp_date.day >= 15 and exp_date.day <= 21 and exp_date.weekday() == 4
                                 period_tag = "m" if is_monthly else "w"
 
                                 expirations.append(ExpirationDate(

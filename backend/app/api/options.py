@@ -9,11 +9,30 @@ from ..services.task_queue import create_analysis_task, get_task_status
 from ..models import db, ServiceType, TaskType, OptionsAnalysisHistory
 from ..utils.decorators import check_quota, db_retry
 from ..utils.auth import require_auth, get_user_id
+from ..analysis.options_analysis.option_market_config import get_option_market_config
 import logging
 
 logger = logging.getLogger(__name__)
 
 options_bp = Blueprint('options', __name__, url_prefix='/api/options')
+
+
+def _check_option_whitelist(symbol: str):
+    """
+    检查标的是否在期权白名单中（HK/CN市场强制白名单）。
+    返回 None 表示通过，否则返回 (error_response, status_code) 元组。
+    """
+    market_config = get_option_market_config(symbol)
+    if market_config.whitelist_enforced and not market_config.is_symbol_allowed(symbol):
+        allowed = market_config.get_allowed_symbols()
+        return jsonify({
+            'success': False,
+            'error': f'标的 {symbol} 不在 {market_config.market} 市场期权白名单中',
+            'allowed_symbols': allowed,
+            'market': market_config.market
+        }), 400
+    return None
+
 
 def get_options_analysis_data(symbol: str, enhanced: bool = False, expiry_date: str = None, option_identifier: str = None) -> dict:
     """
@@ -78,6 +97,11 @@ def analyze_options_chain_async():
 
         if not symbol or not expiry_date:
             return jsonify({'error': 'symbol and expiry_date are required'}), 400
+
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
 
         user_id = get_user_id()
         if not user_id:
@@ -166,6 +190,11 @@ def analyze_options_enhanced_async():
 def get_expirations(symbol):
     """Get option expiration dates"""
     try:
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
         response = OptionsService.get_expirations(symbol)
         # response is an ExpirationResponse pydantic model
         return jsonify(response.dict()), 200
@@ -185,6 +214,11 @@ def get_option_chain(symbol, expiry_date):
     }
     """
     try:
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
         # Check if async mode is requested (POST request)
         if request.method == 'POST':
             data = request.get_json() or {}
@@ -568,6 +602,11 @@ def reverse_score_option():
         expiry_date = data.get('expiry_date', '')
         option_price = float(data.get('option_price', 0))
         implied_volatility = data.get('implied_volatility')
+
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
 
         # 验证期权类型
         if option_type not in ['CALL', 'PUT']:

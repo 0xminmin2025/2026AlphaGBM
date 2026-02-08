@@ -50,6 +50,15 @@ const errorMessages: Record<string, { messageKey: string; suggestionKeys: string
   'invalid symbol': {
     messageKey: 'error.invalidSymbol',
     suggestionKeys: ['error.suggestion.checkSymbol']
+  },
+  // 白名单错误 (匹配后端 "不在...白名单" 错误)
+  '不在': {
+    messageKey: 'error.notInWhitelist',
+    suggestionKeys: ['error.suggestion.selectAllowed']
+  },
+  'not in': {
+    messageKey: 'error.notInWhitelist',
+    suggestionKeys: ['error.suggestion.selectAllowed']
   }
 };
 
@@ -76,6 +85,8 @@ interface ErrorAlertProps {
   showHelp?: boolean;
   className?: string;
   variant?: 'default' | 'compact' | 'inline';
+  allowedSymbols?: string[];
+  onSelectSymbol?: (symbol: string) => void;
 }
 
 /**
@@ -89,7 +100,9 @@ export function ErrorAlert({
   suggestions,
   showHelp = true,
   className,
-  variant = 'default'
+  variant = 'default',
+  allowedSymbols,
+  onSelectSymbol
 }: ErrorAlertProps) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith('zh');
@@ -187,6 +200,20 @@ export function ErrorAlert({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {allowedSymbols && allowedSymbols.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {allowedSymbols.map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => onSelectSymbol?.(sym)}
+                  className="px-2.5 py-1 text-xs font-mono rounded-md border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                >
+                  {sym}
+                </button>
+              ))}
             </div>
           )}
 

@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,19 +29,24 @@ class BuyCallScorer:
             'time_optimization': 0.10     # 时间价值优化权重
         }
 
-    def score_options(self, options_data: Dict, stock_data: Dict) -> Dict[str, Any]:
+    def score_options(self, options_data: Dict, stock_data: Dict,
+                      market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         为Buy Call策略计分期权
 
         Args:
             options_data: 期权链数据
             stock_data: 标的股票数据
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             计分结果
         """
         try:
-            logger.info(f"开始Buy Call策略计分: {options_data.get('symbol', 'Unknown')}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"开始Buy Call策略计分: {options_data.get('symbol', 'Unknown')} (市场: {market_config.market})")
 
             if not options_data.get('success'):
                 return {
@@ -67,7 +74,7 @@ class BuyCallScorer:
             # 筛选和计分期权
             scored_options = []
             for call_option in calls:
-                score_result = self._score_individual_call(call_option, current_price, stock_data)
+                score_result = self._score_individual_call(call_option, current_price, stock_data, market_config=market_config)
                 if score_result and score_result.get('score', 0) > 0:
                     scored_options.append(score_result)
 
@@ -99,9 +106,16 @@ class BuyCallScorer:
             }
 
     def _score_individual_call(self, call_option: Dict, current_price: float,
-                              stock_data: Dict) -> Optional[Dict]:
+                              stock_data: Dict,
+                              market_config: OptionMarketConfig = None) -> Optional[Dict]:
         """计分单个看涨期权"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+            multiplier = market_config.get_multiplier(
+                stock_data.get('symbol', '') if isinstance(stock_data, dict) else ''
+            )
+
             strike = call_option.get('strike', 0)
             bid = call_option.get('bid', 0)
             ask = call_option.get('ask', 0)
@@ -172,7 +186,7 @@ class BuyCallScorer:
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'breakeven': round(breakeven, 2),
                 'required_move_pct': round(required_move, 2),
-                'max_loss': round(mid_price * 100, 0),  # 假设1份合约
+                'max_loss': round(mid_price * multiplier, 0),  # 1份合约
                 'max_profit_potential': 'unlimited',
                 'leverage_ratio': round((delta if delta else 0.5) * current_price / mid_price, 2),
                 'strategy_notes': self._generate_call_notes(current_price, strike, moneyness, time_value, days_to_expiry)
