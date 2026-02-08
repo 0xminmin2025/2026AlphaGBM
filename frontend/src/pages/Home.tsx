@@ -957,6 +957,9 @@ export default function Home() {
                     <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
                         {t(`stock.style.${style}.desc`)}
                     </div>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>
+                        ⚡ {isZh ? '每次分析消耗 1 次查询额度' : '1 query credit per analysis'}
+                    </p>
 
                     {/* 叙事雷达模式 - 暂时隐藏 */}
                     {/* {stockMode === 'narrative' && (

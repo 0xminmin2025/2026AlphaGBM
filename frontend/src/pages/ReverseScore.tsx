@@ -1051,6 +1051,9 @@ export default function ReverseScore() {
                                     ? (isZh ? '计算中...' : 'Calculating...')
                                     : (isZh ? '计算评分' : 'Calculate Score')}
                             </Button>
+                            <p className="text-xs text-center mt-2" style={{ color: 'var(--muted-foreground)' }}>
+                                ⚡ {isZh ? '每次分析消耗 1 次查询额度' : '1 query credit per analysis'}
+                            </p>
                         </div>
                     </div>
                     )}
