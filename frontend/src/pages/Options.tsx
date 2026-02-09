@@ -948,12 +948,6 @@ export default function Options() {
         }
     };
 
-    // Helper function to poll a single task (legacy - for single expiry)
-    const pollTask = async (taskId: string, symbol: string) => {
-        const expiry = selectedExpiries[0] || '';
-        pollTaskWithExpiry(taskId, symbol, expiry);
-    };
-
     // Helper function to poll a single task with expiry info
     const pollTaskWithExpiry = async (taskId: string, symbol: string, expiry: string) => {
         const taskKey = `${symbol}_${expiry}`;
@@ -998,7 +992,7 @@ export default function Options() {
     };
 
     // Initialize task polling hook for single stock fallback
-    const { startPolling } = useTaskPolling({
+    useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Options task completed:', taskResult);
             console.log('real_stock_price in taskResult:', taskResult?.real_stock_price);
