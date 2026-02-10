@@ -440,6 +440,238 @@ const styles = `
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Step Wizard Styles */
+    .step-wizard {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        padding: 0 0.5rem;
+    }
+
+    .step-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 2rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        transition: all 0.3s;
+        white-space: nowrap;
+    }
+
+    .step-indicator.completed {
+        color: var(--bull);
+    }
+
+    .step-indicator.active {
+        color: var(--primary);
+        background: rgba(13, 155, 151, 0.1);
+    }
+
+    .step-indicator.pending {
+        color: var(--muted-foreground);
+        opacity: 0.5;
+    }
+
+    .step-number {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .step-indicator.completed .step-number {
+        background: var(--bull);
+        color: white;
+    }
+
+    .step-indicator.active .step-number {
+        background: var(--primary);
+        color: white;
+        box-shadow: 0 0 0 3px rgba(13, 155, 151, 0.2);
+    }
+
+    .step-indicator.pending .step-number {
+        background: var(--muted);
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+    }
+
+    .step-connector {
+        width: 24px;
+        height: 1px;
+        background: var(--border);
+        flex-shrink: 0;
+    }
+
+    .step-connector.done {
+        background: var(--bull);
+    }
+
+    @media (max-width: 640px) {
+        .step-indicator span:not(.step-number) { display: none; }
+        .step-indicator { padding: 0.25rem; }
+        .step-connector { width: 16px; }
+    }
+
+    /* Step Section Card */
+    .step-section {
+        position: relative;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid var(--border);
+        background: var(--card);
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+        z-index: 1;
+    }
+
+    /* Ensure earlier steps stack above later ones so dropdowns aren't clipped */
+    .step-section:nth-child(2) { z-index: 5; }  /* Step 1 (after wizard) */
+    .step-section:nth-child(3) { z-index: 4; }  /* Step 2 */
+    .step-section:nth-child(4) { z-index: 3; }  /* Step 3 */
+    .step-section:nth-child(5) { z-index: 2; }  /* Step 4 */
+
+    .step-section.active-step {
+        border-color: rgba(13, 155, 151, 0.4);
+        background: linear-gradient(135deg, rgba(13, 155, 151, 0.03) 0%, var(--card) 100%);
+    }
+
+    .step-section.completed-step {
+        border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .step-section.disabled-step {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    .step-section-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: var(--foreground);
+    }
+
+    .step-section-label .step-badge {
+        font-size: 0.65rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.25rem;
+        font-weight: 700;
+    }
+
+    .step-section-label .step-badge.active {
+        background: var(--primary);
+        color: white;
+    }
+
+    .step-section-label .step-badge.done {
+        background: var(--bull);
+        color: white;
+    }
+
+    .step-section-label .step-badge.waiting {
+        background: var(--muted);
+        color: var(--muted-foreground);
+    }
+
+    /* Load Dates Button */
+    .load-dates-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        border: 2px dashed var(--primary);
+        background: rgba(13, 155, 151, 0.05);
+        color: var(--primary);
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .load-dates-btn:hover:not(:disabled) {
+        background: rgba(13, 155, 151, 0.12);
+        border-style: solid;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(13, 155, 151, 0.15);
+    }
+
+    .load-dates-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        border-color: var(--border);
+        color: var(--muted-foreground);
+        background: transparent;
+    }
+
+    .load-dates-btn.loading {
+        border-style: solid;
+        background: rgba(13, 155, 151, 0.08);
+        cursor: wait;
+    }
+
+    /* Skeleton Loading */
+    @keyframes shimmer {
+        0% { background-position: -200px 0; }
+        100% { background-position: calc(200px + 100%) 0; }
+    }
+
+    .skeleton-pill {
+        display: inline-block;
+        height: 32px;
+        border-radius: 0.375rem;
+        background: linear-gradient(90deg, var(--muted) 25%, rgba(255,255,255,0.05) 50%, var(--muted) 75%);
+        background-size: 200px 100%;
+        animation: shimmer 1.5s ease-in-out infinite;
+    }
+
+    /* Start Analysis Button - prominent */
+    .start-analysis-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.9rem 2rem;
+        border-radius: 0.75rem;
+        border: none;
+        background: linear-gradient(135deg, hsl(178, 78%, 32%) 0%, hsl(178, 78%, 26%) 100%);
+        color: white;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 12px rgba(13, 155, 151, 0.25);
+    }
+
+    .start-analysis-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(13, 155, 151, 0.35);
+        filter: brightness(1.1);
+    }
+
+    .start-analysis-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
     /* Risk Warning Collapse Animation */
     @keyframes slideDown {
         from { opacity: 0; transform: translateY(-10px); }
@@ -1719,38 +1951,77 @@ export default function Options() {
 
             {/* Controls */}
             <div className="controls-section">
-                <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                <h5 className="mb-3 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                     <i className="bi bi-graph-up"></i>
                     {t('options.form.title')}
                 </h5>
 
+                {/* Step Progress Indicator */}
+                {(() => {
+                    const step1Done = tickers.length > 0;
+                    const step2Done = step1Done && !!strategy;
+                    const step3Done = step2Done && expirations.length > 0;
+                    const step4Done = step3Done && selectedExpiries.length > 0;
+
+                    const steps = [
+                        { num: 1, label: isZh ? '选股' : 'Stock', done: step1Done, active: !step1Done },
+                        { num: 2, label: isZh ? '策略' : 'Strategy', done: step2Done, active: step1Done && !step2Done },
+                        { num: 3, label: isZh ? '加载日期' : 'Load', done: step3Done, active: step2Done && !step3Done },
+                        { num: 4, label: isZh ? '选择日期' : 'Select', done: step4Done, active: step3Done && !step4Done },
+                    ];
+
+                    return (
+                        <div className="step-wizard">
+                            {steps.map((step, i) => (
+                                <div key={step.num} style={{ display: 'contents' }}>
+                                    {i > 0 && <div className={`step-connector ${steps[i - 1].done ? 'done' : ''}`} />}
+                                    <div className={`step-indicator ${step.done ? 'completed' : step.active ? 'active' : 'pending'}`}>
+                                        <span className="step-number">
+                                            {step.done ? <i className="bi bi-check-lg" style={{ fontSize: '0.65rem' }}></i> : step.num}
+                                        </span>
+                                        <span>{step.label}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
+
                 {/* Step 1: Enter Stock Symbol(s) */}
-                <div className="mb-4 flex items-center gap-3">
-                    <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                        <span style={{ color: tickers.length > 0 ? 'var(--primary)' : 'var(--muted-foreground)' }}>{t('options.form.step1')}</span> {t('options.form.step1Label')}
-                    </label>
-                    <div className="flex-1">
-                        <MultiStockInput
-                            values={tickers}
-                            onChange={setTickers}
-                            maxCount={3}
-                            placeholder={t('options.multiStock.placeholder')}
-                        />
-                        <p className="text-xs mt-1.5" style={{ color: '#f59e0b' }}>
-                            {i18n.language.startsWith('zh')
-                                ? '⚡ 每次分析消耗 1 次查询额度'
-                                : '⚡ Each analysis uses 1 query credit'}
-                        </p>
+                <div className={`step-section ${tickers.length > 0 ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${tickers.length > 0 ? 'done' : 'active'}`}>
+                            {tickers.length > 0 ? <i className="bi bi-check-lg"></i> : '1'}
+                        </span>
+                        {t('options.form.step1Label')}
+                        {tickers.length > 0 && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--bull)', marginLeft: 'auto' }}>
+                                {tickers.join(', ')}
+                            </span>
+                        )}
                     </div>
+                    <MultiStockInput
+                        values={tickers}
+                        onChange={setTickers}
+                        maxCount={3}
+                        placeholder={t('options.multiStock.placeholder')}
+                    />
+                    <p className="text-xs mt-1.5" style={{ color: '#f59e0b', opacity: 0.8 }}>
+                        {i18n.language.startsWith('zh')
+                            ? '* 每次分析消耗 1 次查询额度'
+                            : '* Each analysis uses 1 query credit'}
+                    </p>
                 </div>
 
                 {/* Step 2: Select Strategy */}
-                <div className="mb-4">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <span style={{ color: strategy ? 'var(--primary)' : (tickers.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step2')}</span> {t('options.form.step2Label')}
-                        </label>
-                        <div className="flex gap-2 flex-1 flex-wrap" style={{ minWidth: 0 }}>
+                <div className={`step-section ${!tickers.length ? 'disabled-step' : strategy ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${strategy && tickers.length > 0 ? 'done' : tickers.length > 0 ? 'active' : 'waiting'}`}>
+                            {strategy && tickers.length > 0 ? <i className="bi bi-check-lg"></i> : '2'}
+                        </span>
+                        {t('options.form.step2Label')}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
                         {(Object.keys(strategyLabels) as Strategy[]).map(s => (
                             <button
                                 key={s}
@@ -1758,8 +2029,6 @@ export default function Options() {
                                 onClick={() => setStrategy(s)}
                                 disabled={tickers.length === 0}
                                 style={{
-                                    opacity: tickers.length > 0 ? 1 : 0.5,
-                                    cursor: tickers.length > 0 ? 'pointer' : 'not-allowed',
                                     flex: '1 1 0',
                                     minWidth: '100px'
                                 }}
@@ -1767,24 +2036,61 @@ export default function Options() {
                                 {strategyLabels[s]}
                             </button>
                         ))}
-                        </div>
                     </div>
                 </div>
 
-                {/* Step 3: 选择到期日 */}
-                <div className="mb-4">
-                    {/* 步骤标签 - 与步骤2对齐 */}
-                    <div className="flex items-center gap-3 mb-2">
-                        <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <span style={{ color: selectedExpiries.length > 0 ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>{t('options.form.step3')}</span> {t('options.form.selectExpiryTitle')}
-                        </label>
+                {/* Step 3: Load Expiration Dates */}
+                <div className={`step-section ${!tickers.length || !strategy ? 'disabled-step' : expirations.length > 0 ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${expirations.length > 0 ? 'done' : tickers.length > 0 && strategy ? 'active' : 'waiting'}`}>
+                            {expirations.length > 0 ? <i className="bi bi-check-lg"></i> : '3'}
+                        </span>
+                        {t('options.form.step3Label')}
+                        {expirations.length > 0 && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--bull)', marginLeft: 'auto' }}>
+                                {t('options.form.datesAvailable', { count: expirations.length })}
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        className={`load-dates-btn ${expirationsLoading ? 'loading' : ''}`}
+                        onClick={fetchExpirations}
+                        disabled={expirationsLoading || tickers.length === 0 || !strategy}
+                    >
+                        {expirationsLoading ? (
+                            <>
+                                <i className="bi bi-arrow-clockwise animate-spin"></i>
+                                {t('options.form.loading')}
+                            </>
+                        ) : expirations.length > 0 ? (
+                            <>
+                                <i className="bi bi-arrow-repeat"></i>
+                                {t('options.form.reloadDates')}
+                            </>
+                        ) : (
+                            <>
+                                <i className="bi bi-calendar-event"></i>
+                                {t('options.form.loadDates')}
+                            </>
+                        )}
+                    </button>
+                </div>
+
+                {/* Step 4: Select Expiration Date(s) + Start Analysis */}
+                <div className={`step-section ${expirations.length === 0 ? 'disabled-step' : selectedExpiries.length > 0 ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${selectedExpiries.length > 0 ? 'done' : expirations.length > 0 ? 'active' : 'waiting'}`}>
+                            {selectedExpiries.length > 0 ? <i className="bi bi-check-lg"></i> : '4'}
+                        </span>
+                        {t('options.form.selectExpiryTitle')}
                         {selectedExpiries.length > 0 && (
                             <span style={{
-                                fontSize: '0.75rem',
-                                padding: '0.15rem 0.5rem',
+                                fontSize: '0.7rem',
+                                padding: '0.1rem 0.45rem',
                                 borderRadius: '1rem',
                                 backgroundColor: 'var(--primary)',
-                                color: 'white'
+                                color: 'white',
+                                marginLeft: 'auto'
                             }}>
                                 {t('options.form.selectedCount', { count: selectedExpiries.length, max: 2 })}
                             </span>
@@ -1792,6 +2098,32 @@ export default function Options() {
                     </div>
 
                 {(() => {
+                    // Show skeleton during loading
+                    if (expirationsLoading) {
+                        return (
+                            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                                <div className="px-3 py-3" style={{ backgroundColor: 'var(--card)' }}>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[80, 95, 80, 95, 80, 95, 80, 95].map((w, i) => (
+                                            <div key={i} className="skeleton-pill" style={{ width: `${w}px` }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    if (expirations.length === 0) {
+                        return (
+                            <div className="text-center py-3" style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>
+                                <i className="bi bi-calendar3 mr-2" style={{ fontSize: '1.1rem', opacity: 0.5 }}></i>
+                                {tickers.length === 0 || !strategy
+                                    ? t('options.form.completeSteps')
+                                    : t('options.form.clickLoadAbove')}
+                            </div>
+                        );
+                    }
+
                     const now = new Date();
                     const twoWeeksLater = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
@@ -1821,10 +2153,10 @@ export default function Options() {
 
                     return (
                         <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-                            {/* 标签页头部 */}
-                            <div className="flex items-center justify-between" style={{ backgroundColor: 'var(--muted)', padding: '0.25rem' }}>
-                                <div className="flex gap-0.5">
-                                    {expirations.length > 0 ? tabs.map(tab => (
+                            {/* Tab headers */}
+                            <div className="flex items-center" style={{ backgroundColor: 'var(--muted)', padding: '0.25rem' }}>
+                                <div className="flex gap-0.5 flex-1">
+                                    {tabs.map(tab => (
                                         <button
                                             key={tab.key}
                                             onClick={() => setActiveExpiryTab(tab.key)}
@@ -1839,91 +2171,68 @@ export default function Options() {
                                             {tab.label}
                                             <span className="ml-1 opacity-60">({tab.data.length})</span>
                                         </button>
-                                    )) : (
-                                        <span className="px-3 py-1.5 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                            {t('options.form.clickLoad')}
-                                        </span>
-                                    )}
+                                    ))}
                                 </div>
-                                <button
-                                    onClick={fetchExpirations}
-                                    disabled={expirationsLoading || tickers.length === 0 || !strategy}
-                                    className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-40 mr-1"
-                                    style={{ color: 'var(--muted-foreground)' }}
-                                >
-                                    <i className={`bi ${expirationsLoading ? 'bi-arrow-clockwise animate-spin' : 'bi-arrow-repeat'}`}></i>
-                                </button>
                             </div>
 
-                            {/* 日期内容 */}
+                            {/* Date pills */}
                             <div className="px-3 py-2.5" style={{ backgroundColor: 'var(--card)' }}>
-                                {expirations.length === 0 ? (
-                                    <div className="text-center py-2" style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>
-                                        {tickers.length === 0 || !strategy ? t('options.form.completeSteps') : t('options.form.clickLoad')}
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                        {activeTabData.map(exp => {
-                                            const isSelected = selectedExpiries.includes(exp.date);
-                                            const isDisabled = !isSelected && selectedExpiries.length >= 2;
-                                            return (
-                                                <button
-                                                    key={exp.date}
-                                                    onClick={() => !isDisabled && handleExpiryToggle(exp.date)}
-                                                    disabled={isDisabled}
-                                                    className="transition-all"
-                                                    style={{
-                                                        padding: '0.3rem 0.6rem',
-                                                        borderRadius: '0.375rem',
-                                                        border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
-                                                        backgroundColor: isSelected ? 'rgba(13, 155, 151, 0.15)' : 'var(--muted)',
-                                                        color: isSelected ? 'var(--primary)' : isDisabled ? 'var(--muted-foreground)' : 'var(--foreground)',
-                                                        opacity: isDisabled ? 0.4 : 1,
-                                                        cursor: isDisabled ? 'not-allowed' : 'pointer',
-                                                        fontWeight: isSelected ? 600 : 400,
-                                                        fontSize: '0.85rem'
-                                                    }}
-                                                >
-                                                    {isSelected && <i className="bi bi-check-lg mr-1"></i>}
-                                                    {exp.date}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* 底部操作栏 */}
-                            {expirations.length > 0 && (
-                                <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
-                                        {selectedExpiries.length > 0 ? (
-                                            t('options.form.queryCount', {
-                                                count: tickers.length * selectedExpiries.length,
-                                                symbols: tickers.length,
-                                                dates: selectedExpiries.length
-                                            })
-                                        ) : (
-                                            t('options.form.selectToStart')
-                                        )}
-                                    </span>
-                                    <Button
-                                        onClick={handleStartAnalysis}
-                                        disabled={loading || selectedExpiries.length === 0}
-                                        className="btn-primary"
-                                        size="sm"
-                                    >
-                                        {loading ? (
-                                            <><i className="bi bi-arrow-clockwise mr-1 animate-spin"></i>{t('options.form.analyzing')}</>
-                                        ) : (
-                                            <><i className="bi bi-search mr-1"></i>{t('options.form.startAnalysis')}</>
-                                        )}
-                                    </Button>
+                                <div className="flex flex-wrap gap-2">
+                                    {activeTabData.map(exp => {
+                                        const isSelected = selectedExpiries.includes(exp.date);
+                                        const isDisabled = !isSelected && selectedExpiries.length >= 2;
+                                        return (
+                                            <button
+                                                key={exp.date}
+                                                onClick={() => !isDisabled && handleExpiryToggle(exp.date)}
+                                                disabled={isDisabled}
+                                                className="transition-all"
+                                                style={{
+                                                    padding: '0.3rem 0.6rem',
+                                                    borderRadius: '0.375rem',
+                                                    border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                                    backgroundColor: isSelected ? 'rgba(13, 155, 151, 0.15)' : 'var(--muted)',
+                                                    color: isSelected ? 'var(--primary)' : isDisabled ? 'var(--muted-foreground)' : 'var(--foreground)',
+                                                    opacity: isDisabled ? 0.4 : 1,
+                                                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                                    fontWeight: isSelected ? 600 : 400,
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {isSelected && <i className="bi bi-check-lg mr-1"></i>}
+                                                {exp.date}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                            )}
+                            </div>
                         </div>
                     );
                 })()}
+                </div>
+
+                {/* Start Analysis - Prominent Bottom Button */}
+                <div style={{ marginTop: '0.5rem' }}>
+                    {selectedExpiries.length > 0 && (
+                        <p className="text-center mb-2" style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
+                            {t('options.form.queryCount', {
+                                count: tickers.length * selectedExpiries.length,
+                                symbols: tickers.length,
+                                dates: selectedExpiries.length
+                            })}
+                        </p>
+                    )}
+                    <button
+                        className="start-analysis-btn"
+                        onClick={handleStartAnalysis}
+                        disabled={loading || selectedExpiries.length === 0 || tickers.length === 0}
+                    >
+                        {loading ? (
+                            <><i className="bi bi-arrow-clockwise animate-spin"></i>{t('options.form.analyzing')}</>
+                        ) : (
+                            <><i className="bi bi-rocket-takeoff"></i>{t('options.form.startAnalysis')}</>
+                        )}
+                    </button>
                 </div>
             </div>
 

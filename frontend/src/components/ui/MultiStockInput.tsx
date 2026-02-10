@@ -249,7 +249,7 @@ export default function MultiStockInput({
 
             {/* Suggestions dropdown - 移动端优化高度和字体 */}
             {showSuggestions && suggestions.length > 0 && !isMaxReached && (
-                <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl overflow-hidden max-h-[240px] sm:max-h-[320px] overflow-y-auto">
+                <div className="absolute z-50 w-full mt-1 bg-[#2a2a2e] border border-white/20 rounded-lg shadow-2xl overflow-hidden max-h-[240px] sm:max-h-[320px] overflow-y-auto" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
                     {suggestions.map((stock, index) => (
                         <div
                             key={stock.ticker}
@@ -287,7 +287,7 @@ export default function MultiStockInput({
 
             {/* No results hint - allow direct input */}
             {showSuggestions && inputValue.trim().length > 0 && suggestions.length === 0 && !isMaxReached && (
-                <div className="absolute z-50 w-full mt-1 bg-[#1c1c1e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                <div className="absolute z-50 w-full mt-1 bg-[#2a2a2e] border border-white/20 rounded-lg shadow-2xl overflow-hidden" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
                     {isSearching ? (
                         <div className="px-2.5 sm:px-3 py-2.5 sm:py-3 text-slate-400 text-xs sm:text-sm">
                             {isZh ? '搜索中...' : 'Searching...'}
