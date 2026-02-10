@@ -1037,8 +1037,9 @@ export default function Home() {
                         <p className="text-muted">
                             {taskStep || t('stock.loading.connecting')}
                         </p>
-
-                        {/* Task Status Info - Hidden per user request */}
+                        <p style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', marginTop: '0.75rem', opacity: 0.6 }}>
+                            {i18n.language.startsWith('zh') ? '深度分析中，预计需要3分钟' : 'Deep analysis in progress, estimated 3 minutes'}
+                        </p>
                     </div>
                 )}
 

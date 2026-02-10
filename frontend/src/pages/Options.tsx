@@ -999,17 +999,7 @@ export default function Options() {
         return localStorage.getItem('optionsRiskExpanded') === 'true';
     });
 
-    // Quota confirmation dialog state
-    const [showQuotaConfirm, setShowQuotaConfirm] = useState(false);
-    const [quotaInfo, setQuotaInfo] = useState<{
-        hasEnough: boolean;
-        willUseFree: boolean;
-        freeRemaining: number;
-        freeQuota: number;
-        paidCredits: number;
-        amountNeeded: number;
-    } | null>(null);
-    const [pendingExpiries, setPendingExpiries] = useState<string[] | null>(null);
+    // (Quota confirmation dialog removed - analysis starts directly if user has enough credits)
 
     const toast = useToastHelpers();
 
@@ -1382,11 +1372,15 @@ export default function Options() {
     };
 
     // Check quota before analysis (supports multiple expiries)
-    const checkQuotaAndConfirm = async (expiries: string[]) => {
+    const checkQuotaAndStart = async (expiries: string[]) => {
         if (!user) {
             navigate('/login');
             return;
         }
+
+        // Show loading immediately so user gets feedback
+        setLoading(true);
+        setError('');
 
         // Calculate total queries = symbols × expiries
         const totalQueries = tickers.length * expiries.length;
@@ -1399,51 +1393,26 @@ export default function Options() {
 
             const data = response.data;
 
-            // 如果额度不足，显示警告
+            // 如果额度不足（免费+付费都不够），才提示并跳转
             if (!data.has_enough) {
+                setLoading(false);
+                const totalAvailable = (data.free_remaining || 0) + (data.paid_credits || 0);
                 toast.error(
                     t('options.quota.insufficient'),
-                    t('options.quota.insufficientDesc', { needed: totalQueries, remaining: data.free_remaining })
+                    t('options.quota.insufficientDesc', { needed: totalQueries, remaining: totalAvailable })
                 );
                 navigate('/pricing');
                 return;
             }
 
-            // 设置额度信息并显示确认弹窗
-            setQuotaInfo({
-                hasEnough: data.has_enough,
-                willUseFree: data.will_use_free,
-                freeRemaining: data.free_remaining,
-                freeQuota: data.free_quota,
-                paidCredits: data.paid_credits,
-                amountNeeded: totalQueries
-            });
-            setPendingExpiries(expiries);
-            setShowQuotaConfirm(true);
+            // 额度充足 → 直接开始分析，不弹窗
+            fetchChain(expiries);
 
         } catch (err) {
             console.error('Quota check failed:', err);
             // 如果检查失败，仍然允许继续（后端会做最终检查）
             fetchChain(expiries);
         }
-    };
-
-    // Confirm and proceed with analysis
-    const confirmAndAnalyze = () => {
-        setShowQuotaConfirm(false);
-        if (pendingExpiries && pendingExpiries.length > 0) {
-            fetchChain(pendingExpiries);
-            // 分析完成后显示剩余额度的 toast
-            if (quotaInfo?.willUseFree) {
-                const newRemaining = quotaInfo.freeRemaining - quotaInfo.amountNeeded;
-                toast.info(
-                    t('options.quota.used'),
-                    t('options.quota.remaining', { remaining: newRemaining, quota: quotaInfo.freeQuota })
-                );
-            }
-        }
-        setPendingExpiries(null);
-        setQuotaInfo(null);
     };
 
     // Toggle expiry date selection (max 2)
@@ -1464,7 +1433,7 @@ export default function Options() {
     // Start analysis with selected expiries
     const handleStartAnalysis = () => {
         if (selectedExpiries.length > 0 && strategy && tickers.length > 0) {
-            checkQuotaAndConfirm(selectedExpiries);
+            checkQuotaAndStart(selectedExpiries);
         }
     };
 
@@ -2008,8 +1977,8 @@ export default function Options() {
                     />
                     <p className="text-xs mt-1.5" style={{ color: '#f59e0b', opacity: 0.8 }}>
                         {i18n.language.startsWith('zh')
-                            ? '* 每次分析消耗 1 次查询额度'
-                            : '* Each analysis uses 1 query credit'}
+                            ? '* 每次分析消耗 1 次查询额度 (1只股票 1个日期)'
+                            : '* Each analysis uses 1 query credit (1 stock 1 date)'}
                     </p>
                 </div>
 
@@ -2310,6 +2279,9 @@ export default function Options() {
                     {!taskStep && (
                         <p style={{ color: 'var(--muted-foreground)' }}>{t('options.analyzing')}</p>
                     )}
+                    <p style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', marginTop: '0.75rem', opacity: 0.6 }}>
+                        {isZh ? '深度分析中，预计需要1分钟' : 'Deep analysis in progress, estimated 1 minute'}
+                    </p>
                 </div>
             )}
 
@@ -3493,55 +3465,7 @@ export default function Options() {
             )}
 
             {/* Quota Confirmation Dialog */}
-            {showQuotaConfirm && quotaInfo && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                        onClick={() => {
-                            setShowQuotaConfirm(false);
-                            setPendingExpiries(null);
-                            setQuotaInfo(null);
-                        }}
-                    />
-                    <div className="relative bg-[#1a1a1d] border border-white/10 rounded-2xl p-6 max-w-md mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                        <h3 className="text-xl font-bold mb-3">{t('options.quota.confirmTitle')}</h3>
-                        <div className="text-slate-400 mb-4 space-y-2">
-                            <p>{t('options.quota.analyzeCount', { count: quotaInfo.amountNeeded })}</p>
-                            {quotaInfo.willUseFree ? (
-                                <p className="text-green-400">
-                                    {t('options.quota.usingFree', {
-                                        remaining: quotaInfo.freeRemaining,
-                                        quota: quotaInfo.freeQuota
-                                    })}
-                                </p>
-                            ) : (
-                                <p className="text-amber-400">
-                                    {t('options.quota.usingPaid', { credits: quotaInfo.paidCredits })}
-                                </p>
-                            )}
-                        </div>
-                        <div className="flex gap-3 justify-end">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setShowQuotaConfirm(false);
-                                    setPendingExpiries(null);
-                                    setQuotaInfo(null);
-                                }}
-                                className="border-white/20"
-                            >
-                                {t('common.cancel')}
-                            </Button>
-                            <Button
-                                onClick={confirmAndAnalyze}
-                                className="bg-[#0D9B97] hover:bg-[#0D9B97]/80"
-                            >
-                                {t('options.quota.confirmAnalyze')}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Quota confirmation dialog removed - analysis starts directly */}
         </div>
     );
 }

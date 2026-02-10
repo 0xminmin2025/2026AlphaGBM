@@ -7,7 +7,7 @@ import os
 import stripe
 from ..services.payment_service import PaymentService
 from ..utils.auth import require_auth
-from ..models import db, DailyQueryCount
+from ..models import db, DailyQueryCount, ServiceType
 
 payment_bp = Blueprint('payment', __name__, url_prefix='/api/payment')
 
@@ -149,13 +149,13 @@ def check_quota():
     # 获取免费额度信息
     free_info = PaymentService.get_daily_free_quota_info(user_id, service_type)
 
-    # 获取付费额度
-    total_credits = PaymentService.get_total_credits(user_id, service_type)
+    # 获取付费额度（订阅额度统一存储为 stock_analysis 类型，作为通用额度）
+    total_credits = PaymentService.get_total_credits(user_id, ServiceType.STOCK_ANALYSIS.value)
 
-    # 检查是否有足够额度
+    # 检查是否有足够额度（免费 + 付费合计，扣减时优先用免费再用付费）
+    total_available = free_info['remaining'] + total_credits
+    has_enough = total_available >= amount
     can_use_free = free_info['remaining'] >= amount
-    can_use_paid = total_credits >= amount
-    has_enough = can_use_free or can_use_paid
 
     return jsonify({
         'has_enough': has_enough,
@@ -165,7 +165,7 @@ def check_quota():
         'free_remaining': free_info['remaining'],
         'paid_credits': total_credits,
         'amount_needed': amount,
-        'message': '额度充足' if has_enough else f'额度不足，需要 {amount} 次，剩余免费 {free_info["remaining"]} 次'
+        'message': '额度充足' if has_enough else f'额度不足，需要 {amount} 次，剩余总额度 {total_available} 次（免费 {free_info["remaining"]} + 付费 {total_credits}）'
     }), 200
 
 
