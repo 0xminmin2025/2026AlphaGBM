@@ -53,6 +53,7 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         super().__init__(cooldown_seconds=60, max_failures=3)
         self._quote_client: Optional[object] = None
         self._initialized = False
+        self._hk_option_symbol_map: Optional[Dict[str, str]] = None  # stock_code -> option_code
 
     @property
     def name(self) -> str:
@@ -101,6 +102,26 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             Market.CN: TigerMarket.CN,
         }.get(market, TigerMarket.US)
 
+    @staticmethod
+    def _to_tiger_symbol(symbol: str) -> str:
+        """
+        Convert symbol to Tiger API format.
+
+        Tiger API uses 5-digit codes without suffix for HK stocks:
+          - '0179.HK' -> '00179'
+          - '0700.HK' -> '00700'
+          - '9988.HK' -> '09988'
+          - '00700'   -> '00700' (already Tiger format)
+          - 'AAPL'    -> 'AAPL'  (US stocks unchanged)
+          - '600519.SS' -> '600519.SS' (CN stocks unchanged)
+        """
+        s = symbol.strip().upper()
+        if s.endswith('.HK'):
+            base = s[:-3]  # strip .HK
+            if base.isdigit():
+                return base.zfill(5)  # pad to 5 digits
+        return s
+
     def _ensure_initialized(self) -> bool:
         """Ensure Tiger client is initialized."""
         if self._initialized and self._quote_client is not None:
@@ -133,6 +154,14 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             client_config.language = Language.zh_CN
 
             self._quote_client = QuoteClient(client_config)
+
+            # Grab quote permission to ensure this device is primary
+            try:
+                self._quote_client.grab_quote_permission()
+                logger.info("[Tiger] Quote permission grabbed successfully")
+            except Exception as perm_e:
+                logger.warning(f"[Tiger] grab_quote_permission failed (non-fatal): {perm_e}")
+
             self._initialized = True
             logger.info(f"[Tiger] Initialized with Tiger ID: {client_config.tiger_id}")
             return True
@@ -140,6 +169,60 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         except Exception as e:
             logger.warning(f"[Tiger] Initialization failed: {e}")
             return False
+
+    def _get_hk_option_symbol(self, stock_code: str) -> Optional[str]:
+        """
+        Map HK stock code to its option symbol.
+
+        Tiger HK options use special option codes (e.g., TCH.HK for 00700),
+        not the stock code directly. This method fetches and caches the mapping.
+
+        Args:
+            stock_code: HK stock code (e.g., '07709', '00700')
+
+        Returns:
+            Option symbol (e.g., 'TCH.HK') or None if no options available
+        """
+        if not self._ensure_initialized():
+            return None
+
+        # Build mapping cache on first call
+        if self._hk_option_symbol_map is None:
+            try:
+                from tigeropen.common.consts import Market as TigerMarketEnum
+                symbols_df = self._quote_client.get_option_symbols(market=TigerMarketEnum.HK)
+                if symbols_df is not None and not symbols_df.empty:
+                    self._hk_option_symbol_map = {}
+                    for _, row in symbols_df.iterrows():
+                        underlying = str(row.get('underlying_symbol', '')).strip()
+                        option_sym = str(row.get('symbol', '')).strip()
+                        if underlying and option_sym:
+                            self._hk_option_symbol_map[underlying] = option_sym
+                    logger.info(f"[Tiger] Loaded {len(self._hk_option_symbol_map)} HK option symbol mappings")
+                else:
+                    self._hk_option_symbol_map = {}
+                    logger.warning("[Tiger] No HK option symbols returned")
+            except Exception as e:
+                self._hk_option_symbol_map = {}
+                logger.warning(f"[Tiger] Failed to load HK option symbols: {e}")
+
+        # Try exact match first
+        if stock_code in self._hk_option_symbol_map:
+            return self._hk_option_symbol_map[stock_code]
+
+        # Try padded format (e.g., '7709' -> '07709')
+        if stock_code.isdigit():
+            padded = stock_code.zfill(5)
+            if padded in self._hk_option_symbol_map:
+                return self._hk_option_symbol_map[padded]
+            # Try without leading zeros
+            stripped = stock_code.lstrip('0')
+            for key, val in self._hk_option_symbol_map.items():
+                if key.lstrip('0') == stripped:
+                    return val
+
+        logger.info(f"[Tiger] No option symbol mapping found for HK stock {stock_code}")
+        return None
 
     def get_quote(self, symbol: str) -> Optional[QuoteData]:
         """Get real-time quote."""
@@ -149,8 +232,9 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
-            briefs = self._quote_client.get_stock_briefs([symbol])
+            briefs = self._quote_client.get_stock_briefs([tiger_sym])
 
             if briefs is None or briefs.empty:
                 return None
@@ -191,20 +275,25 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
+            # Detect market for timezone
+            market = get_market_for_symbol(symbol)
+
             # Calculate time range
             end_time = int(datetime.now().timestamp() * 1000)
             limit = self._period_to_limit(period) if period else 60
 
             # Note: get_bars doesn't accept market param - it infers from symbol
             bars = self._quote_client.get_bars(
-                symbols=[symbol],
+                symbols=[tiger_sym],
                 period=BarPeriod.DAY,
                 end_time=end_time,
                 limit=limit,
             )
 
-            if bars is None or bars.empty:
+            if bars is None or (hasattr(bars, 'empty') and bars.empty):
+                logger.info(f"[Tiger] get_bars returned no data for {symbol} (limit={limit})")
                 return None
 
             # Transform to standard format
@@ -256,6 +345,7 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
                 source=self.name,
             )
         except Exception as e:
+            logger.warning(f"[Tiger] get_history failed for {symbol} (period={period}): {e}")
             self._handle_error(e, symbol)
             return None
 
@@ -290,16 +380,37 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
-            expirations = self._quote_client.get_option_expirations(
-                symbols=[symbol],
-                market=tiger_market
-            )
+            # For HK market, try mapped option symbol first, then fall back to stock code
+            query_symbols = [tiger_sym]
+            if market == Market.HK:
+                hk_option_sym = self._get_hk_option_symbol(tiger_sym)
+                if hk_option_sym:
+                    query_symbols = [hk_option_sym, tiger_sym]  # Try mapped symbol first
+                    logger.info(f"[Tiger] HK option symbol mapped: {symbol} -> {hk_option_sym}")
 
-            if expirations is None or expirations.empty:
+            expirations = None
+            used_symbol = None
+            for qs in query_symbols:
+                try:
+                    exp = self._quote_client.get_option_expirations(
+                        symbols=[qs],
+                        market=tiger_market
+                    )
+                    if exp is not None and not (hasattr(exp, 'empty') and exp.empty):
+                        expirations = exp
+                        used_symbol = qs
+                        break
+                    logger.info(f"[Tiger] get_option_expirations no data for {qs}")
+                except Exception as exp_e:
+                    logger.info(f"[Tiger] get_option_expirations failed for {qs}: {exp_e}")
+
+            if expirations is None:
+                logger.info(f"[Tiger] No option expirations found for {symbol} (tried: {query_symbols})")
                 return None
 
             # Extract expiry dates
@@ -323,6 +434,7 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             self._handle_success()
             return result if result else None
         except Exception as e:
+            logger.warning(f"[Tiger] get_options_expirations failed for {symbol}: {e}")
             self._handle_error(e, symbol)
             return None
 
@@ -334,12 +446,13 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
-            # Get underlying price
-            briefs = self._quote_client.get_stock_briefs([symbol])
+            # Get underlying price using stock code
+            briefs = self._quote_client.get_stock_briefs([tiger_sym])
             underlying_price = None
             if briefs is not None and not briefs.empty:
                 underlying_price = safe_float(briefs.iloc[0].get('latest_price'))
@@ -347,13 +460,30 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
             if underlying_price is None:
                 return None
 
-            # Get option chain
-            chain = self._quote_client.get_option_chain(
-                symbol=symbol,
-                expiry=expiry,
-                market=tiger_market,
-                return_greek_value=True
-            )
+            # For HK market, try mapped option symbol first, then fall back to stock code
+            query_symbols = [tiger_sym]
+            if market == Market.HK:
+                hk_option_sym = self._get_hk_option_symbol(tiger_sym)
+                if hk_option_sym:
+                    query_symbols = [hk_option_sym, tiger_sym]
+                    logger.info(f"[Tiger] HK option chain symbol mapped: {symbol} -> {hk_option_sym}")
+
+            # Get option chain - try each symbol
+            chain = None
+            for qs in query_symbols:
+                try:
+                    result = self._quote_client.get_option_chain(
+                        symbol=qs,
+                        expiry=expiry,
+                        market=tiger_market,
+                        return_greek_value=True
+                    )
+                    if result is not None and not (hasattr(result, 'empty') and result.empty):
+                        chain = result
+                        break
+                    logger.info(f"[Tiger] get_option_chain no data for {qs}")
+                except Exception as chain_e:
+                    logger.info(f"[Tiger] get_option_chain failed for {qs}: {chain_e}")
 
             if chain is None or chain.empty:
                 return None
@@ -418,8 +548,9 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
-            briefs = self._quote_client.get_stock_delay_briefs([symbol])
+            briefs = self._quote_client.get_stock_delay_briefs([tiger_sym])
 
             if briefs is None or briefs.empty:
                 return None
@@ -481,13 +612,14 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             if market is None:
                 market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
             depth = self._quote_client.get_depth_quote(
-                symbols=[symbol],
+                symbols=[tiger_sym],
                 market=tiger_market
             )
 
@@ -529,12 +661,13 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
             ticks = self._quote_client.get_trade_ticks(
-                symbols=[symbol],
+                symbols=[tiger_sym],
                 market=tiger_market,
                 limit=limit,
                 begin_index=begin_index
@@ -559,12 +692,13 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
             timeline = self._quote_client.get_timeline(
-                symbols=[symbol],
+                symbols=[tiger_sym],
                 market=tiger_market,
                 include_hour_trading=True
             )
@@ -592,12 +726,13 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
             flow = self._quote_client.get_capital_flow(
-                symbol=symbol,
+                symbol=tiger_sym,
                 market=tiger_market,
                 period=period
             )
@@ -630,12 +765,13 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             market = get_market_for_symbol(symbol)
             tiger_market = self._get_tiger_market(market)
 
             dist = self._quote_client.get_capital_distribution(
-                symbol=symbol,
+                symbol=tiger_sym,
                 market=tiger_market
             )
 
@@ -681,6 +817,7 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         try:
             # Map period string to BarPeriod
             period_map = {
@@ -698,7 +835,7 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
 
             # Note: get_bars_by_page doesn't accept market param - infers from symbol
             result = self._quote_client.get_bars_by_page(
-                symbol=symbol,
+                symbol=tiger_sym,
                 period=bar_period,
                 page_token=page_token,
                 limit=min(limit, 1200)
@@ -867,11 +1004,12 @@ class TigerAdapter(BaseAdapter, DataProviderAdapter):
         if not self._ensure_initialized():
             return None
 
+        tiger_sym = self._to_tiger_symbol(symbol)
         if market is None:
             market = get_market_for_symbol(symbol)
 
         try:
-            stock_data = self._quote_client.get_stock_briefs([symbol])
+            stock_data = self._quote_client.get_stock_briefs([tiger_sym])
 
             if stock_data is not None and not stock_data.empty:
                 # Try margin_rate column first

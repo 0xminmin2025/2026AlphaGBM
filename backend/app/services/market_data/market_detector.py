@@ -77,7 +77,12 @@ def detect_market(symbol: str) -> Market:
         if prefix in CN_STOCK_PREFIX_RULES:
             return Market.CN
 
-    # 3. Default to US market
+    # 3. Check if it's a HK stock (1-5 digit pure number without suffix)
+    #    HK stock codes are 1-5 digit numbers (e.g., 700, 00700, 07709, 9988)
+    if base_ticker.isdigit() and len(base_ticker) <= 5:
+        return Market.HK
+
+    # 4. Default to US market
     return Market.US
 
 
@@ -122,6 +127,10 @@ def detect_market_with_exchange(symbol: str) -> Tuple[Market, Optional[str]]:
         exchange = CN_STOCK_PREFIX_RULES.get(prefix)
         if exchange:
             return Market.CN, exchange
+
+    # Check if it's a HK stock (1-5 digit pure number without suffix)
+    if base_ticker.isdigit() and len(base_ticker) <= 5:
+        return Market.HK, 'HK'
 
     # Default to US
     return Market.US, None
