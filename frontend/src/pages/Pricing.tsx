@@ -469,7 +469,7 @@ export default function Pricing() {
 
             {/* Success Message */}
             {success && (
-                <div className="success-banner max-w-4xl mx-4 sm:mx-auto">
+                <div className="success-banner max-w-4xl mx-auto">
                     <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
                         <Check className="w-5 h-5 text-green-500" />
                     </div>
@@ -481,7 +481,7 @@ export default function Pricing() {
             )}
 
             {/* Pricing Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 max-w-7xl mx-4 sm:mx-auto mb-8 sm:mb-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 mb-8 sm:mb-16">
                 {/* Free Plan */}
                 <div className={`pricing-card ${currentPlan === 'free' ? 'current' : ''}`}>
                     {currentPlan === 'free' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
@@ -718,7 +718,7 @@ export default function Pricing() {
             </div>
 
             {/* Top-up Section */}
-            <div className="max-w-2xl mx-4 sm:mx-auto">
+            <div className="max-w-2xl mx-auto">
                 <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6">{t('pricing.topUpTitle')}</h2>
                 <div className="topup-card flex-col sm:flex-row gap-4 sm:gap-6">
                     <div className="flex-1">
@@ -741,7 +741,7 @@ export default function Pricing() {
             </div>
 
             {/* FAQ Section */}
-            <div className="max-w-3xl mx-4 sm:mx-auto mt-16 mb-12">
+            <div className="max-w-3xl mx-auto mt-16 mb-12">
                 <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8">{t('pricing.faq.title')}</h2>
                 <Accordion type="single" collapsible className="w-full">
                     <AccordionItem value="change-plans" className="border-white/10">
