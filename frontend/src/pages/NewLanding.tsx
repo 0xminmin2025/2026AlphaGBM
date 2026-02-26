@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
-import { Menu, X, TrendingUp, Calculator, BarChart3, ArrowRight, Sparkles, Target, Shield, Zap } from 'lucide-react';
+import { Menu, X, TrendingUp, Calculator, BarChart3, ArrowRight, Sparkles, Target, Shield, Zap, BookOpen, GraduationCap, Route } from 'lucide-react';
 import FeedbackButton from '@/components/FeedbackButton';
 import PrivacyPolicy from '@/components/PrivacyPolicy';
 import HotRecommendations from '@/components/HotRecommendations';
@@ -344,6 +344,9 @@ export default function NewLanding() {
                                 <Link to="/pricing" className="hover:text-[#0D9B97] transition-colors text-sm text-[var(--text-secondary)]">
                                     {isZh ? '定价' : 'Pricing'}
                                 </Link>
+                                <Link to="/knowledge" className="hover:text-[#0D9B97] transition-colors text-sm text-[var(--text-secondary)]">
+                                    {isZh ? '知识库' : 'Knowledge'}
+                                </Link>
                             </div>
 
                             <div className="flex items-center gap-4">
@@ -387,6 +390,9 @@ export default function NewLanding() {
                                 </Link>
                                 <Link to="/pricing" className="block text-sm text-[var(--text-secondary)] hover:text-[#0D9B97] py-2" onClick={closeMobileMenu}>
                                     {isZh ? '定价' : 'Pricing'}
+                                </Link>
+                                <Link to="/knowledge" className="block text-sm text-[var(--text-secondary)] hover:text-[#0D9B97] py-2" onClick={closeMobileMenu}>
+                                    {isZh ? '知识库' : 'Knowledge'}
                                 </Link>
                                 <div className="border-t border-slate-700 pt-4 mt-4 space-y-4">
                                     <button onClick={toggleLang} className="text-sm font-mono border border-slate-700 px-3 py-1 rounded">
@@ -570,8 +576,70 @@ export default function NewLanding() {
                 </div>
             </section>
 
-            {/* Trust Signals */}
+            {/* Learning Center Section */}
             <section className="py-12 sm:py-16 px-4 sm:px-6 bg-[var(--bg-secondary)]">
+                <div className="max-w-5xl mx-auto">
+                    <h2 className="section-title text-center">
+                        {isZh ? '学习中心' : 'Learning Center'}
+                    </h2>
+                    <p className="section-subtitle text-center">
+                        {isZh ? '从零开始掌握期权交易' : 'Master options trading from scratch'}
+                    </p>
+
+                    <div className="grid sm:grid-cols-3 gap-6">
+                        {[
+                            {
+                                icon: BookOpen,
+                                color: '#0D9B97',
+                                title: isZh ? '入门指南' : 'Beginner Guide',
+                                desc: isZh ? '破除期权"高风险"迷思，用日常比喻理解核心概念' : 'Break options myths, understand core concepts with everyday analogies',
+                                slug: 'risk-myths',
+                            },
+                            {
+                                icon: GraduationCap,
+                                color: '#F59E0B',
+                                title: isZh ? '核心策略' : 'Core Strategies',
+                                desc: isZh ? '5大新手友善策略：从Sell Put到Covered Call实战' : '5 beginner-friendly strategies: from Sell Put to Covered Call',
+                                slug: 'beginner-strategies',
+                            },
+                            {
+                                icon: Route,
+                                color: '#8B5CF6',
+                                title: isZh ? '7天学习路径' : '7-Day Learning Path',
+                                desc: isZh ? '从零基础到完成第一笔模拟交易的完整路径' : 'Complete path from zero to your first simulated trade',
+                                slug: 'seven-day-plan',
+                            },
+                        ].map((card, idx) => {
+                            const IconComp = card.icon;
+                            return (
+                                <Link
+                                    key={idx}
+                                    to={`/knowledge/${card.slug}`}
+                                    className="group p-6 rounded-xl border border-slate-700/50 bg-slate-800/20 hover:border-[rgba(13,155,151,0.4)] hover:bg-[rgba(13,155,151,0.05)] transition-all duration-300 hover:-translate-y-1"
+                                >
+                                    <div
+                                        className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                                        style={{ backgroundColor: `${card.color}20` }}
+                                    >
+                                        <IconComp size={24} style={{ color: card.color }} />
+                                    </div>
+                                    <h3 className="font-semibold text-white mb-2 group-hover:text-[#0D9B97] transition-colors">
+                                        {card.title}
+                                    </h3>
+                                    <p className="text-sm text-[var(--text-muted)] mb-3">{card.desc}</p>
+                                    <span className="inline-flex items-center gap-1 text-sm text-[#0D9B97] opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {isZh ? '开始学习' : 'Start Learning'}
+                                        <ArrowRight size={14} />
+                                    </span>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </div>
+            </section>
+
+            {/* Trust Signals */}
+            <section className="py-12 sm:py-16 px-4 sm:px-6">
                 <div className="max-w-5xl mx-auto">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
                         <div>
@@ -626,6 +694,9 @@ export default function NewLanding() {
                             </Link>
                             <Link to="/pricing" className="text-[var(--text-muted)] hover:text-[#0D9B97] text-sm">
                                 {isZh ? '定价' : 'Pricing'}
+                            </Link>
+                            <Link to="/knowledge" className="text-[var(--text-muted)] hover:text-[#0D9B97] text-sm">
+                                {isZh ? '知识库' : 'Knowledge'}
                             </Link>
                             <PrivacyPolicy />
                         </div>

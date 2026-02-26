@@ -213,6 +213,10 @@ export default function MainLayout() {
                             {t('footer.copyright')}
                         </p>
                         <span className="text-slate-600">|</span>
+                        <Link to="/knowledge" className="text-xs sm:text-sm text-slate-500 hover:text-[#0D9B97] transition-colors">
+                            {t('nav.knowledge')}
+                        </Link>
+                        <span className="text-slate-600">|</span>
                         <PrivacyPolicy />
                     </div>
                 </div>

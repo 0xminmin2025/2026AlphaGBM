@@ -1,20 +1,68 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen } from 'lucide-react';
 import type { KBChapter } from '../types';
-import { getAdjacentChapters } from '../data';
+import { getAdjacentChapters, allChapters } from '../data';
 
 interface Props {
   chapterId: string;
+}
+
+// Get 3 related chapters (excluding current, varied selection)
+function getRelatedChapters(currentId: string): KBChapter[] {
+  const others = allChapters.filter((ch) => ch.id !== currentId);
+  // Simple strategy: pick chapters that are nearby but not adjacent
+  const idx = allChapters.findIndex((ch) => ch.id === currentId);
+  const picks: KBChapter[] = [];
+  // Pick one from 2 ahead, one from 4 ahead, one from 6 ahead (wrapping)
+  for (const offset of [2, 4, 6]) {
+    const target = others[(idx + offset) % others.length];
+    if (target && !picks.some((p) => p.id === target.id)) {
+      picks.push(target);
+    }
+  }
+  return picks.slice(0, 3);
 }
 
 export default function KBArticleFooter({ chapterId }: Props) {
   const { i18n } = useTranslation();
   const isZh = i18n.language === 'zh';
   const { prev, next } = getAdjacentChapters(chapterId);
+  const related = getRelatedChapters(chapterId);
 
   return (
     <div className="mt-12 pt-6 border-t border-white/10">
+      {/* Related Chapters */}
+      {related.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-sm font-semibold text-[#FAFAFA] mb-4 flex items-center gap-2">
+            <BookOpen size={14} className="text-[#0D9B97]" />
+            {isZh ? '相关推荐' : 'Related Topics'}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {related.map((ch) => {
+              const title = isZh ? ch.titleZh : ch.titleEn;
+              const shortTitle = title.replace(/^第[一二三四五六七八九十]+章\s*/, '').replace(/^附：/, '').replace(/^Ch\d+:\s*/, '');
+              return (
+                <Link
+                  key={ch.id}
+                  to={`/knowledge/${ch.slug}`}
+                  className="p-3.5 rounded-xl border border-white/10 bg-[#18181B]/50 hover:bg-[#18181B] hover:border-[#0D9B97]/20 transition-all group"
+                >
+                  <p className="text-sm text-[#A1A1AA] group-hover:text-[#FAFAFA] transition-colors line-clamp-2 font-medium">
+                    {shortTitle}
+                  </p>
+                  <p className="text-xs text-[#71717A] mt-1.5">
+                    {isZh ? `${ch.readTimeMin} 分钟` : `${ch.readTimeMin} min`}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Prev / Next Navigation */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {prev ? (
           <NavCard chapter={prev} direction="prev" isZh={isZh} />

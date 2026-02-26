@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Helmet } from 'react-helmet-async';
 import { useToastHelpers } from '@/components/ui/toast';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
+import KBQuickLink from '@/components/KBQuickLink';
 
 // Declare global types for Chart.js
 declare global {
@@ -2067,7 +2068,7 @@ export default function Options() {
                             </button>
                         ))}
                     </div>
-                    <div className="mt-2">
+                    <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
                             <input
                                 type="checkbox"
@@ -2082,6 +2083,10 @@ export default function Options() {
                                 {isZh ? '仅高流动性' : 'High Liquidity Only'}
                             </span>
                         </label>
+                        <KBQuickLink
+                            slug="beginner-strategies"
+                            label={isZh ? '了解各策略区别' : 'Learn about strategies'}
+                        />
                     </div>
                 </div>
 

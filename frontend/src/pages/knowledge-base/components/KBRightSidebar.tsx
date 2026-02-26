@@ -39,12 +39,12 @@ export default function KBRightSidebar({ headings, activeId }: Props) {
               <button
                 key={h.id}
                 onClick={() => handleClick(h.id)}
-                className={`block w-full text-left text-sm py-1.5 transition-all border-l-2 ${
+                className={`block w-full text-left text-sm py-1.5 transition-all duration-200 border-l-2 rounded-r-md ${
                   h.level === 3 ? 'pl-6' : 'pl-3'
                 } ${
                   activeId === h.id
-                    ? 'border-[#0D9B97] text-[#0D9B97] font-medium'
-                    : 'border-transparent text-[#71717A] hover:text-[#A1A1AA] hover:border-white/20'
+                    ? 'border-[#0D9B97] text-[#0D9B97] font-medium bg-[#0D9B97]/8'
+                    : 'border-transparent text-[#71717A] hover:text-[#A1A1AA] hover:border-white/20 hover:bg-[#27272A]/30'
                 }`}
               >
                 <span className="line-clamp-2">{h.text}</span>

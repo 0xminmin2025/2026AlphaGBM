@@ -11,18 +11,26 @@ interface Props {
   activeSlug: string;
 }
 
-const iconMap: Record<string, LucideIcon> = {
-  BookOpen,
-  Target,
-  Zap,
-  Monitor,
-  PenLine,
+const iconMap: Record<string, { icon: LucideIcon; color: string }> = {
+  BookOpen: { icon: BookOpen, color: '#0D9B97' },
+  Target: { icon: Target, color: '#F59E0B' },
+  Zap: { icon: Zap, color: '#8B5CF6' },
+  Monitor: { icon: Monitor, color: '#3B82F6' },
+  PenLine: { icon: PenLine, color: '#10B981' },
 };
 
 function CategoryIcon({ name }: { name: string }) {
-  const Icon = iconMap[name];
-  if (!Icon) return null;
-  return <Icon size={16} className="text-[#A1A1AA]" />;
+  const entry = iconMap[name];
+  if (!entry) return null;
+  const Icon = entry.icon;
+  return (
+    <div
+      className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+      style={{ backgroundColor: `${entry.color}15`, border: `1px solid ${entry.color}25` }}
+    >
+      <Icon size={13} style={{ color: entry.color }} />
+    </div>
+  );
 }
 
 export default function KBLeftSidebar({ activeSlug }: Props) {
@@ -129,7 +137,7 @@ function CategoryGroup({
     <div className="mb-1">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-[#A1A1AA] hover:bg-[#27272A] hover:text-[#FAFAFA] transition-colors"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-[#A1A1AA] hover:bg-[#27272A]/70 hover:text-[#FAFAFA] transition-all duration-200"
       >
         <CategoryIcon name={category.icon} />
         <span className="flex-1 text-left truncate">{isZh ? category.titleZh : category.titleEn}</span>
@@ -164,10 +172,10 @@ function ChapterNavItem({
   return (
     <Link
       to={`/knowledge/${chapter.slug}`}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+      className={`flex items-center gap-2 px-3 py-2 text-sm transition-all duration-200 ${
         isActive
-          ? 'bg-[#0D9B97]/10 text-[#0D9B97] border-l-[3px] border-[#0D9B97] font-medium'
-          : 'text-[#71717A] hover:text-[#A1A1AA] hover:bg-[#27272A]/50 border-l-[3px] border-transparent'
+          ? 'bg-[#0D9B97]/10 text-[#0D9B97] border-l-[3px] border-[#0D9B97] font-medium rounded-r-lg'
+          : 'text-[#71717A] hover:text-[#A1A1AA] hover:bg-[#27272A]/50 border-l-[3px] border-transparent rounded-lg'
       }`}
     >
       <span className="flex-1 truncate">{shortTitle}</span>

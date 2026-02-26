@@ -14,6 +14,35 @@ import KBArticleFooter from './components/KBArticleFooter';
 import KBRightSidebar from './components/KBRightSidebar';
 import KBMobileNav from './components/KBMobileNav';
 import { BlurOverlay, useHasAccess } from '@/components/BlurOverlay';
+import { BuffettCaseStudy, SellPutExample } from './components/KBCaseStudyCard';
+import KBScoringBreakdown from './components/KBScoringBreakdown';
+import KBRiskMetricsTable from './components/KBRiskMetricsTable';
+import { SellPutStepGuide } from './components/KBStepGuide';
+import KBStrategyFlowDiagram, { WheelStrategyCycle } from './components/KBStrategyFlowDiagram';
+
+// Rich visual components mapped to chapter IDs — inserted after markdown content
+function ChapterVisuals({ chapterId }: { chapterId: string }) {
+  switch (chapterId) {
+    case 'preface':
+      return <BuffettCaseStudy />;
+    case 'ch03':
+      return (
+        <>
+          <KBStrategyFlowDiagram />
+          <SellPutExample />
+          <KBRiskMetricsTable />
+        </>
+      );
+    case 'ch04':
+      return <SellPutStepGuide />;
+    case 'ch05':
+      return <WheelStrategyCycle />;
+    case 'ch06':
+      return <KBScoringBreakdown />;
+    default:
+      return null;
+  }
+}
 
 export default function KnowledgeBasePage() {
   const { chapterSlug } = useParams<{ chapterSlug?: string }>();
@@ -113,7 +142,10 @@ export default function KnowledgeBasePage() {
                 ))}
               </div>
             ) : hasAccess ? (
-              <KBMarkdownRenderer content={content} />
+              <>
+                <KBMarkdownRenderer content={content} />
+                <ChapterVisuals chapterId={chapter.id} />
+              </>
             ) : (
               <>
                 {/* Show first portion as teaser */}
