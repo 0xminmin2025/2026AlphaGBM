@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings, ArrowUpRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings, ArrowUpRight, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '@/lib/api';
 import i18n from '@/lib/i18n';
@@ -133,14 +133,38 @@ export default function Profile() {
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
                                     <span className="text-slate-500">{t('profile.remainingCredits')}</span>
-                                    <span className="font-bold text-2xl text-[#0D9B97]">{credits.total_credits}</span>
+                                    <span className="font-bold text-2xl text-[#0D9B97] font-mono">{credits.total_credits}</span>
                                 </div>
-                                <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                    <span className="text-slate-500">{t('profile.dailyFreeCredits')}</span>
-                                    <span className="text-slate-300">
-                                        {credits.daily_free.remaining} / {credits.daily_free.quota}
-                                    </span>
+                                <div className="py-2 border-b border-white/5 space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-500">{t('profile.dailyFreeCredits')}</span>
+                                        <span className="text-slate-300 font-mono">
+                                            {credits.daily_free.remaining} / {credits.daily_free.quota}
+                                        </span>
+                                    </div>
+                                    <div className="h-2 bg-[#27272A] rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full transition-all duration-500"
+                                            style={{
+                                                width: `${(credits.daily_free.remaining / credits.daily_free.quota) * 100}%`,
+                                                backgroundColor: credits.daily_free.remaining <= 1 ? '#EF4444' : credits.daily_free.remaining <= 2 ? '#F59E0B' : '#0D9B97'
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="text-xs text-slate-500">
+                                        {i18n.language === 'zh' ? '每日 UTC 00:00 重置' : 'Resets daily at UTC 00:00'}
+                                    </div>
                                 </div>
+                                {credits.total_credits <= 2 && credits.daily_free.remaining <= 1 && (
+                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                                        <span className="text-xs text-amber-400">
+                                            {i18n.language === 'zh'
+                                                ? '额度即将用完，升级 Pro 套餐享受无限分析'
+                                                : 'Credits running low. Upgrade to Pro for unlimited analyses.'}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="pt-2 space-y-2">
                                     <Button
                                         variant="outline"
@@ -209,7 +233,7 @@ export default function Profile() {
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </Button>
-                        <span className="text-sm text-slate-500">
+                        <span className="text-sm text-slate-500 font-mono">
                             {usagePagination.current_page} / {usagePagination.total_pages}
                         </span>
                         <Button
@@ -266,7 +290,7 @@ export default function Profile() {
                                                 {translateServiceType(log.service_type)}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right font-medium text-amber-500">
+                                        <TableCell className="text-right font-medium font-mono text-amber-500">
                                             -{log.amount_used}
                                         </TableCell>
                                     </TableRow>
@@ -302,7 +326,7 @@ export default function Profile() {
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </Button>
-                        <span className="text-sm text-slate-500">
+                        <span className="text-sm text-slate-500 font-mono">
                             {transactionPagination.current_page} / {transactionPagination.total_pages}
                         </span>
                         <Button
@@ -351,7 +375,7 @@ export default function Profile() {
                                             {new Date(transaction.date).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : 'en-US')}
                                         </TableCell>
                                         <TableCell>{translateDescription(transaction.description)}</TableCell>
-                                        <TableCell className="font-medium">
+                                        <TableCell className="font-medium font-mono">
                                             {transaction.currency.toUpperCase()} {transaction.amount}
                                         </TableCell>
                                         <TableCell>

@@ -47,9 +47,21 @@ export default {
     			bear: 'hsl(var(--bear))'
     		},
     		borderRadius: {
-    			lg: '`var(--radius)`',
-    			md: '`calc(var(--radius) - 2px)`',
-    			sm: 'calc(var(--radius) - 4px)'
+    			sm: '8px',
+    			md: '12px',
+    			lg: '16px',
+    		},
+    		boxShadow: {
+    			'subtle': '0 2px 8px rgba(0, 0, 0, 0.3)',
+    			'hover': '0 4px 16px rgba(13, 155, 151, 0.15)',
+    			'modal': '0 8px 32px rgba(0, 0, 0, 0.5)',
+    		},
+    		spacing: {
+    			'tight': '8px',
+    			'compact': '12px',
+    			'standard': '16px',
+    			'relaxed': '24px',
+    			'section': '32px',
     		},
     		keyframes: {
     			'accordion-down': {

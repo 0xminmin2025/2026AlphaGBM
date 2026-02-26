@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -101,9 +101,22 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
     const { t } = useTranslation();
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
+    const [timeRange, setTimeRange] = useState<'30D' | '90D' | '180D' | '1Y'>('90D');
+
+    // Filter data based on selected time range
+    const filteredData = useMemo(() => {
+        if (!dates || !prices || dates.length === 0) return { dates: [], prices: [] };
+        const rangeDays = { '30D': 30, '90D': 90, '180D': 180, '1Y': 365 };
+        const days = rangeDays[timeRange];
+        const sliceCount = Math.min(days, dates.length);
+        return {
+            dates: dates.slice(-sliceCount),
+            prices: prices.slice(-sliceCount),
+        };
+    }, [dates, prices, timeRange]);
 
     useEffect(() => {
-        if (!chartRef.current || !dates || !prices || dates.length === 0) return;
+        if (!chartRef.current || filteredData.dates.length === 0) return;
 
         if (chartInstance.current) {
             chartInstance.current.destroy();
@@ -115,10 +128,10 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
         chartInstance.current = new window.Chart(ctx, {
             type: 'line',
             data: {
-                labels: dates,
+                labels: filteredData.dates,
                 datasets: [{
                     label: 'Price',
-                    data: prices,
+                    data: filteredData.prices,
                     borderColor: '#0D9B97',
                     backgroundColor: 'rgba(13, 155, 151, 0.1)',
                     fill: true,
@@ -145,8 +158,8 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
                 chartInstance.current.destroy();
             }
         };
-    }, [dates, prices]);
-    
+    }, [filteredData]);
+
     if (!dates || !prices || dates.length === 0) {
         return (
             <div className="h-48 flex items-center justify-center text-muted">
@@ -155,14 +168,32 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
         );
     }
 
+    const ranges: Array<'30D' | '90D' | '180D' | '1Y'> = ['30D', '90D', '180D', '1Y'];
+
     return (
         <div>
+            <div className="flex justify-end gap-1 mb-3">
+                {ranges.map((r) => (
+                    <button
+                        key={r}
+                        onClick={() => setTimeRange(r)}
+                        className="px-3 py-1 text-xs rounded-full transition-colors"
+                        style={{
+                            backgroundColor: timeRange === r ? '#0D9B97' : '#27272A',
+                            color: timeRange === r ? '#FAFAFA' : '#A1A1AA',
+                            border: timeRange === r ? '1px solid #0D9B97' : '1px solid transparent',
+                        }}
+                    >
+                        {r}
+                    </button>
+                ))}
+            </div>
             <div style={{ height: '200px' }}>
                 <canvas ref={chartRef}></canvas>
             </div>
             <div className="mt-4 text-center">
                 <small style={{ color: '#9CA3AF', fontWeight: 400, fontSize: '0.85rem' }}>
-                    {t('stock.chart.dateRange', { start: dates[0], end: dates[dates.length - 1] })}
+                    {t('stock.chart.dateRange', { start: filteredData.dates[0], end: filteredData.dates[filteredData.dates.length - 1] })}
                 </small>
             </div>
         </div>
@@ -1211,7 +1242,25 @@ export default function Home() {
                                             <i className="bi bi-stars"></i>
                                             {t('stock.aiReport.title')}
                                         </h5>
-                                        <span className="badge-primary">{t('stock.aiReport.generated')}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="badge-primary">{t('stock.aiReport.generated')}</span>
+                                            <button
+                                                onClick={() => {
+                                                    const printContent = document.querySelector('.ai-summary');
+                                                    if (printContent) {
+                                                        const w = window.open('', '_blank');
+                                                        if (w) {
+                                                            w.document.write(`<html><head><title>${d.name} - AI Report</title><style>body{font-family:Inter,sans-serif;padding:2rem;max-width:800px;margin:0 auto;line-height:1.8;}h1,h2,h3{color:#0D9B97;}table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ddd;padding:8px;}</style></head><body>${printContent.innerHTML}</body></html>`);
+                                                            w.document.close();
+                                                            w.print();
+                                                        }
+                                                    }
+                                                }}
+                                                className="px-2 py-1 text-xs rounded border border-white/20 text-slate-400 hover:text-[#0D9B97] hover:border-[#0D9B97] transition-colors"
+                                            >
+                                                PDF
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="overflow-auto" style={{ flex: 1, padding: '1.5rem', minHeight: 0 }}>
                                         <div
@@ -1220,6 +1269,18 @@ export default function Home() {
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div className="flex flex-wrap gap-3">
+                                <button
+                                    onClick={() => navigate(`/options?ticker=${d.symbol}`)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                                    style={{ backgroundColor: '#0D9B97', color: '#FAFAFA' }}
+                                >
+                                    {i18n.language === 'zh' ? '分析该股期权' : 'Analyze Options'}
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                </button>
                             </div>
 
                             {/* Full Text Report */}

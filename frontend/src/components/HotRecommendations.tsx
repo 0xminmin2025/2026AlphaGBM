@@ -137,6 +137,7 @@ const styles = `
         justify-content: center;
         font-size: 1rem;
         font-weight: 700;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
     .score-high {
@@ -207,6 +208,7 @@ const styles = `
     .detail-value {
         font-weight: 500;
         color: white;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
     .trend-indicator {
@@ -237,6 +239,7 @@ const styles = `
         border-radius: 0.25rem;
         font-size: 0.75rem;
         font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
     .reason-text {
@@ -742,7 +745,7 @@ export default function HotRecommendations({
                         {data.market_summary.vix_level > 0 && (
                             <div className="summary-item">
                                 <span className="summary-label">VIX</span>
-                                <span className="summary-value">
+                                <span className="summary-value font-mono">
                                     {data.market_summary.vix_level.toFixed(1)}
                                 </span>
                             </div>
@@ -799,7 +802,7 @@ export default function HotRecommendations({
                                                 </span>
                                             )}
                                         </span>
-                                        <span className="current-price">{getCurrencySymbol(rec.currency)}{rec.current_price?.toFixed(2)}</span>
+                                        <span className="current-price font-mono">{getCurrencySymbol(rec.currency)}{rec.current_price?.toFixed(2)}</span>
                                     </div>
                                     <div className={`score-circle ${getScoreClass(rec.score)}`}>
                                         {showScore ? (

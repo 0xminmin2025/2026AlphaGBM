@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { useAuth } from './AuthProvider';
 import api from '@/lib/api';
 
+const MOCK_AUTH = import.meta.env.VITE_MOCK_AUTH === 'true';
+
 // Types
 type UsageLog = {
     id: number;
@@ -97,6 +99,21 @@ type UserDataContextType = {
 
 const UserDataContext = createContext<UserDataContextType | undefined>(undefined);
 
+const MOCK_CREDITS: CreditsData = {
+    total_credits: 88,
+    subscription: { has_subscription: false, plan_tier: 'free', status: 'active' },
+    daily_free: { remaining: 3, quota: 5 },
+};
+
+const MOCK_PRICING: PricingData = {
+    plans: {
+        free: { name: 'Free', features: ['5 daily analyses', 'Basic stock data', 'Limited options data'], credits: '5/day' },
+        plus: { name: 'Plus', features: ['50 daily analyses', 'Real-time data', 'Full options chain', 'Email support'], monthly: { price: 9.8, credits: 50, currency: 'USD', period: 'month' }, yearly: { price: 58.8, credits: 50, currency: 'USD', period: 'year', savings: '50%' } },
+        pro: { name: 'Pro', features: ['Unlimited analyses', 'Real-time data', 'Full options chain', 'Priority support', 'API access'], monthly: { price: 16.6, credits: 999, currency: 'USD', period: 'month' }, yearly: { price: 99.8, credits: 999, currency: 'USD', period: 'year', savings: '50%' } },
+    },
+    topups: { '100': { name: '100 Credits', price: 4.99, validity: '永不过期', currency: 'USD' } },
+};
+
 export function UserDataProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
 
@@ -127,6 +144,36 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     const [pricingLoading, setPricingLoading] = useState(false);
     const [transactionsLoading, setTransactionsLoading] = useState(false);
     const [usageLoading, setUsageLoading] = useState(false);
+
+    // Mock mode: provide fake data, skip all API calls
+    if (MOCK_AUTH) {
+        const noop = async () => {};
+        const mockValue: UserDataContextType = {
+            credits: MOCK_CREDITS,
+            pricing: MOCK_PRICING,
+            transactions: [],
+            usageLogs: [],
+            transactionPagination: { current_page: 1, total_pages: 1, has_next: false, has_prev: false },
+            usagePagination: { current_page: 1, total_pages: 1, total_records: 0, has_next: false, has_prev: false },
+            isInitialLoading: false,
+            creditsLoading: false,
+            pricingLoading: false,
+            transactionsLoading: false,
+            usageLoading: false,
+            refreshCredits: noop,
+            refreshPricing: noop,
+            refreshTransactions: noop,
+            refreshUsageHistory: noop,
+            refreshAll: noop,
+            fetchTransactionsPage: noop,
+            fetchUsagePage: noop,
+        };
+        return (
+            <UserDataContext.Provider value={mockValue}>
+                {children}
+            </UserDataContext.Provider>
+        );
+    }
 
     // Cache flags to prevent duplicate API calls
     const dataCache = useRef({

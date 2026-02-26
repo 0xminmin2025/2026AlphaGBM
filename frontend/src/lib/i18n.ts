@@ -92,6 +92,7 @@ const resources = {
             "pricing.pro.desc": "Professional experience",
             "pricing.enterprise.name": "Enterprise",
             "pricing.mostPopular": "🔥 Most Popular",
+            "pricing.bestValue": "⚡ Best Value",
             "pricing.perMonth": "/month",
             "pricing.permanentFree": "Permanent Free",
             "pricing.yearly": "Annual: ${{price}}/year",
@@ -141,6 +142,26 @@ const resources = {
             "pricing.upgradeSuccess": "Upgrade Successful",
             "pricing.upgradeSuccessDesc": "Your plan has been upgraded. Page will refresh shortly.",
             "pricing.upgradeFailed": "Upgrade Failed",
+
+            // Pricing FAQ
+            "pricing.faq.title": "Frequently Asked Questions",
+            "pricing.faq.changePlans.q": "Can I change plans later?",
+            "pricing.faq.changePlans.a": "Yes, you can upgrade or downgrade your plan at any time. When upgrading, the price difference is charged immediately. When downgrading, the change takes effect at the end of your current billing cycle.",
+            "pricing.faq.paymentMethods.q": "What payment methods are accepted?",
+            "pricing.faq.paymentMethods.a": "We accept major credit cards (Visa, Mastercard, American Express) via Stripe. All transactions are securely processed.",
+            "pricing.faq.freeQuota.q": "What happens when free quota runs out?",
+            "pricing.faq.freeQuota.a": "You can wait for the daily reset (free credits refresh every day), purchase a top-up pack, or upgrade to a paid plan for more queries.",
+            "pricing.faq.refund.q": "Can I get a refund?",
+            "pricing.faq.refund.a": "Yes, within 7 days of purchase you can request a full refund if you are not satisfied. Contact our support team to process your refund.",
+            "pricing.faq.dataSecurity.q": "Is my data secure?",
+            "pricing.faq.dataSecurity.a": "We use industry-standard encryption (TLS/SSL) for all data in transit and AES-256 for data at rest. Your personal information is never shared with third parties.",
+            "pricing.faq.creditsExpire.q": "Do credits expire?",
+            "pricing.faq.creditsExpire.a": "Subscription credits reset monthly on your billing date. Top-up credits are valid for 3 months from purchase date.",
+
+            // Pricing Security Badges
+            "pricing.security.stripeVerified": "Stripe Verified",
+            "pricing.security.sslEncrypted": "SSL Encrypted",
+            "pricing.security.gdprCompliant": "GDPR Compliant",
 
             // Common
             "common.pleaseLogin": "Please login first",
@@ -901,6 +922,7 @@ const resources = {
             "pricing.pro.desc": "专业级体验",
             "pricing.enterprise.name": "企业客户",
             "pricing.mostPopular": "🔥 最受欢迎",
+            "pricing.bestValue": "⚡ 性价比之选",
             "pricing.perMonth": "/月",
             "pricing.permanentFree": "永久免费",
             "pricing.yearly": "年度：¥{{price}}/年",
@@ -950,6 +972,26 @@ const resources = {
             "pricing.upgradeSuccess": "升级成功",
             "pricing.upgradeSuccessDesc": "您的套餐已升级，页面即将刷新。",
             "pricing.upgradeFailed": "升级失败",
+
+            // 定价常见问题
+            "pricing.faq.title": "常见问题",
+            "pricing.faq.changePlans.q": "以后可以更改套餐吗？",
+            "pricing.faq.changePlans.a": "可以，您可以随时升级或降级套餐。升级时，差价会立即扣除；降级时，变更将在当前计费周期结束后生效。",
+            "pricing.faq.paymentMethods.q": "支持哪些支付方式？",
+            "pricing.faq.paymentMethods.a": "我们通过 Stripe 接受主流信用卡（Visa、Mastercard、American Express）。所有交易均经过安全处理。",
+            "pricing.faq.freeQuota.q": "免费额度用完怎么办？",
+            "pricing.faq.freeQuota.a": "您可以等待每日重置（免费额度每天刷新），购买加油包，或升级到付费套餐以获取更多查询次数。",
+            "pricing.faq.refund.q": "可以退款吗？",
+            "pricing.faq.refund.a": "可以，购买后7天内如不满意，可申请全额退款。请联系客服团队处理退款。",
+            "pricing.faq.dataSecurity.q": "我的数据安全吗？",
+            "pricing.faq.dataSecurity.a": "我们使用行业标准加密（TLS/SSL）保护传输中的数据，使用 AES-256 加密存储数据。您的个人信息绝不会与第三方共享。",
+            "pricing.faq.creditsExpire.q": "积分会过期吗？",
+            "pricing.faq.creditsExpire.a": "订阅积分每月在您的计费日重置。加油包积分自购买之日起3个月内有效。",
+
+            // 定价安全徽章
+            "pricing.security.stripeVerified": "Stripe 认证",
+            "pricing.security.sslEncrypted": "SSL 加密",
+            "pricing.security.gdprCompliant": "GDPR 合规",
 
             // 通用
             "common.pleaseLogin": "请先登录",

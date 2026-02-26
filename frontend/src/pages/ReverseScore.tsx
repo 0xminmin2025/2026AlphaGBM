@@ -925,7 +925,7 @@ export default function ReverseScore() {
                                         </div>
                                         <div className="recognition-field">
                                             <span className="recognition-field-label">{isZh ? '执行价' : 'Strike'}</span>
-                                            <span className="recognition-field-value">${recognitionResult.strike}</span>
+                                            <span className="recognition-field-value font-mono">${recognitionResult.strike}</span>
                                         </div>
                                         <div className="recognition-field">
                                             <span className="recognition-field-label">{isZh ? '到期日' : 'Expiry'}</span>
@@ -933,12 +933,12 @@ export default function ReverseScore() {
                                         </div>
                                         <div className="recognition-field">
                                             <span className="recognition-field-label">{isZh ? '期权价格' : 'Price'}</span>
-                                            <span className="recognition-field-value">${recognitionResult.option_price}</span>
+                                            <span className="recognition-field-value font-mono">${recognitionResult.option_price}</span>
                                         </div>
                                         {recognitionResult.implied_volatility && (
                                             <div className="recognition-field">
                                                 <span className="recognition-field-label">{isZh ? '隐含波动率' : 'IV'}</span>
-                                                <span className="recognition-field-value">{(recognitionResult.implied_volatility * 100).toFixed(1)}%</span>
+                                                <span className="recognition-field-value font-mono">{(recognitionResult.implied_volatility * 100).toFixed(1)}%</span>
                                             </div>
                                         )}
                                     </div>
@@ -1109,7 +1109,7 @@ export default function ReverseScore() {
                         <div className="form-card">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-semibold">
-                                    {result.symbol} - {result.option_type} {getCurrencySymbol(result.market_info?.currency)}{result.strike} ({result.expiry_date})
+                                    {result.symbol} - {result.option_type} <span className="font-mono">{getCurrencySymbol(result.market_info?.currency)}{result.strike}</span> ({result.expiry_date})
                                     {result.market_info && result.market_info.market !== 'US' && (
                                         <span className="ml-2 px-2 py-0.5 text-xs rounded align-middle" style={{ background: result.market_info.market === 'HK' ? '#f97316' : '#ef4444', color: '#fff' }}>
                                             {t(`options.market.${result.market_info.market.toLowerCase()}`)}
@@ -1132,6 +1132,7 @@ export default function ReverseScore() {
                                         justifyContent: 'center',
                                         fontSize: '1.5rem',
                                         fontWeight: 700,
+                                        fontFamily: 'ui-monospace, monospace',
                                         backgroundColor: result.total_score >= 70
                                             ? 'rgba(16, 185, 129, 0.2)'
                                             : result.total_score >= 50
@@ -1162,7 +1163,7 @@ export default function ReverseScore() {
                                     <div className="stock-info-label">
                                         {isZh ? '当前股价' : 'Current Price'}
                                     </div>
-                                    <div className="stock-info-value">
+                                    <div className="stock-info-value font-mono">
                                         {getCurrencySymbol(result.market_info?.currency)}{(result.current_price || result.stock_data?.current_price)?.toFixed(2) || '-'}
                                     </div>
                                 </div>
@@ -1171,7 +1172,7 @@ export default function ReverseScore() {
                                         <div className="stock-info-label">
                                             {isZh ? '剩余天数' : 'DTE'}
                                         </div>
-                                        <div className="stock-info-value">
+                                        <div className="stock-info-value font-mono">
                                             {result.days_to_expiry}{isZh ? '天' : 'd'}
                                         </div>
                                     </div>
@@ -1181,7 +1182,7 @@ export default function ReverseScore() {
                                         <div className="stock-info-label">
                                             {isZh ? '隐含波动率' : 'IV'}
                                         </div>
-                                        <div className="stock-info-value">
+                                        <div className="stock-info-value font-mono">
                                             {result.implied_volatility?.toFixed(1)}%
                                         </div>
                                     </div>
@@ -1202,7 +1203,7 @@ export default function ReverseScore() {
                                             <div className="stock-info-label">
                                                 {isZh ? '趋势强度' : 'Strength'}
                                             </div>
-                                            <div className="stock-info-value">
+                                            <div className="stock-info-value font-mono">
                                                 {((result.trend_info.trend_strength || 0) * 100).toFixed(0)}%
                                             </div>
                                         </div>
@@ -1231,7 +1232,7 @@ export default function ReverseScore() {
                                                 {scoreData.style_label}
                                             </div>
                                         </div>
-                                        <div className={`score-badge ${getScoreClass(scoreData.score)}`}>
+                                        <div className={`score-badge font-mono ${getScoreClass(scoreData.score)}`}>
                                             {scoreData.score.toFixed(0)}
                                         </div>
                                     </div>
@@ -1244,7 +1245,7 @@ export default function ReverseScore() {
                                                     <span className="text-muted-foreground">
                                                         {isZh ? '胜率: ' : 'Win Rate: '}
                                                     </span>
-                                                    <span className="font-medium">
+                                                    <span className="font-medium font-mono">
                                                         {(scoreData.win_probability * 100).toFixed(0)}%
                                                     </span>
                                                 </div>
@@ -1254,7 +1255,7 @@ export default function ReverseScore() {
                                                     <span className="text-muted-foreground">
                                                         {isZh ? '最大收益: ' : 'Max Profit: '}
                                                     </span>
-                                                    <span className="font-medium text-green-500">
+                                                    <span className="font-medium font-mono text-green-500">
                                                         +{(scoreData.max_profit_pct * 100).toFixed(1)}%
                                                     </span>
                                                 </div>
@@ -1264,7 +1265,7 @@ export default function ReverseScore() {
                                                     <span className="text-muted-foreground">
                                                         {isZh ? '最大损失: ' : 'Max Loss: '}
                                                     </span>
-                                                    <span className="font-medium text-red-500">
+                                                    <span className="font-medium font-mono text-red-500">
                                                         {(scoreData.max_loss_pct * 100).toFixed(1)}%
                                                     </span>
                                                 </div>
@@ -1284,7 +1285,7 @@ export default function ReverseScore() {
                                                     <span className="breakdown-label">
                                                         {formatBreakdownLabel(key)}
                                                     </span>
-                                                    <span className={`breakdown-score ${
+                                                    <span className={`breakdown-score font-mono ${
                                                         value >= 70 ? 'text-green-500' :
                                                         value >= 50 ? 'text-yellow-500' :
                                                         'text-red-500'
@@ -1306,21 +1307,54 @@ export default function ReverseScore() {
                             );
                         })}
 
-                        {/* Action Buttons */}
+                        {/* Next Steps Action Cards */}
                         <div className="form-card">
-                            <div className="flex gap-4 justify-center">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => navigate(`/stock?ticker=${result.symbol}`)}
-                                >
-                                    {isZh ? '查看股票分析' : 'View Stock Analysis'}
-                                </Button>
-                                <Button
-                                    variant="outline"
+                            <h3 className="text-sm font-semibold mb-3" style={{ color: 'hsl(240, 5%, 64.9%)' }}>
+                                {isZh ? '下一步' : 'Next Steps'}
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <button
                                     onClick={() => navigate(`/options?ticker=${result.symbol}`)}
+                                    className="p-4 rounded-lg bg-[#18181B] border border-zinc-800/80 hover:border-[#0D9B97] hover:shadow-[0_4px_16px_rgba(13,155,151,0.15)] transition-all text-left"
                                 >
-                                    {isZh ? '查看期权链' : 'View Options Chain'}
-                                </Button>
+                                    <div className="text-sm font-semibold text-[#FAFAFA] mb-1">
+                                        {isZh ? '查看完整期权链' : 'View Full Options Chain'}
+                                    </div>
+                                    <div className="text-xs text-[#71717A]">
+                                        {isZh ? `浏览 ${result.symbol} 的所有可用期权合约` : `Browse all available option contracts for ${result.symbol}`}
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => navigate(`/stock?ticker=${result.symbol}`)}
+                                    className="p-4 rounded-lg bg-[#18181B] border border-zinc-800/80 hover:border-[#0D9B97] hover:shadow-[0_4px_16px_rgba(13,155,151,0.15)] transition-all text-left"
+                                >
+                                    <div className="text-sm font-semibold text-[#FAFAFA] mb-1">
+                                        {isZh ? '分析股票' : 'Analyze Stock'}
+                                    </div>
+                                    <div className="text-xs text-[#71717A]">
+                                        {isZh ? `查看 ${result.symbol} 的详细股票分析报告` : `View detailed stock analysis report for ${result.symbol}`}
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setResult(null);
+                                        setSymbol('');
+                                        setStrike('');
+                                        setExpiryDate('');
+                                        setOptionPrice('');
+                                        setImpliedVolatility('');
+                                        setOptionType('CALL');
+                                        setError('');
+                                    }}
+                                    className="p-4 rounded-lg bg-[#18181B] border border-zinc-800/80 hover:border-[#0D9B97] hover:shadow-[0_4px_16px_rgba(13,155,151,0.15)] transition-all text-left"
+                                >
+                                    <div className="text-sm font-semibold text-[#FAFAFA] mb-1">
+                                        {isZh ? '开始新分析' : 'Start New Analysis'}
+                                    </div>
+                                    <div className="text-xs text-[#71717A]">
+                                        {isZh ? '重置表单，分析另一个期权合约' : 'Reset the form and analyze another option contract'}
+                                    </div>
+                                </button>
                             </div>
                         </div>
                     </>

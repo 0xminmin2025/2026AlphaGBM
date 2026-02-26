@@ -3,7 +3,8 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Check, Loader2, Sparkles, Zap, Crown, Building2 } from 'lucide-react';
+import { Check, Loader2, Sparkles, Zap, Crown, Building2, Shield, Lock, CheckCircle } from 'lucide-react';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useToastHelpers } from '@/components/ui/toast';
@@ -94,6 +95,7 @@ const styles = `
     .price-tag {
         font-size: 3rem;
         font-weight: 800;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         background: linear-gradient(135deg, #FAFAFA 0%, #94a3b8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -523,7 +525,7 @@ export default function Pricing() {
                     {currentPlan === 'plus' ? (
                         <div className="current-badge">{t('pricing.currentPlan')}</div>
                     ) : (
-                        <div className="featured-badge">{t('pricing.mostPopular')}</div>
+                        <div className="featured-badge">{t('pricing.bestValue')}</div>
                     )}
                     <div className="card-content">
                         <div className="flex items-center gap-3 mb-6 mt-2">
@@ -549,8 +551,8 @@ export default function Pricing() {
                                         <span className="text-slate-500">{t('pricing.perMonth')}</span>
                                     </div>
                                     <div className="text-sm text-slate-400 mt-2">
-                                        <span>{t('pricing.billedYearly', { price: 588 })}</span>
-                                        <span className="text-green-500 ml-2">（{t('pricing.savings', { percent: '17' })}）</span>
+                                        <span className="font-mono">{t('pricing.billedYearly', { price: 588 })}</span>
+                                        <span className="text-green-500 ml-2 font-mono">（{t('pricing.savings', { percent: '17' })}）</span>
                                     </div>
                                 </>
                             )}
@@ -594,8 +596,12 @@ export default function Pricing() {
                 </div>
 
                 {/* Pro Plan */}
-                <div className={`pricing-card ${currentPlan === 'pro' ? 'current' : ''}`}>
-                    {currentPlan === 'pro' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
+                <div className={`pricing-card ${currentPlan === 'pro' ? 'current' : ''}`} style={currentPlan !== 'pro' ? { borderColor: '#0D9B97', boxShadow: '0 4px 16px rgba(13,155,151,0.15)' } : undefined}>
+                    {currentPlan === 'pro' ? (
+                        <div className="current-badge">{t('pricing.currentPlan')}</div>
+                    ) : (
+                        <div className="featured-badge">{t('pricing.mostPopular')}</div>
+                    )}
                     <div className="card-content">
                         <div className="flex items-center gap-3 mb-6 mt-2">
                             <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
@@ -620,8 +626,8 @@ export default function Pricing() {
                                         <span className="text-slate-500">{t('pricing.perMonth')}</span>
                                     </div>
                                     <div className="text-sm text-slate-400 mt-2">
-                                        <span>{t('pricing.billedYearly', { price: 998 })}</span>
-                                        <span className="text-green-500 ml-2">（{t('pricing.savings', { percent: '17' })}）</span>
+                                        <span className="font-mono">{t('pricing.billedYearly', { price: 998 })}</span>
+                                        <span className="text-green-500 ml-2 font-mono">（{t('pricing.savings', { percent: '17' })}）</span>
                                     </div>
                                 </>
                             )}
@@ -720,7 +726,7 @@ export default function Pricing() {
                         <div className="text-sm text-slate-500">{t('pricing.topup.validity')}</div>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-6 justify-between sm:justify-end">
-                        <div className="text-xl sm:text-2xl font-bold">$4.99</div>
+                        <div className="text-xl sm:text-2xl font-bold font-mono">$4.99</div>
                         <Button
                             variant="outline"
                             onClick={() => handleSubscribe('topup_100')}
@@ -731,6 +737,77 @@ export default function Pricing() {
                             {t('pricing.topUp')}
                         </Button>
                     </div>
+                </div>
+            </div>
+
+            {/* FAQ Section */}
+            <div className="max-w-3xl mx-4 sm:mx-auto mt-16 mb-12">
+                <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8">{t('pricing.faq.title')}</h2>
+                <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value="change-plans" className="border-white/10">
+                        <AccordionTrigger className="text-slate-200 hover:text-white hover:no-underline">
+                            {t('pricing.faq.changePlans.q')}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-slate-400">
+                            {t('pricing.faq.changePlans.a')}
+                        </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="payment-methods" className="border-white/10">
+                        <AccordionTrigger className="text-slate-200 hover:text-white hover:no-underline">
+                            {t('pricing.faq.paymentMethods.q')}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-slate-400">
+                            {t('pricing.faq.paymentMethods.a')}
+                        </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="free-quota" className="border-white/10">
+                        <AccordionTrigger className="text-slate-200 hover:text-white hover:no-underline">
+                            {t('pricing.faq.freeQuota.q')}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-slate-400">
+                            {t('pricing.faq.freeQuota.a')}
+                        </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="refund" className="border-white/10">
+                        <AccordionTrigger className="text-slate-200 hover:text-white hover:no-underline">
+                            {t('pricing.faq.refund.q')}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-slate-400">
+                            {t('pricing.faq.refund.a')}
+                        </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="data-security" className="border-white/10">
+                        <AccordionTrigger className="text-slate-200 hover:text-white hover:no-underline">
+                            {t('pricing.faq.dataSecurity.q')}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-slate-400">
+                            {t('pricing.faq.dataSecurity.a')}
+                        </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="credits-expire" className="border-white/10">
+                        <AccordionTrigger className="text-slate-200 hover:text-white hover:no-underline">
+                            {t('pricing.faq.creditsExpire.q')}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-slate-400">
+                            {t('pricing.faq.creditsExpire.a')}
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </div>
+
+            {/* Security Badges */}
+            <div className="flex flex-wrap items-center justify-center gap-8 mb-12">
+                <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-[#0D9B97]" />
+                    <span className="text-xs text-[#71717A]">{t('pricing.security.stripeVerified')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-[#0D9B97]" />
+                    <span className="text-xs text-[#71717A]">{t('pricing.security.sslEncrypted')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-[#0D9B97]" />
+                    <span className="text-xs text-[#71717A]">{t('pricing.security.gdprCompliant')}</span>
                 </div>
             </div>
 

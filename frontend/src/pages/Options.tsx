@@ -1048,6 +1048,9 @@ export default function Options() {
         return localStorage.getItem('optionsShowAdvancedColumns') === 'true';
     });
 
+    // High liquidity filter state
+    const [highLiquidityOnly, setHighLiquidityOnly] = useState(false);
+
     // 监听导航栏点击重置状态
     useEffect(() => {
         const resetState = (location.state as { reset?: number })?.reset;
@@ -1562,6 +1565,13 @@ export default function Options() {
                     return expiryFilter.includes(optExpiry);
                 });
             }
+
+            // Apply high liquidity filter
+            if (highLiquidityOnly) {
+                options = options.filter(opt => {
+                    return (opt.open_interest || 0) >= 100 && (opt.volume || 0) >= 10;
+                });
+            }
         } catch (error) {
             console.error('Error applying filters:', error);
         }
@@ -2057,6 +2067,22 @@ export default function Options() {
                             </button>
                         ))}
                     </div>
+                    <div className="mt-2">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={highLiquidityOnly}
+                                onChange={(e) => setHighLiquidityOnly(e.target.checked)}
+                                className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-[#27272A] peer-checked:bg-[#0D9B97] rounded-full relative transition-colors">
+                                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${highLiquidityOnly ? 'translate-x-4' : ''}`} />
+                            </div>
+                            <span className="text-[#A1A1AA]">
+                                {isZh ? '仅高流动性' : 'High Liquidity Only'}
+                            </span>
+                        </label>
+                    </div>
                 </div>
 
                 {/* Step 3: Load Expiration Dates */}
@@ -2302,7 +2328,7 @@ export default function Options() {
                         <div className="max-w-md mx-auto mb-4">
                             <div className="flex justify-between text-sm mb-1">
                                 <span style={{ color: 'var(--muted-foreground)' }}>{t('options.progress')}</span>
-                                <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{taskProgress}%</span>
+                                <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 600 }}>{taskProgress}%</span>
                             </div>
                             <div style={{
                                 width: '100%',
@@ -2373,7 +2399,7 @@ export default function Options() {
                                 {t('options.results.title')}: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
                             </h2>
                             <div style={{ color: 'var(--muted-foreground)' }}>
-                                {t('options.results.currentPrice')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{cs}{displayStockPrice?.toFixed(2) || '-'}</span>
+                                {t('options.results.currentPrice')}: <span className="font-mono" style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{cs}{displayStockPrice?.toFixed(2) || '-'}</span>
                                 {displayChain?.market_info && displayChain.market_info.market !== 'US' && (
                                     <span className="ml-2 px-2 py-0.5 text-xs rounded" style={{
                                         background: displayChain.market_info.market === 'HK' ? '#f97316'
@@ -2483,7 +2509,7 @@ export default function Options() {
                                             <i className="bi bi-arrow-up-circle text-green-400"></i>
                                             {t('options.income.totalPremium')}
                                         </div>
-                                        <div className="text-3xl font-bold text-green-400">
+                                        <div className="text-3xl font-bold text-green-400 font-mono">
                                             +${portfolioSummary.totalPremium.toLocaleString()}
                                         </div>
                                     </div>
@@ -2494,7 +2520,7 @@ export default function Options() {
                                             <i className="bi bi-safe text-slate-300"></i>
                                             {t('options.income.totalMargin')}
                                         </div>
-                                        <div className="text-3xl font-bold text-white">
+                                        <div className="text-3xl font-bold text-white font-mono">
                                             ${portfolioSummary.totalMargin.toLocaleString()}
                                         </div>
                                     </div>
@@ -2505,11 +2531,11 @@ export default function Options() {
                                             <i className="bi bi-percent text-[#0D9B97]"></i>
                                             {t('options.income.portfolioReturn')}
                                         </div>
-                                        <div className="text-3xl font-bold text-[#0D9B97]">
+                                        <div className="text-3xl font-bold text-[#0D9B97] font-mono">
                                             {portfolioSummary.portfolioReturn.toFixed(1)}%
                                         </div>
                                         <div className="text-sm text-slate-400 mt-1">
-                                            {t('options.income.annualized')}: <span className="text-[#0D9B97] font-semibold">{portfolioSummary.annualizedReturn.toFixed(0)}%</span>
+                                            {t('options.income.annualized')}: <span className="text-[#0D9B97] font-semibold font-mono">{portfolioSummary.annualizedReturn.toFixed(0)}%</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2558,21 +2584,21 @@ export default function Options() {
                                                     {tickers.length > 1 && opt.symbol && (
                                                         <span className="text-[#0D9B97] font-mono mr-1">{opt.symbol}</span>
                                                     )}
-                                                    {isPut ? 'Sell Put' : 'Sell Call'} {cs}{opt.strike}
+                                                    {isPut ? 'Sell Put' : 'Sell Call'} <span className="font-mono">{cs}{opt.strike}</span>
                                                 </span>
 
                                                 {/* 收入 */}
-                                                <span className="text-green-400 font-semibold">
+                                                <span className="text-green-400 font-semibold font-mono">
                                                     +{cs}{premiumPerContract.toFixed(0)}
                                                 </span>
 
                                                 {/* 保证金 */}
-                                                <span className="text-slate-500 text-sm">
+                                                <span className="text-slate-500 text-sm font-mono">
                                                     {t('options.income.margin')} {cs}{(margin/1000).toFixed(1)}k
                                                 </span>
 
                                                 {/* 收益率 */}
-                                                <span className="text-[#0D9B97] font-semibold">
+                                                <span className="text-[#0D9B97] font-semibold font-mono">
                                                     ({returnPct.toFixed(1)}%)
                                                 </span>
 
@@ -2688,7 +2714,7 @@ export default function Options() {
                                                     {opt.symbol}
                                                 </div>
                                             )}
-                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                            <div className="font-mono" style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
                                                 ${opt.strike}
                                             </div>
                                             <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
@@ -2726,19 +2752,19 @@ export default function Options() {
 
                                             <div className="flex justify-between mt-2">
                                                 <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>Score</span>
-                                                <span className={`score-badge ${getScoreClass(getOptionScore(opt))}`}>
+                                                <span className={`score-badge font-mono ${getScoreClass(getOptionScore(opt))}`}>
                                                     {getOptionScore(opt).toFixed(1)}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
                                                 <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.premiumPerContract')}</span>
-                                                <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.9rem' }}>
                                                     {cs}{(premium * 100).toFixed(0)}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
                                                 <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.annualizedReturn')}</span>
-                                                <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                <span className="font-mono" style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
                                                     {opt.scores?.annualized_return?.toFixed(1) || (premiumPct * 365 / (opt.days_to_expiry || 30)).toFixed(1)}%
                                                 </span>
                                             </div>
@@ -2747,7 +2773,7 @@ export default function Options() {
                                             {profile?.win_probability && (
                                                 <div className="flex justify-between mt-1">
                                                     <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.winRate')}</span>
-                                                    <span className="win-prob">
+                                                    <span className="win-prob font-mono">
                                                         {(profile.win_probability * 100).toFixed(0)}%
                                                     </span>
                                                 </div>
@@ -3136,7 +3162,7 @@ export default function Options() {
                                                     {/* Strike Price Filter */}
                                                     <div>
                                                         <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                            {t('options.filter.strikeRange')}: {cs}{currentStrikeMin.toFixed(2)} - {cs}{currentStrikeMax.toFixed(2)}
+                                                            {t('options.filter.strikeRange')}: <span className="font-mono">{cs}{currentStrikeMin.toFixed(2)} - {cs}{currentStrikeMax.toFixed(2)}</span>
                                                         </label>
                                                         <div className="flex items-center gap-1">
                                                             <input
@@ -3171,7 +3197,7 @@ export default function Options() {
                                                     {/* Annualized Return Filter */}
                                                     <div>
                                                         <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                            {t('options.filter.annualizedRange')}: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
+                                                            {t('options.filter.annualizedRange')}: <span className="font-mono">{currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%</span>
                                                         </label>
                                                         <div className="flex items-center gap-1">
                                                             <input
@@ -3392,7 +3418,7 @@ export default function Options() {
                                                 >
                                                     {/* 评分放第一位 */}
                                                     <td>
-                                                        <span className={`score-badge ${getScoreClass(totalScore)}`}>
+                                                        <span className={`score-badge font-mono ${getScoreClass(totalScore)}`}>
                                                             {totalScore.toFixed(1)}
                                                         </span>
                                                     </td>
@@ -3406,31 +3432,31 @@ export default function Options() {
                                                             {opt.expiry_date || displayChain?.expiry_date}
                                                         </td>
                                                     )}
-                                                    <td style={{ fontWeight: 600 }}>
+                                                    <td className="font-mono" style={{ fontWeight: 600 }}>
                                                         ${opt.strike}
                                                     </td>
                                                     {/* 权利金和年化 */}
-                                                    <td style={{ fontWeight: 500, color: 'var(--primary)' }}>
+                                                    <td className="font-mono" style={{ fontWeight: 500, color: 'var(--primary)' }}>
                                                         ${formatNumber(premium * 100, 0)}
                                                     </td>
-                                                    <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
+                                                    <td className="font-mono" style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
                                                         {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
                                                     </td>
                                                     {/* 默认显示的重要列 */}
-                                                    <td>{cs}{formatNumber(opt.latest_price)}</td>
-                                                    <td><small>{opt.volume} / {opt.open_interest}</small></td>
-                                                    <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
+                                                    <td className="font-mono">{cs}{formatNumber(opt.latest_price)}</td>
+                                                    <td className="font-mono"><small>{opt.volume} / {opt.open_interest}</small></td>
+                                                    <td className="font-mono" style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
                                                         {exerciseProb.toFixed(1)}%
                                                     </td>
-                                                    <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                    <td className="font-mono" style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
                                                         {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
                                                     </td>
                                                     {/* 高级列 - 根据状态显示/隐藏：Delta、IV、买/卖价 */}
                                                     {showAdvancedColumns && (
                                                         <>
-                                                            <td>{formatNumber(opt.delta, 3)}</td>
-                                                            <td>{formatPercent(opt.implied_vol)}</td>
-                                                            <td><small>{cs}{formatNumber(opt.bid_price)} / {cs}{formatNumber(opt.ask_price)}</small></td>
+                                                            <td className="font-mono">{formatNumber(opt.delta, 3)}</td>
+                                                            <td className="font-mono">{formatPercent(opt.implied_vol)}</td>
+                                                            <td className="font-mono"><small>{cs}{formatNumber(opt.bid_price)} / {cs}{formatNumber(opt.ask_price)}</small></td>
                                                         </>
                                                     )}
                                                 </tr>
@@ -3535,6 +3561,20 @@ export default function Options() {
                     }}
                     symbolFilter={''}
                 />
+            </div>
+
+            {/* Risk Disclaimer Banner */}
+            <div className="mt-8 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <p className="text-xs text-amber-400/80">
+                        {isZh
+                            ? '期权交易涉及重大风险，可能导致全部投入资金的损失。过往表现不代表未来收益。投资有风险，入市需谨慎。'
+                            : 'Options trading involves significant risk and may result in the loss of all invested capital. Past performance does not guarantee future results. Please invest carefully.'}
+                    </p>
+                </div>
             </div>
 
             {/* Option Detail Modal */}
@@ -3896,7 +3936,7 @@ function OptionDetailModal({
             <div className="option-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="option-modal-header">
                     <div className="option-modal-title">
-                        {strategyLabels[strategy]} - {cs}{option.strike}
+                        {strategyLabels[strategy]} - <span className="font-mono">{cs}{option.strike}</span>
                     </div>
                     <button className="option-modal-close" onClick={onClose}>
                         ×
@@ -3907,27 +3947,27 @@ function OptionDetailModal({
                     <div className="option-info-grid">
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.strike')}</div>
-                            <div className="option-info-value">{cs}{option.strike.toFixed(2)}</div>
+                            <div className="option-info-value font-mono">{cs}{option.strike.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.stockPrice')}</div>
-                            <div className="option-info-value">{cs}{stockPrice.toFixed(2)}</div>
+                            <div className="option-info-value font-mono">{cs}{stockPrice.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.optionPrice')}</div>
-                            <div className="option-info-value">{cs}{premium.toFixed(2)}</div>
+                            <div className="option-info-value font-mono">{cs}{premium.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.premium')}</div>
-                            <div className="option-info-value" style={{ color: 'var(--primary)', fontWeight: 600 }}>{cs}{(premium * 100).toFixed(0)}</div>
+                            <div className="option-info-value font-mono" style={{ color: 'var(--primary)', fontWeight: 600 }}>{cs}{(premium * 100).toFixed(0)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.iv')}</div>
-                            <div className="option-info-value">{(option.implied_vol * 100).toFixed(1)}%</div>
+                            <div className="option-info-value font-mono">{(option.implied_vol * 100).toFixed(1)}%</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.delta')}</div>
-                            <div className="option-info-value">{option.delta.toFixed(3)}</div>
+                            <div className="option-info-value font-mono">{option.delta.toFixed(3)}</div>
                         </div>
                         <div className="option-info-item">
                             <div className="option-info-label">{t('options.modal.expiry')}</div>
@@ -3949,11 +3989,11 @@ function OptionDetailModal({
                     <div className="option-risk-row">
                         <div className="option-risk-item loss">
                             <span className="option-risk-label">{t('options.modal.maxLoss')}</span>
-                            <span className="option-risk-value">{cs}{maxLoss.toFixed(0)}</span>
+                            <span className="option-risk-value font-mono">{cs}{maxLoss.toFixed(0)}</span>
                         </div>
                         <div className="option-risk-item margin">
                             <span className="option-risk-label">{t('options.modal.minMargin')}</span>
-                            <span className="option-risk-value">{cs}{minMargin.toFixed(0)}</span>
+                            <span className="option-risk-value font-mono">{cs}{minMargin.toFixed(0)}</span>
                         </div>
                     </div>
 

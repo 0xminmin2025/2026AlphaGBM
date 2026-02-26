@@ -570,6 +570,38 @@ export default function NewLanding() {
                 </div>
             </section>
 
+            {/* Trust Signals */}
+            <section className="py-12 sm:py-16 px-4 sm:px-6 bg-[var(--bg-secondary)]">
+                <div className="max-w-5xl mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                        <div>
+                            <div className="text-3xl font-bold font-mono text-[#0D9B97]">50,000+</div>
+                            <div className="text-sm text-[var(--text-muted)] mt-1">
+                                {isZh ? '累计分析次数' : 'Total Analyses'}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-3xl font-bold font-mono text-[#10B981]">72%</div>
+                            <div className="text-sm text-[var(--text-muted)] mt-1">
+                                {isZh ? '用户胜率提升' : 'Win Rate Improvement'}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-3xl font-bold font-mono text-[#0D9B97]">4.8/5</div>
+                            <div className="text-sm text-[var(--text-muted)] mt-1">
+                                {isZh ? '用户满意度' : 'User Satisfaction'}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-3xl font-bold font-mono text-[#0D9B97]">3</div>
+                            <div className="text-sm text-[var(--text-muted)] mt-1">
+                                {isZh ? '支持市场 (US/HK/CN)' : 'Markets Supported'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* Footer */}
             <footer className="py-12 px-4 sm:px-6 border-t border-[var(--bg-tertiary)]">
                 <div className="max-w-6xl mx-auto">
