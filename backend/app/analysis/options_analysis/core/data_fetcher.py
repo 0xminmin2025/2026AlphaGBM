@@ -3,6 +3,8 @@
 整合Tiger API和其他数据源，提供统一的期权数据接口
 
 所有数据通过 DataProvider 获取，DataProvider 内部自动处理多数据源切换和指标追踪
+
+多市场支持: US 走 yfinance/DataProvider, HK/CN 走 MarketDataService(Tiger) 路径
 """
 
 import logging
@@ -13,6 +15,7 @@ import numpy as np
 
 # Use DataProvider for unified data access with metrics tracking
 from ....services.data_provider import DataProvider
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG, get_option_market_config
 
 
 def _create_ticker(symbol: str):
@@ -30,18 +33,23 @@ class OptionsDataFetcher:
         self.cache_duration = 300  # 缓存5分钟
         self._cache = {}
 
-    def get_options_chain(self, symbol: str, expiry_days: int = 45) -> Dict[str, Any]:
+    def get_options_chain(self, symbol: str, expiry_days: int = 45,
+                         market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         获取期权链数据
 
         Args:
             symbol: 股票代码
             expiry_days: 到期天数范围
+            market_config: 市场配置（可选，自动检测）
 
         Returns:
             期权链数据
         """
         try:
+            if market_config is None:
+                market_config = get_option_market_config(symbol)
+
             cache_key = f"chain_{symbol}_{expiry_days}"
 
             # 检查缓存
@@ -49,14 +57,23 @@ class OptionsDataFetcher:
                 logger.info(f"使用缓存的期权链数据: {symbol}")
                 return self._cache[cache_key]['data']
 
-            logger.info(f"获取期权链数据: {symbol}, 到期天数: {expiry_days}")
+            logger.info(f"获取期权链数据: {symbol}, 到期天数: {expiry_days}, 市场: {market_config.market}")
 
-            # 使用 DataProvider 获取期权数据 (内部自动选择最优数据源)
-            result = self._get_yfinance_options_data(symbol)
+            # 根据市场选择数据源
+            if market_config.market == 'COMMODITY':
+                result = self._get_commodity_options(symbol)
+            elif market_config.market in ('HK', 'CN'):
+                result = self._get_market_data_service_options(symbol)
+                # 如果 Tiger/MarketDataService 失败，fallback 到 yfinance
+                if not result.get('success'):
+                    logger.warning(f"{market_config.market} MarketDataService 失败，fallback 到 yfinance: {symbol}")
+                    result = self._get_yfinance_options_data(symbol)
+            else:
+                result = self._get_yfinance_options_data(symbol)
 
             # 添加额外的分析数据
             if result.get('success'):
-                result = self._enrich_options_data(result)
+                result = self._enrich_options_data(result, market_config)
 
             # 更新缓存
             self._cache[cache_key] = {
@@ -229,6 +246,170 @@ class OptionsDataFetcher:
                 'error': f"Tiger数据格式化失败: {str(e)}"
             }
 
+    def _get_market_data_service_options(self, symbol: str) -> Dict[str, Any]:
+        """通过 MarketDataService (Tiger优先) 获取 HK/CN 期权数据"""
+        try:
+            from ....services.market_data.service import MarketDataService
+
+            service = MarketDataService()
+
+            # 获取到期日列表
+            expirations = service.get_options_expirations(symbol)
+            if not expirations:
+                return {
+                    'success': False,
+                    'error': f"无期权到期日数据: {symbol}"
+                }
+
+            calls_data = []
+            puts_data = []
+
+            for expiry in expirations[:3]:  # 只取前3个到期日
+                try:
+                    chain = service.get_options_chain(symbol, expiry)
+                    if chain is None:
+                        continue
+
+                    # chain 可能是 OptionsChainData 对象或 dict
+                    if hasattr(chain, 'calls') and hasattr(chain, 'puts'):
+                        calls_df = chain.calls if isinstance(chain.calls, pd.DataFrame) else pd.DataFrame()
+                        puts_df = chain.puts if isinstance(chain.puts, pd.DataFrame) else pd.DataFrame()
+                    elif isinstance(chain, dict):
+                        calls_df = chain.get('calls', pd.DataFrame())
+                        puts_df = chain.get('puts', pd.DataFrame())
+                    else:
+                        continue
+
+                    # 转换 calls DataFrame 为 dict 列表
+                    if isinstance(calls_df, pd.DataFrame) and not calls_df.empty:
+                        for _, row in calls_df.iterrows():
+                            calls_data.append(self._row_to_option_dict(row, expiry))
+
+                    # 转换 puts DataFrame 为 dict 列表
+                    if isinstance(puts_df, pd.DataFrame) and not puts_df.empty:
+                        for _, row in puts_df.iterrows():
+                            puts_data.append(self._row_to_option_dict(row, expiry))
+
+                except Exception as e:
+                    logger.warning(f"获取 {expiry} 期权链失败 (MarketDataService): {e}")
+                    continue
+
+            if not calls_data and not puts_data:
+                return {
+                    'success': False,
+                    'error': f"MarketDataService 无有效期权数据: {symbol}"
+                }
+
+            return {
+                'success': True,
+                'source': 'market_data_service',
+                'symbol': symbol,
+                'timestamp': datetime.now().isoformat(),
+                'calls': calls_data,
+                'puts': puts_data,
+                'expiry_dates': list(expirations)
+            }
+
+        except Exception as e:
+            logger.error(f"MarketDataService 期权数据获取失败: {e}")
+            return {
+                'success': False,
+                'error': f"MarketDataService 数据获取失败: {str(e)}"
+            }
+
+    def _row_to_option_dict(self, row, expiry: str) -> Dict[str, Any]:
+        """将 DataFrame 行转换为期权字典格式"""
+        def safe_get(val, default=None):
+            if pd.notna(val) if not isinstance(val, (int, float)) else True:
+                try:
+                    return float(val) if val is not None else default
+                except (ValueError, TypeError):
+                    return default
+            return default
+
+        return {
+            'strike': safe_get(row.get('strike') or row.get('strike_price')),
+            'expiry': expiry,
+            'bid': safe_get(row.get('bid') or row.get('bid_price')),
+            'ask': safe_get(row.get('ask') or row.get('ask_price')),
+            'last_price': safe_get(row.get('lastPrice') or row.get('latest_price') or row.get('lastTradePrice')),
+            'volume': int(safe_get(row.get('volume'), 0)),
+            'open_interest': int(safe_get(row.get('openInterest') or row.get('open_interest'), 0)),
+            'implied_volatility': safe_get(row.get('impliedVolatility') or row.get('implied_vol') or row.get('volatility')),
+            'delta': safe_get(row.get('delta')),
+            'gamma': safe_get(row.get('gamma')),
+            'theta': safe_get(row.get('theta')),
+            'vega': safe_get(row.get('vega')),
+        }
+
+    def _get_commodity_options(self, symbol: str) -> Dict[str, Any]:
+        """通过 MarketDataService (AkShare) 获取商品期货期权数据"""
+        try:
+            from ....services.market_data.service import MarketDataService
+            from ....services.market_data.interfaces import Market
+
+            service = MarketDataService()
+
+            # 获取合约列表
+            expirations = service.get_options_expirations(symbol, market=Market.COMMODITY)
+            if not expirations:
+                return {
+                    'success': False,
+                    'error': f"无商品期权合约数据: {symbol}"
+                }
+
+            calls_data = []
+            puts_data = []
+
+            # 取前2个合约（主力+次主力）
+            for contract in expirations[:2]:
+                try:
+                    chain = service.get_options_chain(symbol, contract, market=Market.COMMODITY)
+                    if chain is None:
+                        continue
+
+                    calls_df = chain.calls if isinstance(chain.calls, pd.DataFrame) else pd.DataFrame()
+                    puts_df = chain.puts if isinstance(chain.puts, pd.DataFrame) else pd.DataFrame()
+
+                    if isinstance(calls_df, pd.DataFrame) and not calls_df.empty:
+                        for _, row in calls_df.iterrows():
+                            entry = self._row_to_option_dict(row, contract)
+                            entry['contract'] = contract
+                            calls_data.append(entry)
+
+                    if isinstance(puts_df, pd.DataFrame) and not puts_df.empty:
+                        for _, row in puts_df.iterrows():
+                            entry = self._row_to_option_dict(row, contract)
+                            entry['contract'] = contract
+                            puts_data.append(entry)
+
+                except Exception as e:
+                    logger.warning(f"获取商品期权链失败 {contract}: {e}")
+                    continue
+
+            if not calls_data and not puts_data:
+                return {
+                    'success': False,
+                    'error': f"无有效商品期权数据: {symbol}"
+                }
+
+            return {
+                'success': True,
+                'source': 'akshare_commodity',
+                'symbol': symbol,
+                'timestamp': datetime.now().isoformat(),
+                'calls': calls_data,
+                'puts': puts_data,
+                'expiry_dates': list(expirations),
+            }
+
+        except Exception as e:
+            logger.error(f"商品期权数据获取失败: {e}")
+            return {
+                'success': False,
+                'error': f"商品期权数据获取失败: {str(e)}"
+            }
+
     def _get_yfinance_options_data(self, symbol: str) -> Dict[str, Any]:
         """使用yfinance获取期权数据（备用方案）"""
         try:
@@ -308,9 +489,13 @@ class OptionsDataFetcher:
                 'error': f"yfinance数据获取失败: {str(e)}"
             }
 
-    def _enrich_options_data(self, options_data: Dict) -> Dict[str, Any]:
+    def _enrich_options_data(self, options_data: Dict,
+                            market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """丰富期权数据，添加分析指标"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
             # 计算期权链分析指标
             calls = options_data.get('calls', [])
             puts = options_data.get('puts', [])
@@ -323,8 +508,8 @@ class OptionsDataFetcher:
             # 计算最大痛点
             max_pain = self._calculate_max_pain(calls, puts)
 
-            # 添加流动性分析
-            liquid_options = self._analyze_option_liquidity(calls + puts)
+            # 添加流动性分析（使用市场化阈值）
+            liquid_options = self._analyze_option_liquidity(calls + puts, market_config)
 
             # 添加到结果中
             options_data.update({
@@ -382,8 +567,12 @@ class OptionsDataFetcher:
             logger.error(f"计算最大痛点失败: {e}")
             return None
 
-    def _analyze_option_liquidity(self, options: List) -> List[Dict]:
-        """分析期权流动性"""
+    def _analyze_option_liquidity(self, options: List,
+                                 market_config: OptionMarketConfig = None) -> List[Dict]:
+        """分析期权流动性（使用市场化阈值）"""
+        if market_config is None:
+            market_config = US_OPTIONS_CONFIG
+
         liquid_options = []
 
         for opt in options:
@@ -392,12 +581,12 @@ class OptionsDataFetcher:
             bid = opt.get('bid', 0)
             ask = opt.get('ask', 0)
 
-            # 流动性标准
+            # 流动性标准（从市场配置读取）
             is_liquid = (
-                volume >= 10 and  # 最小成交量
-                open_interest >= 50 and  # 最小持仓量
-                bid > 0 and ask > 0 and  # 有效报价
-                (ask - bid) / ((ask + bid) / 2) <= 0.1  # 价差不超过10%
+                volume >= market_config.min_volume and
+                open_interest >= market_config.min_open_interest and
+                bid > 0 and ask > 0 and
+                (ask - bid) / ((ask + bid) / 2) <= market_config.max_bid_ask_spread_pct
             )
 
             if is_liquid:
@@ -405,14 +594,18 @@ class OptionsDataFetcher:
 
         return liquid_options
 
-    def _calculate_volatility(self, hist_data: pd.DataFrame) -> Optional[float]:
+    def _calculate_volatility(self, hist_data: pd.DataFrame,
+                              market_config: OptionMarketConfig = None) -> Optional[float]:
         """计算30天历史波动率"""
         try:
             if hist_data.empty:
                 return None
 
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
             returns = hist_data['Close'].pct_change().dropna()
-            volatility = returns.std() * np.sqrt(252)  # 年化波动率
+            volatility = returns.std() * np.sqrt(market_config.trading_days_per_year)
             return float(volatility)
 
         except Exception as e:

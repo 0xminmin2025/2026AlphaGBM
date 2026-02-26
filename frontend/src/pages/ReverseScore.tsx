@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import StockSearchInput from '@/components/ui/StockSearchInput';
 import { useTranslation } from 'react-i18next';
 import { Upload, Camera, FileText, X, Loader2 } from 'lucide-react';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 
 // Score result type
 interface ScoreResult {
@@ -59,8 +60,22 @@ interface ReverseScoreResponse {
         support_levels: number[];
         resistance_levels: number[];
     };
+    market_info?: {
+        market: string;
+        currency: string;
+        contract_multiplier: number;
+        cash_settlement: boolean;
+    };
     error?: string;
 }
+
+const getCurrencySymbol = (currency?: string): string => {
+    switch (currency) {
+        case 'HKD': return 'HK$';
+        case 'CNY': return '¥';
+        default: return '$';
+    }
+};
 
 // CSS styles
 const styles = `
@@ -530,7 +545,7 @@ const breakdownLabels: Record<string, { en: string; zh: string }> = {
 export default function ReverseScore() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
-    const { i18n } = useTranslation();
+    const { t, i18n } = useTranslation();
     const isZh = i18n.language.startsWith('zh');
 
     // Input mode: 'upload' or 'manual' - default to manual (primary action)
@@ -557,6 +572,7 @@ export default function ReverseScore() {
     const [result, setResult] = useState<ReverseScoreResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [allowedSymbols, setAllowedSymbols] = useState<string[]>([]);
 
     // Redirect if not authenticated
     useEffect(() => {
@@ -574,6 +590,7 @@ export default function ReverseScore() {
 
         setLoading(true);
         setError('');
+        setAllowedSymbols([]);
         setResult(null);
 
         try {
@@ -593,10 +610,14 @@ export default function ReverseScore() {
             }
         } catch (err: any) {
             console.error('Reverse score error:', err);
+            const errorData = err.response?.data;
             if (err.response?.status === 402) {
                 setError(isZh ? '额度不足，请充值' : 'Insufficient credits, please top up');
             } else {
-                setError(err.response?.data?.error || (isZh ? '请求失败' : 'Request failed'));
+                setError(errorData?.error || (isZh ? '请求失败' : 'Request failed'));
+            }
+            if (errorData?.allowed_symbols) {
+                setAllowedSymbols(errorData.allowed_symbols);
             }
         } finally {
             setLoading(false);
@@ -1061,8 +1082,13 @@ export default function ReverseScore() {
 
                 {/* Error */}
                 {error && (
-                    <div className="error-message mb-4">
-                        {error}
+                    <div className="mb-4">
+                        <ErrorAlert
+                            error={error}
+                            onDismiss={() => { setError(''); setAllowedSymbols([]); }}
+                            allowedSymbols={allowedSymbols}
+                            onSelectSymbol={(sym) => { setSymbol(sym); setError(''); setAllowedSymbols([]); }}
+                        />
                     </div>
                 )}
 
@@ -1083,7 +1109,12 @@ export default function ReverseScore() {
                         <div className="form-card">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-semibold">
-                                    {result.symbol} - {result.option_type} ${result.strike} ({result.expiry_date})
+                                    {result.symbol} - {result.option_type} {getCurrencySymbol(result.market_info?.currency)}{result.strike} ({result.expiry_date})
+                                    {result.market_info && result.market_info.market !== 'US' && (
+                                        <span className="ml-2 px-2 py-0.5 text-xs rounded align-middle" style={{ background: result.market_info.market === 'HK' ? '#f97316' : '#ef4444', color: '#fff' }}>
+                                            {t(`options.market.${result.market_info.market.toLowerCase()}`)}
+                                        </span>
+                                    )}
                                 </h3>
                                 {/* 总评分 */}
                                 <div style={{
@@ -1132,7 +1163,7 @@ export default function ReverseScore() {
                                         {isZh ? '当前股价' : 'Current Price'}
                                     </div>
                                     <div className="stock-info-value">
-                                        ${(result.current_price || result.stock_data?.current_price)?.toFixed(2) || '-'}
+                                        {getCurrencySymbol(result.market_info?.currency)}{(result.current_price || result.stock_data?.current_price)?.toFixed(2) || '-'}
                                     </div>
                                 </div>
                                 {result.days_to_expiry && (

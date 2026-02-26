@@ -677,6 +677,22 @@ const resources = {
             "error.suggestion.relogin": "Log out and log back in",
             "error.suggestion.topUp": "Top up your credits",
             "error.suggestion.checkPricing": "View pricing plans",
+            "error.notInWhitelist": "This symbol is not in the {{market}} options whitelist",
+            "error.suggestion.selectAllowed": "Select from supported symbols below",
+
+            // Market labels
+            "options.market.us": "US Market",
+            "options.market.hk": "HK Market",
+            "options.market.cn": "A-Share Market",
+
+            // Contract multiplier & settlement
+            "options.info.multiplier": "Contract multiplier: {{multiplier}}",
+            "options.info.cashSettlement": "Cash settlement",
+
+            // Currency symbols
+            "options.currency.USD": "$",
+            "options.currency.HKD": "HK$",
+            "options.currency.CNY": "¥",
 
             "options.style.steady_income": "Steady Income",
             "options.style.balanced": "Balanced",
@@ -1470,6 +1486,22 @@ const resources = {
             "error.suggestion.relogin": "退出后重新登录",
             "error.suggestion.topUp": "充值额度",
             "error.suggestion.checkPricing": "查看定价方案",
+            "error.notInWhitelist": "该标的不在{{market}}期权白名单中",
+            "error.suggestion.selectAllowed": "请从下方支持的标的中选择",
+
+            // 市场标签
+            "options.market.us": "美股市场",
+            "options.market.hk": "港股市场",
+            "options.market.cn": "A股市场",
+
+            // 合约乘数 & 结算方式
+            "options.info.multiplier": "合约乘数: {{multiplier}}",
+            "options.info.cashSettlement": "现金结算",
+
+            // 币种符号
+            "options.currency.USD": "$",
+            "options.currency.HKD": "HK$",
+            "options.currency.CNY": "¥",
 
             "options.style.steady_income": "稳健收益",
             "options.style.balanced": "稳中求进",

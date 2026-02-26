@@ -15,6 +15,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from .trend_analyzer import TrendAnalyzer, ATRCalculator
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +42,24 @@ class SellPutScorer:
         self.trend_analyzer = TrendAnalyzer()
         self.atr_calculator = ATRCalculator()
 
-    def score_options(self, options_data: Dict, stock_data: Dict) -> Dict[str, Any]:
+    def score_options(self, options_data: Dict, stock_data: Dict,
+                      market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         为Sell Put策略计分期权
 
         Args:
             options_data: 期权链数据
             stock_data: 标的股票数据
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             计分结果
         """
         try:
-            logger.info(f"开始Sell Put策略计分: {options_data.get('symbol', 'Unknown')}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"开始Sell Put策略计分: {options_data.get('symbol', 'Unknown')} (市场: {market_config.market})")
 
             if not options_data.get('success'):
                 return {
@@ -82,13 +88,14 @@ class SellPutScorer:
             trend_info = self._analyze_trend(stock_data, current_price)
 
             # 新增：计算ATR用于动态安全边际
-            atr_14 = self._get_atr(stock_data)
+            atr_14 = self._get_atr(stock_data, market_config)
 
             # 筛选和计分期权
             scored_options = []
             for put_option in puts:
                 score_result = self._score_individual_put(
-                    put_option, current_price, stock_data, trend_info, atr_14
+                    put_option, current_price, stock_data, trend_info, atr_14,
+                    market_config=market_config
                 )
                 if score_result and score_result.get('score', 0) > 0:
                     scored_options.append(score_result)
@@ -152,8 +159,12 @@ class SellPutScorer:
                 }
             }
 
-    def _get_atr(self, stock_data: Dict) -> float:
+    def _get_atr(self, stock_data: Dict, market_config: OptionMarketConfig = None) -> float:
         """获取或计算ATR"""
+        if market_config is None:
+            market_config = US_OPTIONS_CONFIG
+        trading_days = market_config.trading_days_per_year
+
         # 优先使用已计算的ATR
         atr = stock_data.get('atr_14', 0)
         if atr > 0:
@@ -175,14 +186,21 @@ class SellPutScorer:
         # 备用：使用波动率估算
         vol_30d = stock_data.get('volatility_30d', 0.25)
         current_price = stock_data.get('current_price', 100)
-        # ATR约等于日波动率 * 价格，日波动率 ≈ 年化波动率 / sqrt(252)
-        return current_price * vol_30d / np.sqrt(252)
+        return current_price * vol_30d / np.sqrt(trading_days)
 
     def _score_individual_put(self, put_option: Dict, current_price: float,
                              stock_data: Dict, trend_info: Dict = None,
-                             atr_14: float = 0) -> Optional[Dict]:
+                             atr_14: float = 0,
+                             market_config: OptionMarketConfig = None) -> Optional[Dict]:
         """计分单个看跌期权（优化版本：含趋势和ATR评分）"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+            multiplier = market_config.get_multiplier(
+                stock_data.get('symbol', '') if isinstance(stock_data, dict) else ''
+            )
+            trading_days = market_config.trading_days_per_year
+
             strike = put_option.get('strike', 0)
             bid = put_option.get('bid', 0)
             ask = put_option.get('ask', 0)
@@ -214,7 +232,7 @@ class SellPutScorer:
             safety_margin = ((current_price - strike) / current_price) * 100  # 安全边际%
 
             # 年化收益率计算
-            annualized_return = (premium_yield / days_to_expiry) * 365
+            annualized_return = (premium_yield / days_to_expiry) * trading_days
 
             # 计算各项得分
             scores = {}
@@ -241,7 +259,8 @@ class SellPutScorer:
 
             # 5. 盈利概率得分 (15%)
             scores['probability_profit'] = self._score_profit_probability(
-                current_price, strike, implied_volatility, days_to_expiry
+                current_price, strike, implied_volatility, days_to_expiry,
+                risk_free_rate=market_config.risk_free_rate
             )
 
             # 6. 流动性得分 (10%)
@@ -256,6 +275,15 @@ class SellPutScorer:
                 for factor in scores.keys()
             )
 
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = put_option.get('contract') or put_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 构建趋势警告信息
             trend_warning = None
             if trend_info and trend_info.get('display_info'):
@@ -263,7 +291,7 @@ class SellPutScorer:
                 if not display.get('is_ideal_trend'):
                     trend_warning = display.get('warning')
 
-            return {
+            result = {
                 'option_symbol': put_option.get('symbol', f"PUT_{strike}_{put_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': put_option.get('expiry'),
@@ -283,7 +311,7 @@ class SellPutScorer:
                 'score': round(total_score, 1),
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'assignment_risk': self._calculate_assignment_risk(current_price, strike),
-                'max_profit': round(time_value * 100, 0),
+                'max_profit': round(time_value * multiplier, 0),
                 'breakeven': round(strike - mid_price, 2),
                 'strategy_notes': self._generate_put_notes(current_price, strike, premium_yield, days_to_expiry),
                 # 新增：ATR安全边际信息
@@ -292,6 +320,11 @@ class SellPutScorer:
                 'trend_warning': trend_warning,
                 'is_ideal_trend': trend_info.get('is_ideal_trend', True) if trend_info else True,
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")
@@ -416,7 +449,8 @@ class SellPutScorer:
             return max(0, 50 + safety_margin * 2)
 
     def _score_profit_probability(self, current_price: float, strike: float,
-                                 implied_vol: float, days_to_expiry: int) -> float:
+                                 implied_vol: float, days_to_expiry: int,
+                                 risk_free_rate: float = 0.05) -> float:
         """计分盈利概率（期权到期时价值为0的概率）"""
         try:
             # 使用布莱克-肖尔斯模型估算概率
@@ -428,7 +462,7 @@ class SellPutScorer:
 
             # 计算期权到期时股价低于执行价的概率
             t = days_to_expiry / 365
-            d1 = (math.log(current_price / strike) + (0.05 + 0.5 * implied_vol ** 2) * t) / (implied_vol * math.sqrt(t))
+            d1 = (math.log(current_price / strike) + (risk_free_rate + 0.5 * implied_vol ** 2) * t) / (implied_vol * math.sqrt(t))
             prob_below_strike = norm.cdf(-d1)
 
             # 转换为得分

@@ -15,6 +15,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from .trend_analyzer import TrendAnalyzer, ATRCalculator
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,8 @@ class SellCallScorer:
         self.atr_calculator = ATRCalculator()
 
     def score_options(self, options_data: Dict, stock_data: Dict,
-                      user_holdings: List[str] = None) -> Dict[str, Any]:
+                      user_holdings: List[str] = None,
+                      market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         为Sell Call策略计分期权
 
@@ -51,12 +53,16 @@ class SellCallScorer:
             options_data: 期权链数据
             stock_data: 标的股票数据
             user_holdings: 用户持有的股票列表（用于Covered Call识别）
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             计分结果
         """
         try:
-            logger.info(f"开始Sell Call策略计分: {options_data.get('symbol', 'Unknown')}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"开始Sell Call策略计分: {options_data.get('symbol', 'Unknown')} (市场: {market_config.market})")
 
             if not options_data.get('success'):
                 return {
@@ -85,7 +91,7 @@ class SellCallScorer:
             trend_info = self._analyze_trend(stock_data, current_price)
 
             # 新增：计算ATR用于动态上涨缓冲
-            atr_14 = self._get_atr(stock_data)
+            atr_14 = self._get_atr(stock_data, market_config)
 
             # 检查是否为Covered Call
             symbol = options_data.get('symbol', '')
@@ -96,7 +102,8 @@ class SellCallScorer:
             for call_option in calls:
                 score_result = self._score_individual_call(
                     call_option, current_price, stock_data,
-                    trend_info, atr_14, is_covered
+                    trend_info, atr_14, is_covered,
+                    market_config=market_config
                 )
                 if score_result and score_result.get('score', 0) > 0:
                     scored_options.append(score_result)
@@ -159,8 +166,12 @@ class SellCallScorer:
                 }
             }
 
-    def _get_atr(self, stock_data: Dict) -> float:
+    def _get_atr(self, stock_data: Dict, market_config: OptionMarketConfig = None) -> float:
         """获取或计算ATR"""
+        if market_config is None:
+            market_config = US_OPTIONS_CONFIG
+        trading_days = market_config.trading_days_per_year
+
         atr = stock_data.get('atr_14', 0)
         if atr > 0:
             return atr
@@ -179,13 +190,21 @@ class SellCallScorer:
 
         vol_30d = stock_data.get('volatility_30d', 0.25)
         current_price = stock_data.get('current_price', 100)
-        return current_price * vol_30d / np.sqrt(252)
+        return current_price * vol_30d / np.sqrt(trading_days)
 
     def _score_individual_call(self, call_option: Dict, current_price: float,
                               stock_data: Dict, trend_info: Dict = None,
-                              atr_14: float = 0, is_covered: bool = False) -> Optional[Dict]:
+                              atr_14: float = 0, is_covered: bool = False,
+                              market_config: OptionMarketConfig = None) -> Optional[Dict]:
         """计分单个看涨期权（优化版本：含趋势和ATR评分）"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+            multiplier = market_config.get_multiplier(
+                stock_data.get('symbol', '') if isinstance(stock_data, dict) else ''
+            )
+            trading_days = market_config.trading_days_per_year
+
             strike = call_option.get('strike', 0)
             bid = call_option.get('bid', 0)
             ask = call_option.get('ask', 0)
@@ -211,7 +230,7 @@ class SellCallScorer:
             premium_yield = (time_value / current_price) * 100
             upside_buffer = ((strike - current_price) / current_price) * 100
 
-            annualized_return = (premium_yield / days_to_expiry) * 365
+            annualized_return = (premium_yield / days_to_expiry) * trading_days
 
             # 计算各项得分
             scores = {}
@@ -254,6 +273,15 @@ class SellCallScorer:
                 for factor in scores.keys()
             )
 
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = call_option.get('contract') or call_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 构建趋势警告信息
             trend_warning = None
             if trend_info and trend_info.get('display_info'):
@@ -261,7 +289,7 @@ class SellCallScorer:
                 if not display.get('is_ideal_trend'):
                     trend_warning = display.get('warning')
 
-            return {
+            result = {
                 'option_symbol': call_option.get('symbol', f"CALL_{strike}_{call_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': call_option.get('expiry'),
@@ -281,7 +309,7 @@ class SellCallScorer:
                 'score': round(total_score, 1),
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'assignment_risk': self._calculate_assignment_risk(current_price, strike),
-                'max_profit': round(time_value * 100, 0),
+                'max_profit': round(time_value * multiplier, 0),
                 'breakeven': round(current_price + mid_price, 2),
                 'profit_range': f"${current_price:.2f} - ${strike:.2f}",
                 'strategy_notes': self._generate_call_notes(current_price, strike, premium_yield, days_to_expiry),
@@ -293,6 +321,11 @@ class SellCallScorer:
                 # 新增：Covered Call标识
                 'is_covered': is_covered,
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")

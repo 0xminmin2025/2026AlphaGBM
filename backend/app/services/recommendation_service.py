@@ -21,6 +21,7 @@ from .data_provider import DataProvider
 
 from .option_scorer import OptionScorer
 from .option_models import OptionData
+from ..analysis.options_analysis.option_market_config import get_option_market_config
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,15 @@ HOT_SYMBOLS = [
     'AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL',
     'META', 'AMZN', 'AMD'
 ]
+
+# 港股热门期权标的
+HK_HOT_SYMBOLS = ['0700.HK', '9988.HK', '3690.HK']
+
+# A股ETF期权标的
+CN_HOT_SYMBOLS = ['510050.SS', '510300.SS']
+
+# 商品期货期权标的（流动性最好的3个）
+COMMODITY_HOT_SYMBOLS = ['au', 'ag', 'cu']
 
 # 期权策略类型
 STRATEGIES = ['sell_put', 'sell_call', 'buy_call', 'buy_put']
@@ -67,6 +77,22 @@ SYMBOL_QUALITY = {
     'MSTR': {'tier': 4, 'quality': 50, 'description': 'MicroStrategy，比特币持仓'},
     'GME': {'tier': 4, 'quality': 40, 'description': 'GameStop，meme股'},
     'AMC': {'tier': 4, 'quality': 40, 'description': 'AMC，meme股'},
+
+    # HK 港股期权标的
+    '0700.HK': {'tier': 2, 'quality': 85, 'description': '腾讯，港股科技龙头'},
+    '9988.HK': {'tier': 2, 'quality': 80, 'description': '阿里巴巴，电商+云'},
+    '3690.HK': {'tier': 3, 'quality': 72, 'description': '美团，本地生活'},
+
+    # CN A股ETF期权标的
+    '510050.SS': {'tier': 1, 'quality': 90, 'description': '上证50ETF，A股蓝筹'},
+    '510300.SS': {'tier': 1, 'quality': 88, 'description': '沪深300ETF，大盘指数'},
+
+    # 商品期货期权标的
+    'au': {'tier': 1, 'quality': 88, 'description': '黄金期权，避险资产'},
+    'ag': {'tier': 2, 'quality': 80, 'description': '白银期权，贵金属'},
+    'cu': {'tier': 2, 'quality': 78, 'description': '沪铜期权，工业金属'},
+    'al': {'tier': 3, 'quality': 70, 'description': '沪铝期权，工业金属'},
+    'm': {'tier': 3, 'quality': 72, 'description': '豆粕期权，农产品'},
 }
 
 
@@ -239,7 +265,10 @@ class RecommendationService:
                 'total_options_scanned': 0,
             }
 
-            for symbol in HOT_SYMBOLS[:8]:  # 限制分析数量以提高性能
+            # 合并 US + HK + CN + COMMODITY 标的池
+            all_symbols = HOT_SYMBOLS[:8] + HK_HOT_SYMBOLS + CN_HOT_SYMBOLS + COMMODITY_HOT_SYMBOLS
+
+            for symbol in all_symbols:
                 try:
                     symbol_recs = self._analyze_symbol(symbol)
                     if symbol_recs:
@@ -531,6 +560,9 @@ class RecommendationService:
                         annualized = 0
                         days_to_expiry = max(1, (datetime.strptime(expiry, '%Y-%m-%d') - datetime.now()).days)
 
+                    # 获取市场配置（币种/市场标签）
+                    market_config = get_option_market_config(symbol)
+
                     recommendations.append({
                         'symbol': symbol,
                         'strategy': strategy,
@@ -546,7 +578,10 @@ class RecommendationService:
                         'iv_rank': scores.iv_rank,
                         'open_interest': open_interest,
                         'reason': self._generate_reason(strategy, score, current_price, strike, implied_vol, price_trend),
-                        # ========== 新增字段 ==========
+                        # ========== 市场信息 ==========
+                        'market': market_config.market,
+                        'currency': market_config.currency,
+                        # ========== 标的/趋势字段 ==========
                         'symbol_quality': symbol_quality.get('quality', 50),
                         'symbol_tier': symbol_quality.get('tier', 5),
                         'symbol_description': symbol_quality.get('description', ''),

@@ -8,6 +8,7 @@ Supported Markets:
 - US: United States (default)
 - CN: China A-shares (Shanghai & Shenzhen)
 - HK: Hong Kong
+- COMMODITY: 商品期货期权 (Au/Ag/Cu/Al/M)
 """
 
 from typing import Tuple, Optional
@@ -30,6 +31,49 @@ TICKER_SUFFIX_TO_MARKET = {
     '.HK': Market.HK,   # Hong Kong Exchange
 }
 
+# 商品期货期权品种代码白名单
+COMMODITY_PRODUCT_CODES = {'au', 'ag', 'cu', 'al', 'm'}
+
+# 期货交易所前缀
+FUTURES_EXCHANGE_PREFIXES = {'shfe', 'dce', 'czce', 'ine'}
+
+
+def is_commodity_symbol(symbol: str) -> bool:
+    """
+    Check if a symbol is a commodity futures option product.
+
+    Recognizes formats: 'au', 'au2604', 'SHFE.au2604'
+
+    Args:
+        symbol: Symbol string
+
+    Returns:
+        True if symbol is a commodity product
+
+    Examples:
+        >>> is_commodity_symbol("au")
+        True
+        >>> is_commodity_symbol("au2604")
+        True
+        >>> is_commodity_symbol("SHFE.au2604")
+        True
+        >>> is_commodity_symbol("m2605")
+        True
+        >>> is_commodity_symbol("AAPL")
+        False
+    """
+    s = symbol.lower().strip()
+    # Strip exchange prefix: SHFE.au2506 -> au2506
+    if '.' in s:
+        parts = s.split('.')
+        if parts[0] in FUTURES_EXCHANGE_PREFIXES:
+            s = parts[1]
+        else:
+            return False  # Has a dot but not a futures exchange prefix
+    # Extract alphabetic product code
+    product = ''.join(c for c in s if c.isalpha())
+    return product in COMMODITY_PRODUCT_CODES
+
 
 def detect_market(symbol: str) -> Market:
     """
@@ -41,13 +85,14 @@ def detect_market(symbol: str) -> Market:
     Detection Rules (in order of priority):
     1. Suffix-based: .HK → HK, .SS/.SZ/.SH → CN
     2. Prefix-based: 6-digit codes starting with 60/68/00/30 → CN
-    3. Default: US market
+    3. Commodity futures: au/ag/cu/al/m (with optional contract month)
+    4. Default: US market
 
     Args:
-        symbol: Stock ticker symbol (e.g., "AAPL", "0700.HK", "600519")
+        symbol: Stock ticker symbol (e.g., "AAPL", "0700.HK", "600519", "au2604")
 
     Returns:
-        Market enum (US, HK, or CN)
+        Market enum (US, HK, CN, or COMMODITY)
 
     Examples:
         >>> detect_market("AAPL")
@@ -56,12 +101,12 @@ def detect_market(symbol: str) -> Market:
         Market.HK
         >>> detect_market("600519")
         Market.CN
-        >>> detect_market("000001")
-        Market.CN
-        >>> detect_market("600519.SS")
-        Market.CN
-        >>> detect_market("300750")
-        Market.CN
+        >>> detect_market("au")
+        Market.COMMODITY
+        >>> detect_market("au2604")
+        Market.COMMODITY
+        >>> detect_market("m2605")
+        Market.COMMODITY
     """
     symbol_upper = symbol.upper().strip()
 
@@ -77,12 +122,16 @@ def detect_market(symbol: str) -> Market:
         if prefix in CN_STOCK_PREFIX_RULES:
             return Market.CN
 
-    # 3. Check if it's a HK stock (1-5 digit pure number without suffix)
+    # 3. Check commodity futures (before HK/US default)
+    if is_commodity_symbol(symbol):
+        return Market.COMMODITY
+
+    # 4. Check if it's a HK stock (1-5 digit pure number without suffix)
     #    HK stock codes are 1-5 digit numbers (e.g., 700, 00700, 07709, 9988)
     if base_ticker.isdigit() and len(base_ticker) <= 5:
         return Market.HK
 
-    # 4. Default to US market
+    # 5. Default to US market
     return Market.US
 
 
@@ -215,6 +264,7 @@ def get_market_name(market: Market, language: str = 'en') -> str:
         Market.US: {'en': 'US Market', 'zh': '美股'},
         Market.CN: {'en': 'China A-Share', 'zh': 'A股'},
         Market.HK: {'en': 'Hong Kong', 'zh': '港股'},
+        Market.COMMODITY: {'en': 'Commodity Futures', 'zh': '商品期货'},
     }
     return names.get(market, {}).get(language, str(market.value))
 
@@ -232,3 +282,8 @@ def is_hk_stock(symbol: str) -> bool:
 def is_us_stock(symbol: str) -> bool:
     """Check if a symbol is a US stock."""
     return detect_market(symbol) == Market.US
+
+
+def is_commodity(symbol: str) -> bool:
+    """Check if a symbol is a commodity futures option."""
+    return detect_market(symbol) == Market.COMMODITY

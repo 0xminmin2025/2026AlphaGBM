@@ -30,6 +30,7 @@ class Market(Enum):
     US = "us"
     HK = "hk"
     CN = "cn"
+    COMMODITY = "commodity"  # 商品期货期权
 
 
 class ProviderStatus(Enum):

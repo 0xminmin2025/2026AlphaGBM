@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,19 +29,24 @@ class BuyPutScorer:
             'time_value': 0.10           # 时间价值权重
         }
 
-    def score_options(self, options_data: Dict, stock_data: Dict) -> Dict[str, Any]:
+    def score_options(self, options_data: Dict, stock_data: Dict,
+                      market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         为Buy Put策略计分期权
 
         Args:
             options_data: 期权链数据
             stock_data: 标的股票数据
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             计分结果
         """
         try:
-            logger.info(f"开始Buy Put策略计分: {options_data.get('symbol', 'Unknown')}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"开始Buy Put策略计分: {options_data.get('symbol', 'Unknown')} (市场: {market_config.market})")
 
             if not options_data.get('success'):
                 return {
@@ -67,7 +74,7 @@ class BuyPutScorer:
             # 筛选和计分期权
             scored_options = []
             for put_option in puts:
-                score_result = self._score_individual_put(put_option, current_price, stock_data)
+                score_result = self._score_individual_put(put_option, current_price, stock_data, market_config=market_config)
                 if score_result and score_result.get('score', 0) > 0:
                     scored_options.append(score_result)
 
@@ -99,9 +106,16 @@ class BuyPutScorer:
             }
 
     def _score_individual_put(self, put_option: Dict, current_price: float,
-                             stock_data: Dict) -> Optional[Dict]:
+                             stock_data: Dict,
+                             market_config: OptionMarketConfig = None) -> Optional[Dict]:
         """计分单个看跌期权"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+            multiplier = market_config.get_multiplier(
+                stock_data.get('symbol', '') if isinstance(stock_data, dict) else ''
+            )
+
             strike = put_option.get('strike', 0)
             bid = put_option.get('bid', 0)
             ask = put_option.get('ask', 0)
@@ -149,11 +163,20 @@ class BuyPutScorer:
                 for factor in scores.keys()
             )
 
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = put_option.get('contract') or put_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 计算盈亏平衡点
             breakeven = strike - mid_price
-            max_profit = (breakeven * 100) if breakeven > 0 else 0  # 假设1份合约
+            max_profit = (breakeven * multiplier) if breakeven > 0 else 0  # 1份合约
 
-            return {
+            result = {
                 'option_symbol': put_option.get('symbol', f"PUT_{strike}_{put_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': put_option.get('expiry'),
@@ -171,11 +194,16 @@ class BuyPutScorer:
                 'score': round(total_score, 1),
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'breakeven': round(breakeven, 2),
-                'max_loss': round(mid_price * 100, 0),  # 假设1份合约
+                'max_loss': round(mid_price * multiplier, 0),  # 1份合约
                 'max_profit_potential': 'unlimited' if breakeven > 0 else 'limited',
                 'profit_potential': round(max_profit, 0),
                 'strategy_notes': self._generate_put_notes(current_price, strike, moneyness, time_value, days_to_expiry)
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")
