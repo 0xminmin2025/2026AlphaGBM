@@ -88,6 +88,7 @@ export default function MainLayout() {
                             <a href="/options" onClick={handleOptionsNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.options')}</a>
                             <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
                             <a href="/stock" onClick={handleStockNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.stock')}</a>
+                            <Link to="/knowledge" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.knowledge')}</Link>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>
                         </nav>
 
@@ -147,6 +148,13 @@ export default function MainLayout() {
                                 {t('nav.stock')}
                             </a>
                             <Link
+                                to="/knowledge"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.knowledge')}
+                            </Link>
+                            <Link
                                 to="/pricing"
                                 className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
                                 onClick={closeMobileMenu}
@@ -190,7 +198,7 @@ export default function MainLayout() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 container py-4 px-4 sm:py-8 sm:px-8 max-w-7xl mx-auto">
+            <main className={`flex-1 ${location.pathname.startsWith('/knowledge') ? '' : 'container py-4 px-4 sm:py-8 sm:px-8 max-w-7xl mx-auto'}`}>
                 <Outlet />
             </main>
 

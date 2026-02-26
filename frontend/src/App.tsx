@@ -10,6 +10,7 @@ import Login from '@/pages/Login';
 import ResetPassword from '@/pages/ResetPassword';
 import NewLanding from '@/pages/NewLanding';
 import Landing from '@/pages/Landing';
+import KnowledgeBasePage from '@/pages/knowledge-base/KnowledgeBasePage';
 import { AnalyticsProvider } from '@/components/analytics/AnalyticsProvider';
 import { ToastProvider } from '@/components/ui/toast';
 
@@ -30,6 +31,8 @@ function App() {
               <Route path="/options/reverse" element={<ReverseScore />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/knowledge" element={<KnowledgeBasePage />} />
+              <Route path="/knowledge/:chapterSlug" element={<KnowledgeBasePage />} />
             </Route>
           </Routes>
           </AnalyticsProvider>
