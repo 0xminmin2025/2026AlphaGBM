@@ -19,7 +19,9 @@
 flowchart TD
     A[POST /api/options/chain-async] --> B{@require_auth}
     B -->|401| Z1[认证失败]
-    B -->|通过| C{@check_quota}
+    B -->|通过| B2{白名单校验}
+    B2 -->|400 不在白名单| Z3[白名单校验失败]
+    B2 -->|通过| C{@check_quota}
     C -->|402| Z2[额度不足]
     C -->|通过| D[创建 AnalysisTask]
 
@@ -64,7 +66,8 @@ sequenceDiagram
     participant DB as Database
 
     FE->>BE: POST /api/options/chain-async<br/>{symbol: "AAPL", expiry_date: "2026-03-21"}
-    BE->>BE: @require_auth → @check_quota
+    BE->>BE: @require_auth → 白名单校验 → @check_quota
+    Note over BE: _check_option_whitelist(symbol)<br/>HK/CN/COMMODITY 强制白名单
     BE->>TQ: create_task(task_type='option_analysis')
     TQ-->>BE: task_id
     BE-->>FE: 201 {task_id}
@@ -210,10 +213,33 @@ flowchart TD
 | `implied_volatility` | float | 隐含波动率 (小数形式) |
 | `confidence` | string | high / medium / low |
 
+## 7.1 商品期货合约查询流程 (2026-02-09 新增)
+
+`GET /api/options/commodity/contracts/<product>` -- 同步返回
+
+```mermaid
+flowchart TD
+    A[GET /commodity/contracts/au] --> B{@require_auth}
+    B -->|401| Z1[认证失败]
+    B -->|通过| C{品种验证}
+    C -->|400 不支持| Z2[返回 supported 列表]
+    C -->|通过| D[AkShareCommodityAdapter]
+    D --> E[akshare.option_commodity_contract_sina]
+    E --> F{数据获取成功?}
+    F -->|失败| Z3[500 数据源异常]
+    F -->|成功| G[按持仓量排序]
+    G --> H[返回 contracts + dominant_contract + multiplier]
+```
+
+支持品种: `au`(黄金), `ag`(白银), `cu`(沪铜), `al`(沪铝), `m`(豆粕)。
+
+---
+
 ## 8. 异常处理
 
 | 场景 | HTTP Status | 处理策略 |
 |------|-------------|----------|
+| Symbol 不在白名单 | 400 | `_check_option_whitelist()` 返回白名单列表 |
 | Symbol 无效 | 400 | 前端验证 + 后端校验 |
 | 期权链数据获取失败 | 200 | `MockDataGenerator` fallback（标记 data_source="mock"）|
 | 额度不足 | 402 | `@check_quota` 返回扣减失败信息 |
@@ -232,4 +258,7 @@ flowchart TD
 | `app/services/phase1/risk_adjuster.py` | 风险调整器 |
 | `app/services/image_recognition_service.py` | Gemini Vision 截图识别 |
 | `app/analysis/options_analysis/scoring/` | 各策略评分实现 (buy_call, buy_put 等) |
+| `app/analysis/options_analysis/option_market_config.py` | 多市场参数配置 (US/HK/CN/COMMODITY) |
+| `app/analysis/options_analysis/advanced/delivery_risk.py` | 商品期权交割风险评估 |
+| `app/services/market_data/adapters/akshare_commodity_adapter.py` | 商品期权数据适配器 |
 | `app/services/data_provider.py` | 统一数据访问层 |

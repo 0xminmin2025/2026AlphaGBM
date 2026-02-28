@@ -1,6 +1,6 @@
 # AlphaGBM 功能清单 (Feature Checklist)
 
-> 最后更新: 2026-02-08
+> 最后更新: 2026-02-27
 >
 > 本文档列出 AlphaGBM 股票/期权分析平台后端的全部功能模块、API 端点及核心服务引用。
 
@@ -40,6 +40,9 @@
 | 3.4 | 图像识别 | 通过 Gemini Vision API 识别期权截图并提取参数 | `POST /api/options/recognize-image` | `options_bp.recognize_option_image()` / `ImageRecognitionService.recognize_option_from_image()` | ✅ 已实现 |
 | 3.5 | 反向评分 | 根据用户输入的期权参数（symbol/strike/expiry 等）反向计算评分 | `POST /api/options/reverse-score` | `options_bp.reverse_score_option()` / `OptionsService.reverse_score_option()` | ✅ 已实现 |
 | 3.6 | 批量分析 | 批量创建多 symbol x 多 expiry 的期权链分析异步任务 | `POST /api/options/chain/batch` | `options_bp.get_option_chain_batch()` / `TaskQueue.create_analysis_task()` | ✅ 已实现 |
+| 3.7 | 商品期货合约查询 | 查询商品期货期权可用合约列表及主力合约 (au/ag/cu/al/m) | `GET /api/options/commodity/contracts/<product>` | `options_bp` / `AkShareCommodityAdapter` | ✅ 已实现 |
+| 3.8 | 多市场白名单校验 | HK/CN/COMMODITY 市场标的白名单校验，不在名单内返回 400 | 所有期权链端点 | `_check_option_whitelist()` / `OptionMarketConfig` | ✅ 已实现 |
+| 3.9 | 交割风险评估 | 商品期权交割月风控 (T-30 红区/T-60 警告区) | 商品期权评分流程内部 | `DeliveryRiskCalculator.assess()` | ✅ 已实现 |
 
 ---
 
@@ -47,7 +50,7 @@
 
 | # | 功能名称 | 功能描述 | 入口端点 | 核心服务类/方法 | 当前状态 |
 |---|---------|---------|----------|----------------|---------|
-| 4.1 | 推荐列表 + 市场摘要 | 获取每日热门期权推荐及市场概况，支持缓存与强制刷新 | `GET /api/options/recommendations?count=5&refresh=false` | `options_bp.get_recommendations()` / `RecommendationService.get_daily_recommendations()` | ✅ 已实现 |
+| 4.1 | 推荐列表 + 市场摘要 | 获取每日热门期权推荐及市场概况（US/HK/CN/Commodity 四市场），支持缓存与强制刷新 | `GET /api/options/recommendations?count=5&refresh=false` | `options_bp.get_recommendations()` / `RecommendationService.get_daily_recommendations()` | ✅ 已实现 |
 
 ---
 
@@ -185,5 +188,5 @@
 ## 统计
 
 - **功能模块总数**: 13
-- **API 端点总数**: 48
-- **已实现**: 48 / 48 (100%)
+- **API 端点总数**: 49
+- **已实现**: 49 / 49 (100%)

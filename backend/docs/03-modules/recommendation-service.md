@@ -23,7 +23,16 @@ class RecommendationService:
         self._price_trend_cache = {}          # 价格趋势内存缓存（1hr TTL）
 ```
 
-**热门标的**: `HOT_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'META', 'AMZN', 'AMD']`，实际分析取前 8 个。
+**热门标的 (多市场)**:
+
+| 变量 | 标的列表 | 市场 |
+|------|---------|------|
+| `HOT_SYMBOLS` | SPY, QQQ, IWM, AAPL, NVDA, TSLA, MSFT, GOOGL, META, AMZN, AMD | US |
+| `HK_HOT_SYMBOLS` | 0700.HK (腾讯), 9988.HK (阿里), 3690.HK (美团) | HK |
+| `CN_HOT_SYMBOLS` | 510050.SS (ETF50), 510300.SS (ETF300) | CN |
+| `COMMODITY_HOT_SYMBOLS` | au (黄金), ag (白银), cu (沪铜) | COMMODITY |
+
+实际扫描池: `HOT_SYMBOLS[:8] + HK_HOT_SYMBOLS + CN_HOT_SYMBOLS + COMMODITY_HOT_SYMBOLS` = **16 个标的**。
 
 ---
 
@@ -36,7 +45,7 @@ get_daily_recommendations(count=5, force_refresh=False)
 │   └── 命中 → 返回 cached.recommendations[:count]
 │
 └── _generate_recommendations(count)
-    ├── for symbol in HOT_SYMBOLS[:8]:
+    ├── for symbol in HOT_SYMBOLS[:8] + HK + CN + COMMODITY:
     │   └── _analyze_symbol(symbol)
     │       ├── DataProvider → current_price, expiry_dates[:5]
     │       ├── 排除日权（today/tomorrow 到期）→ filtered[:3]
@@ -61,7 +70,9 @@ get_daily_recommendations(count=5, force_refresh=False)
 | Tier | 类别 | Quality | 代表标的 |
 |------|------|---------|----------|
 | **1** | 蓝筹 ETF | 85-95 | SPY(95), QQQ(90), IWM(85), DIA(92), VOO(95) |
+| **1** | A股ETF | 88-90 | 510050.SS(90), 510300.SS(88) |
 | **2** | 大盘蓝筹 | 80-90 | MSFT(90), AAPL(88), BRK-B(88), GOOGL(85) |
+| **2** | 港股蓝筹 | 80-85 | 0700.HK(85), 9988.HK(80), 3690.HK(72) |
 | **3** | 高成长股 | 70-80 | NVDA(80), META(78), CRM(76), AMD(75), TSLA(70) |
 | **4** | 高风险标的 | 40-55 | COIN(55), MSTR(50), GME(40), AMC(40) |
 | **5** | 未评级 | 50 | 其他所有标的（默认） |
@@ -109,6 +120,9 @@ else          → trend='sideways',  good_for_put=True
 | `recommended_strategies` | 出现次数最多的前 2 种策略 |
 | `avg_iv_rank` | 平均 IV Rank |
 | `strategy_distribution` | 各策略数量统计 |
+| `by_market` | 按市场分组统计（US/HK/CN/COMMODITY 各自的 calls_count/puts_count） |
+
+> **2026-02-09 新增:** 每个推荐项增加 `market`（US/HK/CN/COMMODITY）和 `currency`（USD/HKD/CNY）字段，从 `get_option_market_config(symbol)` 获取。
 
 判断：`sell_count > buy_count * 1.5` → range_bound; 反之 → trending; 否则 mixed。
 

@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-02-10
+
+### Bug 修复
+- **Tiger 适配器港股期权符号映射** (`tiger_adapter.py`):
+  - 新增 `_to_tiger_symbol()` 将 `.HK` 后缀转为 Tiger 5 位格式
+  - 新增 `_get_hk_option_symbol()` 港股期权特殊代码映射（如 `00700` → `TCH.HK`）
+  - 初始化时调用 `grab_quote_permission()` 确保设备为主要连接
+- **支付额度逻辑修复** (`payment.py`):
+  - `check_quota` 由 `can_use_free OR can_use_paid` 改为 `total_available = free_remaining + paid_credits` 合并计算
+  - 付费额度统一查询 `STOCK_ANALYSIS` 服务类型（通用额度池）
+
+---
+
+## 2026-02-09
+
+### HK/CN 期权多市场支持
+- **新增 OptionMarketConfig 体系** (`option_market_config.py`):
+  - frozen dataclass 定义 4 个市场配置（US/HK/CN/COMMODITY）
+  - `get_option_market_config(symbol)` 自动检测市场并返回对应参数
+  - 白名单机制：HK (0700/9988/3690)、CN (510050/510300)、COMMODITY (au/ag/cu/al/m)
+- **4 个评分器全部升级**: 接受 `market_config` 参数，使用市场特定利率和交易日
+- **VRP/Risk Adjuster 升级**: 使用市场特定保证金率、合约乘数、年化因子
+- **API 白名单校验**: `_check_option_whitelist()` 应用于所有期权链端点
+
+### 商品期货期权
+- **新增 AkShareCommodityAdapter** (`akshare_commodity_adapter.py`, 514 行):
+  - 支持 5 个品种: au(黄金), ag(白银), cu(沪铜), al(沪铝), m(豆粕)
+  - 底层: akshare (Sina Finance API)，无需 API Key
+- **新增 DeliveryRiskCalculator** (`delivery_risk.py`, 151 行):
+  - T-30 红区(penalty=1.0)、T-30~60 警告区(线性插值)、T-60+ 安全区
+- **新增 API 端点**: `GET /api/options/commodity/contracts/<product>` — 合约列表 + 主力合约
+- **市场检测更新**: `is_commodity_symbol()` 商品符号检测（优先级在 HK 之前）
+
+### 推荐服务扩展
+- 推荐标的池: US(8) + HK(3) + CN(2) = 13 个标的
+- `SYMBOL_QUALITY` 新增 HK/CN 条目
+- 推荐响应新增 `market` 和 `currency` 字段
+
+---
+
 ## 2026-02-08
 
 ### 文档体系建设 (51 documents)

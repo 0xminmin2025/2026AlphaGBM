@@ -102,7 +102,7 @@ app/services/market_data/
 ├── config.py                 # 数据服务配置（超时、重试、缓存 TTL）
 ├── interfaces.py             # 抽象接口定义（DataAdapter Protocol）
 ├── metrics.py                # 性能指标收集（命中率、延迟、错误率）
-├── market_detector.py        # 市场检测器（ticker -> US / CN / HK 市场识别）
+├── market_detector.py        # 市场检测器（ticker -> US / CN / HK / COMMODITY 市场识别）
 ├── deduplicator.py           # 请求去重（500ms 窗口内合并相同请求）
 │
 └── adapters/                 # 数据源适配器
@@ -111,7 +111,8 @@ app/services/market_data/
     ├── defeatbeta_adapter.py # DefeatBeta 适配器
     ├── tiger_adapter.py      # Tiger Securities 适配器（老虎证券）
     ├── alphavantage_adapter.py # Alpha Vantage 适配器
-    └── tushare_adapter.py    # Tushare 适配器（A 股数据）
+    ├── tushare_adapter.py    # Tushare 适配器（A 股数据）
+    └── akshare_commodity_adapter.py # AkShare 适配器（商品期货期权）
 ```
 
 市场数据子系统采用 Adapter 模式，将多个第三方数据源统一为相同接口。
@@ -143,9 +144,10 @@ app/analysis/stock_analysis/
 
 ```
 app/analysis/options_analysis/
+├── option_market_config.py   # 多市场参数配置（US/HK/CN/COMMODITY）
 ├── core/
 │   ├── engine.py             # OptionsAnalysisEngine 主引擎
-│   └── data_fetcher.py       # OptionsDataFetcher 期权链数据获取
+│   └── data_fetcher.py       # OptionsDataFetcher 期权链数据获取（含商品期权）
 ├── scoring/
 │   ├── sell_put.py           # Sell Put 评分器（SPRV 策略）
 │   ├── sell_call.py          # Sell Call 评分器（SCRV 策略）
@@ -155,7 +157,8 @@ app/analysis/options_analysis/
 │   └── risk_return_profile.py # 风险收益标签（保守/平衡/激进）
 └── advanced/
     ├── vrp_calculator.py     # VRP 波动率风险溢价计算
-    └── risk_adjuster.py      # 风险调整因子（VIX、行业 Beta）
+    ├── risk_adjuster.py      # 风险调整因子（VIX、行业 Beta）
+    └── delivery_risk.py      # 商品期权交割风险评估（T-30/T-60 风控）
 ```
 
 `analysis/` 是 AlphaGBM 的量化核心。股票分析引擎计算技术指标、基本面评分、

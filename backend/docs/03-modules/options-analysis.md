@@ -15,6 +15,73 @@
 
 **评分系统:** 所有策略统一 0-100 分制，按分数降序排列推荐期权合约。
 
+**支持 4 个市场:** US (美股)、HK (港股)、CN (A股ETF)、COMMODITY (商品期货)。各市场参数差异通过 `OptionMarketConfig` 体系管理。
+
+
+## 1.1 OptionMarketConfig — 多市场参数体系
+
+**文件:** `app/analysis/options_analysis/option_market_config.py`
+
+所有评分器、VRP 计算器、风险调整器从此模块读取市场特定参数，实现「参数化，不复制」。
+
+### 设计原则
+
+- `frozen dataclass` 保证配置不可变
+- `get_option_market_config(symbol)` 自动检测市场并返回对应配置
+- 不传 config 时默认 US，100% 向后兼容
+
+### 配置字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `market` | str | 市场标识: `US` / `HK` / `CN` / `COMMODITY` |
+| `currency` | str | 币种: `USD` / `HKD` / `CNY` |
+| `contract_multiplier` | int | 默认合约乘数 |
+| `risk_free_rate` | float | 无风险利率 |
+| `trading_days_per_year` | int | 年化交易日数 |
+| `default_margin_rate` | float | 默认保证金率 |
+| `min_volume` | int | 最小成交量（流动性筛选） |
+| `min_open_interest` | int | 最小持仓量 |
+| `max_bid_ask_spread_pct` | float | 最大买卖价差百分比 |
+| `monthly_expiry_rule` | str | 月到期规则 |
+| `whitelist_enforced` | bool | 是否强制白名单 |
+| `whitelist` | frozenset | 白名单标的集合 |
+| `cash_settlement` | bool | 是否现金交割 |
+| `per_symbol_multiplier` | Dict | 个股乘数覆盖 |
+
+### 四市场配置对比
+
+| 参数 | US | HK | CN | COMMODITY |
+|------|-----|-----|-----|-----------|
+| 币种 | USD | HKD | CNY | CNY |
+| 合约乘数 | 100 | 100 | 10,000 | 按品种 (Au:1000, Ag:15, Cu:5, Al:5, M:10) |
+| 无风险利率 | 5.0% | 2.5% | 1.8% | 1.8% |
+| 年交易日 | 252 | 242 | 240 | 240 |
+| 保证金率 | 20% | 15% | 12% | 10% |
+| 最小成交量 | 10 | 5 | 50 | 5 |
+| 最小持仓量 | 50 | 20 | 100 | 20 |
+| 最大价差 | 10% | 20% | 8% | 15% |
+| 到期规则 | 第三个周五 | 第四个周三 | 第四个周三 | 交易所规定 |
+| 白名单 | 关闭 | 开启 | 开启 | 开启 |
+| 白名单标的 | 无限制 | 0700.HK, 9988.HK, 3690.HK | 510050.SS, 510300.SS | au, ag, cu, al, m |
+| 现金交割 | 否 | 否 | 是 | 否 |
+
+### 核心方法
+
+**`get_option_market_config(symbol) -> OptionMarketConfig`** — 自动检测:
+- 调用 `market_detector.detect_market(symbol)` 识别市场
+- 查找 `_MARKET_CONFIG_MAP` 返回对应配置
+- 检测失败时默认返回 US 配置
+
+**`OptionMarketConfig.get_multiplier(symbol) -> int`** — 取合约乘数:
+- 先查 `per_symbol_multiplier`（去除 `.HK` 等后缀后大写匹配）
+- 未命中则返回 `contract_multiplier` 默认值
+
+**`OptionMarketConfig.is_symbol_allowed(symbol) -> bool`** — 白名单校验:
+- `whitelist_enforced=False` 时始终返回 True
+- COMMODITY 市场: 提取品种代码 (`au2604` → `au`, `SHFE.au2604` → `au`)，匹配白名单
+- 其他市场: 大写后直接匹配
+
 
 ## 2. OptionsAnalysisEngine -- 分析引擎主类
 
@@ -106,6 +173,8 @@ volatility = std(daily_returns) * sqrt(252)
 ## 4. OptionScorer -- 量化评分核心
 
 **文件:** `app/services/option_scorer.py` (818 行)
+
+> **多市场支持 (2026-02-09):** 所有 4 个评分器新增 `market_config: OptionMarketConfig` 可选参数。评分器使用 `market_config.risk_free_rate` 替代硬编码 0.05，使用 `market_config.trading_days_per_year` 替代 252。COMMODITY 市场额外计算交割风险惩罚 (见 Section 8.1)。
 
 ### 4.1 SPRV -- Sell Put Recommendation Value
 
@@ -246,6 +315,45 @@ S = 标的价格, K = 执行价, r = 0.05, sigma = IV, T = DTE/365
 **日权评分上限:** DTE <= 1 判定为日权，所有策略评分 **封顶 30 分**。
 
 
+## 8.1 交割风险惩罚 — 商品期货专用 (Delivery Risk)
+
+**文件:** `app/analysis/options_analysis/advanced/delivery_risk.py`
+
+商品期货期权存在实物交割风险，临近交割月持仓可能被强制平仓或产生实物交割成本。
+
+### DeliveryRiskCalculator
+
+基于距交割月天数的三级风控:
+
+| 风险区 | 条件 | 惩罚系数 | 建议 | 说明 |
+|--------|------|----------|------|------|
+| **红区** | ≤ 30 天 | `1.0` (满额惩罚) | `close` — 立即平仓 | 评分直接归零 |
+| **警告区** | 30-60 天 | 线性插值 0.0~1.0 | `reduce` — 关注移仓 | `penalty = (60 - days) / 30` |
+| **安全区** | > 60 天 | `0.0` (无惩罚) | `ok` — 正常交易 | 不影响评分 |
+
+### DeliveryRiskAssessment 数据结构
+
+```python
+@dataclass
+class DeliveryRiskAssessment:
+    days_to_delivery: int       # 距交割月首日天数
+    is_red_zone: bool           # 是否红区
+    is_warning_zone: bool       # 是否警告区
+    delivery_penalty: float     # 惩罚系数 0.0~1.0
+    warning: str                # 风险提示文本
+    recommendation: str         # 'ok' | 'reduce' | 'close'
+    delivery_month: str         # 交割月 'YYYY-MM'
+```
+
+### 合约代码解析
+
+格式: `品种 + YYMM`（如 `au2506`, `m2605`）。提取末 4 位数字，`year = 2000 + YY`，`month = MM`。交割日期 = 交割月1日。
+
+### 对评分的影响
+
+交割惩罚直接作用于最终评分: `final_score = base_score * (1 - delivery_penalty)`。仅对 `Market.COMMODITY` 生效，其他市场不计算交割风险。
+
+
 ## 9. 风险收益标签 (Risk-Return Profile)
 
 **文件:** `app/analysis/options_analysis/scoring/risk_return_profile.py` (788 行)
@@ -294,6 +402,8 @@ VRP_relative = (IV - RV) / RV
 
 VRP > 0 期权偏贵 (卖方有利); VRP < 0 期权偏便宜 (买方有利)。
 
+> **多市场支持 (2026-02-09):** VRP 年化计算使用 `market_config.trading_days_per_year`（US:252, HK:242, CN/Commodity:240），无风险利率使用 `market_config.risk_free_rate`。
+
 ### 10.2 VRP 等级与策略建议
 
 | VRP Relative | 等级 | 建议 |
@@ -331,9 +441,11 @@ VRP > 0 期权偏贵 (卖方有利); VRP < 0 期权偏便宜 (买方有利)。
 
 ### 11.3 仓位计算
 
-- 买方: `portfolio_value * max_single_position / (mid_price * 100)`
-- 卖方: 额外考虑保证金 (strike * 100 * 20% - 权利金)
+- 买方: `portfolio_value * max_single_position / (mid_price * multiplier)`
+- 卖方: 额外考虑保证金 (`strike * multiplier * margin_rate - 权利金`)
 - 波动率乘数调整 + 组合级别缩放
+
+> **多市场支持 (2026-02-09):** 仓位计算使用 `market_config.default_margin_rate` 替代硬编码 20%，合约乘数使用 `market_config.get_multiplier(symbol)` 替代固定 100。港股/A股/商品各市场保证金率和乘数差异显著（见 Section 1.1 配置对比表）。
 
 ### 11.4 策略基础风险
 
@@ -384,10 +496,11 @@ backend/
     analysis/
       options_analysis/
         __init__.py
+        option_market_config.py  # 180行  多市场参数配置 (US/HK/CN/COMMODITY)
         core/
           __init__.py
           engine.py              # 341行  分析引擎主类
-          data_fetcher.py        # 819行  期权数据获取
+          data_fetcher.py        # 819行  期权数据获取 (含商品期权)
         scoring/
           __init__.py
           sell_put.py            # 744行  Sell Put 策略计分
@@ -399,8 +512,9 @@ backend/
         advanced/
           vrp_calculator.py      # 594行  VRP 波动率溢价
           risk_adjuster.py       # 722行  风险调整器
+          delivery_risk.py       # 151行  商品期权交割风险评估
     services/
       option_scorer.py           # 818行  量化评分核心算法
 ```
 
-**模块总计:** 约 7,482 行 Python 代码。
+**模块总计:** 约 7,813 行 Python 代码。

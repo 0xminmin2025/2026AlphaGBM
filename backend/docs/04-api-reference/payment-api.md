@@ -168,14 +168,16 @@ Authorization: Bearer <token>
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `has_enough` | boolean | 是否有足够额度 |
+| `has_enough` | boolean | 是否有足够额度（`total_available >= amount`） |
 | `will_use_free` | boolean | 是否将使用免费额度 |
 | `free_quota` | integer | 每日免费总额度 |
 | `free_used` | integer | 今日已使用免费额度 |
 | `free_remaining` | integer | 今日剩余免费额度 |
-| `paid_credits` | integer | 付费额度余额 |
+| `paid_credits` | integer | 付费额度余额（统一查询 `STOCK_ANALYSIS` 通用额度池） |
 | `amount_needed` | integer | 本次需要的额度数量 |
 | `message` | string | 人类可读的状态描述 |
+
+> **额度逻辑更新 (2026-02-10):** `has_enough` 计算改为合并免费+付费: `total_available = free_remaining + paid_credits`，判断 `total_available >= amount`。额度不足时错误信息格式: `"剩余总额度 X 次（免费 Y + 付费 Z）"`。
 
 ### 错误码
 

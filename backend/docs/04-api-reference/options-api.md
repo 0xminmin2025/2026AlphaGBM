@@ -22,6 +22,9 @@
 | POST | `/api/options/reverse-score` | `@require_auth` `@check_quota` | 反向查分 |
 | POST | `/api/options/chain/batch` | `@require_auth` | 批量期权链分析 |
 | POST | `/api/options/recognize-image` | `@require_auth` | 期权截图识别 |
+| GET | `/api/options/commodity/contracts/{product}` | `@require_auth` | 商品期货合约列表 |
+
+> **白名单校验 (2026-02-09 新增):** `chain-async`, `enhanced-async`, `expirations`, `chain`, `reverse-score` 端点在处理 HK/CN/COMMODITY 市场标的时，会先进行白名单校验。不在白名单内的标的返回 `400` 错误（见下方通用错误码）。
 
 ---
 
@@ -739,3 +742,94 @@ Content-Type: image/png
 | `400` | `文件大小不能超过 10MB` | 文件超过大小限制 |
 | `401` | - | 未登录 |
 | `500` | `图片识别失败: ...` | AI 识别服务异常 |
+
+---
+
+## GET /api/options/commodity/contracts/{product}
+
+> **2026-02-09 新增**
+
+查询商品期货期权的可用合约列表及主力合约。
+
+### 认证
+
+`@require_auth`
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `product` | string | 商品品种代码: `au`(黄金), `ag`(白银), `cu`(沪铜), `al`(沪铝), `m`(豆粕) |
+
+### 请求示例
+
+```http
+GET /api/options/commodity/contracts/au HTTP/1.1
+Authorization: Bearer <token>
+```
+
+### 成功响应
+
+**Status: `200 OK`**
+
+```json
+{
+  "success": true,
+  "product": "au",
+  "product_name": "黄金",
+  "exchange": "SHFE",
+  "contracts": ["au2604", "au2605", "au2606", "au2608", "au2610", "au2612"],
+  "dominant_contract": "au2604",
+  "multiplier": 1000
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `product` | string | 品种代码 |
+| `product_name` | string | 品种中文名 |
+| `exchange` | string | 交易所代码 (SHFE/DCE) |
+| `contracts` | string[] | 可用合约列表（按持仓量排序） |
+| `dominant_contract` | string | 主力合约（持仓量最大） |
+| `multiplier` | integer | 合约乘数 |
+
+### 错误码
+
+| 状态码 | 错误描述 | 说明 |
+|--------|---------|------|
+| `400` | `不支持的商品品种: {product}` | 品种不在支持列表中，响应含 `supported` 字段列出所有支持品种 |
+| `401` | - | 未登录 |
+| `500` | `获取合约数据失败` | AkShare 数据源异常 |
+
+---
+
+## 通用错误：白名单校验失败
+
+> **2026-02-09 新增**，适用于 `chain-async`, `enhanced-async`, `expirations`, `chain`, `reverse-score` 端点
+
+当请求的标的不在对应市场的白名单中时：
+
+**Status: `400 Bad Request`**
+
+```json
+{
+  "success": false,
+  "error": "标的 9618.HK 不在 HK 市场期权白名单中",
+  "allowed_symbols": ["0700.HK", "9988.HK", "3690.HK"]
+}
+```
+
+白名单规则：US 市场无白名单限制；HK、CN、COMMODITY 市场强制白名单（详见期权分析模块 Section 1.1）。
+
+---
+
+## GET /api/options/recommendations — 响应字段补充
+
+> **2026-02-09 更新**
+
+每个推荐项新增以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `market` | string | 标的所属市场: `US` / `HK` / `CN` / `COMMODITY` |
+| `currency` | string | 计价币种: `USD` / `HKD` / `CNY` |

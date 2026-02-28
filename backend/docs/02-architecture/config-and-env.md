@@ -30,6 +30,7 @@ AlphaGBM 后端通过 `Config` 类集中管理所有运行时配置。启动时�
 | `SUPABASE_ANON_KEY` | 是 | -- | Supabase 匿名公钥 |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 否 | -- | 前端同名变量，作为 `SUPABASE_ANON_KEY` 的 fallback |
 | `SUPABASE_KEY` | 否 | -- | 第三级 fallback（兼容旧配置） |
+| `ADMIN_SECRET_KEY` | 生产必填 | -- | Admin 触发端点认证密钥（`/api/admin/trigger-*`），通过 Header `X-Admin-Secret` 传递 |
 
 ### 1.3 支付 (Stripe)
 
@@ -57,6 +58,8 @@ AlphaGBM 后端通过 `Config` 类集中管理所有运行时配置。启动时�
 | `TIGER_PRIVATE_KEY` | 否 | -- | Tiger 私钥（通过 properties 文件配置） |
 | `TUSHARE_TOKEN` | 否 | `''` | Tushare Pro API 令牌，A 股数据源 |
 | `ALPHA_VANTAGE_API_KEY` | 否 | `''` | Alpha Vantage API 密钥，美股补充数据源 |
+
+> **AkShare 说明**: 商品期货期权数据通过 `AkShareCommodityAdapter` 获取，底层使用 Sina Finance 公开 API，**无需 API Key**。仅需安装 `akshare` Python 包。
 
 > **Tiger 说明**: Tiger API 使用 `tiger_openapi_config.properties` 文件进行认证，
 > 搜索路径依次为: `backend/tiger_openapi_config.properties` -> `/etc/tiger/` 等。

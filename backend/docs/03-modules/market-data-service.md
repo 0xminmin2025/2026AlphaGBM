@@ -6,7 +6,7 @@ Market Data Service 是行情数据的统一入口层，为整个应用提供股
 
 **核心架构决策：**
 
-- **多数据源统一接口** — 5 个 adapter 实现相同的 `DataProviderAdapter` 抽象基类，上层无需感知底层数据源
+- **多数据源统一接口** — 6 个 adapter 实现相同的 `DataProviderAdapter` 抽象基类，上层无需感知底层数据源
 - **自动 failover** — 按 market + data_type 自动选择 adapter 优先级链，主力源失败后切换备用源
 - **多级缓存** — 内存 LRU (L1) + 数据库 (L2)，不同数据类型使用不同 TTL
 - **请求去重** — 500ms 窗口内相同请求合并为一次 API 调用，避免浪费 rate limit
@@ -107,7 +107,7 @@ class MarketDataService:
 | 枚举 | 值 |
 |------|---|
 | `DataType` | QUOTE, HISTORY, INFO, FUNDAMENTALS, OPTIONS_CHAIN, OPTIONS_EXPIRATIONS, EARNINGS, MACRO |
-| `Market` | US, HK, CN |
+| `Market` | US, HK, CN, COMMODITY |
 | `ProviderStatus` | HEALTHY, DEGRADED, RATE_LIMITED, UNAVAILABLE |
 
 ### 3.3 标准化数据类
@@ -126,7 +126,7 @@ class MarketDataService:
 
 ---
 
-## 4. 五个适配器详解
+## 4. 六个适配器详解
 
 ### 4.1 YFinanceAdapter — 默认/美股主力
 
@@ -153,6 +153,12 @@ class MarketDataService:
 **需要:** 环境变量 `TIGER_ID` + `TIGER_PRIVATE_KEY`
 **优势:** 港股实时行情，期权链含更好的 IV/Greeks 数据
 
+**HK 期权符号映射 (2026-02-10):**
+- `_to_tiger_symbol(symbol)` — 将 `.HK` 后缀代码转为 Tiger 5 位格式（如 `0700.HK` → `00700`）
+- `_get_hk_option_symbol(stock_code)` — 港股期权使用特殊代码（如 `00700` → `TCH.HK`），内部维护映射缓存
+- 初始化时调用 `grab_quote_permission()` 确保设备为主要连接
+- 查询港股期权时：优先使用映射后的 option symbol，失败后 fallback 到 stock code
+
 ### 4.4 AlphaVantageAdapter — 历史数据备用
 
 **文件：** `adapters/alphavantage_adapter.py`（380 行）
@@ -170,7 +176,34 @@ class MarketDataService:
 **需要:** 环境变量 `TUSHARE_TOKEN`
 **特色:** A 股行情、基本面、资金流、行业分类数据
 
-### 4.6 Base Adapter 公共基类
+### 4.6 AkShareCommodityAdapter — 商品期货期权
+
+**文件：** `adapters/akshare_commodity_adapter.py`（514 行）
+**priority:** 10 | **市场:** COMMODITY only
+**支持:** QUOTE, HISTORY, OPTIONS_CHAIN, OPTIONS_EXPIRATIONS
+**底层:** akshare (Sina Finance API) | **rate limit:** 30 req/min, 5000 req/day
+**需要:** 无（akshare 为公开数据源，无需 API Key）
+
+**支持品种:**
+
+| 品种代码 | 中文名 | 合约乘数 | 交易所 |
+|---------|--------|---------|--------|
+| `au` | 黄金期权 | 1,000 | SHFE (上期所) |
+| `ag` | 白银期权 | 15 | SHFE |
+| `cu` | 沪铜期权 | 5 | SHFE |
+| `al` | 沪铝期权 | 5 | SHFE |
+| `m` | 豆粕期权 | 10 | DCE (大商所) |
+
+**核心方法:**
+- `get_options_expirations(symbol)` — 调用 `akshare.option_commodity_contract_sina()` 获取合约列表，按持仓量排序（首个 = 主力合约）
+- `get_options_chain(symbol, expiry)` — 调用 `akshare.option_commodity_contract_table_sina()` 获取 T 型期权链
+- `get_quote(symbol)` — 通过主力合约期权链的 put-call parity ATM 估算标的价格
+- `_extract_product(symbol)` — 提取品种代码（`au2604` → `au`, `SHFE.au2604` → `au`）
+- `_estimate_underlying_price(calls, puts)` — ATM 处 `underlying ≈ strike + call - put`
+
+**缓存配置:** quote 120s, history 600s, options_chain 120s, expirations 300s
+
+### 4.7 Base Adapter 公共基类
 
 **文件：** `adapters/base.py`
 
@@ -261,7 +294,20 @@ Thread C: get_quote("AAPL") → 同上
 | 1 | 后缀 `.HK` | `0700.HK` | `Market.HK` |
 | 2 | 后缀 `.SS`/`.SZ`/`.SH` | `600519.SS` | `Market.CN` |
 | 3 | 6 位纯数字 + A 股前缀 | `600519` | `Market.CN` |
-| 4 | 默认 | `AAPL` | `Market.US` |
+| 4 | 商品期货品种代码 | `au`, `au2604`, `SHFE.au2604` | `Market.COMMODITY` |
+| 5 | 1-5 位纯数字（港股） | `700`, `0700`, `9988` | `Market.HK` |
+| 6 | 默认 | `AAPL` | `Market.US` |
+
+### 8.3 商品符号检测 (2026-02-09 新增)
+
+**函数:** `is_commodity_symbol(symbol) -> bool`
+
+检测流程:
+1. 去除交易所前缀（`SHFE.`, `DCE.`, `CZCE.`, `INE.`）
+2. 提取纯字母部分（如 `au2604` → `au`）
+3. 匹配 `COMMODITY_PRODUCT_CODES = {'au', 'ag', 'cu', 'al', 'm'}`
+
+此检测优先级在 HK 纯数字检测之前，避免 `au` 等短字符串被误判为港股。
 
 ### 8.2 A 股代码前缀规则
 
@@ -283,6 +329,7 @@ Thread C: get_quote("AAPL") → 同上
 **美股 (US):** yfinance(10) → Tiger(15) → DefeatBeta(20) → AlphaVantage(25)
 **港股 (HK):** yfinance(10) → Tiger(15)
 **A 股 (CN):** Tushare(10) → Tiger(15)
+**商品期货 (COMMODITY):** AkShareCommodity(10)（单一数据源，无 fallback）
 
 **降级机制：**
 - 被 rate limit 的 provider：priority 临时 +1000（降至最后但不排除）
@@ -342,7 +389,8 @@ backend/app/services/market_data/
 │   ├── defeatbeta_adapter.py       # DefeatBetaAdapter (439 行)
 │   ├── tiger_adapter.py            # TigerAdapter (894 行)
 │   ├── alphavantage_adapter.py     # AlphaVantageAdapter (380 行)
-│   └── tushare_adapter.py          # TushareAdapter (584 行)
+│   ├── tushare_adapter.py          # TushareAdapter (584 行)
+│   └── akshare_commodity_adapter.py # AkShareCommodityAdapter (514 行)
 └── tests/
     ├── test_cache.py               # 缓存单元测试
     ├── test_market_detector.py     # 市场检测单元测试

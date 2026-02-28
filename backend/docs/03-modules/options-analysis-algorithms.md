@@ -58,6 +58,20 @@ safety_ratio = actual_buffer / required_buffer    # >= 1.0 安全
 
 ---
 
+## 3.1 多市场参数化 (2026-02-09 新增)
+
+所有评分器新增 `market_config: OptionMarketConfig` 可选参数：
+
+| 原硬编码值 | 现参数来源 | US | HK | CN | COMMODITY |
+|-----------|-----------|-----|-----|-----|-----------|
+| `r = 0.05` | `market_config.risk_free_rate` | 0.05 | 0.025 | 0.018 | 0.018 |
+| `252` 交易日 | `market_config.trading_days_per_year` | 252 | 242 | 240 | 240 |
+| `100` 合约乘数 | `market_config.get_multiplier(symbol)` | 100 | 100 | 10,000 | 按品种 |
+
+商品期权额外计算 **交割风险惩罚**: `final_score = base_score * (1 - delivery_penalty)`，其中 `delivery_penalty` 由 `DeliveryRiskCalculator` 基于距交割月天数计算（≤30天: 1.0, 30-60天: 线性插值, >60天: 0）。
+
+---
+
 ## 4. Sell Put 计分器
 
 **文件**: `scoring/sell_put.py` | 筛选: `strike <= price * 1.02`, `time_value > 0`
@@ -208,6 +222,8 @@ vrp_relative = (IV - HV) / HV
 | `backend/app/analysis/options_analysis/scoring/trend_analyzer.py` | 趋势分析 + ATR |
 | `backend/app/analysis/options_analysis/scoring/risk_return_profile.py` | 风格标签 |
 | `backend/app/analysis/options_analysis/advanced/vrp_calculator.py` | VRP 计算器 |
+| `backend/app/analysis/options_analysis/advanced/delivery_risk.py` | 商品期权交割风险评估 |
+| `backend/app/analysis/options_analysis/option_market_config.py` | 多市场参数配置 |
 
 ---
 
