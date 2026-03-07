@@ -10,6 +10,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from .trend_analyzer import TrendAnalyzer
+from .macro_event_calendar import calculate_event_penalty, generate_event_notes, get_vix_penalty_for_seller
 from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -176,6 +177,12 @@ class BuyCallScorer:
                 for factor in scores.keys()
             )
 
+            # 宏观事件风险惩罚（Buy Call：短期期权在事件日前到期时降分）
+            expiry_str = call_option.get('expiry', '')
+            event_penalty = calculate_event_penalty(expiry_str, days_to_expiry, 'buy_call')
+            if event_penalty['has_event_risk']:
+                total_score *= event_penalty['penalty_factor']
+
             # 商品期权：交割月风险惩罚
             delivery_risk_data = None
             if market_config and market_config.market == 'COMMODITY':
@@ -188,6 +195,13 @@ class BuyCallScorer:
             # 计算盈亏平衡点
             breakeven = strike + mid_price
             required_move = ((breakeven - current_price) / current_price) * 100
+
+            # 生成策略提示（含宏观事件提示）
+            strategy_notes = self._generate_call_notes(current_price, strike, moneyness, time_value, days_to_expiry)
+            event_notes = generate_event_notes(expiry_str, days_to_expiry)
+            strategy_notes.extend(event_notes)
+            if event_penalty['warnings']:
+                strategy_notes.extend(event_penalty['warnings'])
 
             result = {
                 'option_symbol': call_option.get('symbol', f"CALL_{strike}_{call_option.get('expiry')}"),
@@ -211,7 +225,8 @@ class BuyCallScorer:
                 'max_loss': round(mid_price * multiplier, 0),  # 1份合约
                 'max_profit_potential': 'unlimited',
                 'leverage_ratio': round((delta if delta else 0.5) * current_price / mid_price, 2),
-                'strategy_notes': self._generate_call_notes(current_price, strike, moneyness, time_value, days_to_expiry)
+                'strategy_notes': strategy_notes,
+                'macro_event_risk': event_penalty['event_info'] if event_penalty['has_event_risk'] else None,
             }
 
             if delivery_risk_data:

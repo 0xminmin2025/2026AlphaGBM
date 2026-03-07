@@ -15,6 +15,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from .trend_analyzer import TrendAnalyzer, ATRCalculator
+from .macro_event_calendar import calculate_event_penalty, generate_event_notes, get_vix_penalty_for_seller
 from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,8 @@ class SellPutScorer:
         self.atr_calculator = ATRCalculator()
 
     def score_options(self, options_data: Dict, stock_data: Dict,
-                      market_config: OptionMarketConfig = None) -> Dict[str, Any]:
+                      market_config: OptionMarketConfig = None,
+                      vix_level: float = 0) -> Dict[str, Any]:
         """
         为Sell Put策略计分期权
 
@@ -51,6 +53,7 @@ class SellPutScorer:
             options_data: 期权链数据
             stock_data: 标的股票数据
             market_config: 市场配置（可选，默认 US）
+            vix_level: 当前VIX水平（用于卖方策略风险调整）
 
         Returns:
             计分结果
@@ -90,6 +93,9 @@ class SellPutScorer:
             # 新增：计算ATR用于动态安全边际
             atr_14 = self._get_atr(stock_data, market_config)
 
+            # VIX环境分层：高VIX时卖方策略降分
+            vix_penalty_info = get_vix_penalty_for_seller(vix_level) if vix_level > 0 else None
+
             # 筛选和计分期权
             scored_options = []
             for put_option in puts:
@@ -98,6 +104,16 @@ class SellPutScorer:
                     market_config=market_config
                 )
                 if score_result and score_result.get('score', 0) > 0:
+                    # VIX惩罚
+                    if vix_penalty_info and vix_penalty_info['penalty_factor'] < 1.0:
+                        score_result['score'] = round(
+                            score_result['score'] * vix_penalty_info['penalty_factor'], 1
+                        )
+                        if vix_penalty_info['warning']:
+                            score_result.setdefault('strategy_notes', []).append(
+                                vix_penalty_info['warning']
+                            )
+                        score_result['vix_zone'] = vix_penalty_info['vix_zone']
                     scored_options.append(score_result)
 
             # 排序并选择最佳期权
@@ -275,6 +291,10 @@ class SellPutScorer:
                 for factor in scores.keys()
             )
 
+            # 宏观事件风险检测（Sell Put：加警告标签，不降分）
+            expiry_str = put_option.get('expiry', '')
+            event_penalty = calculate_event_penalty(expiry_str, days_to_expiry, 'sell_put')
+
             # 商品期权：交割月风险惩罚
             delivery_risk_data = None
             if market_config and market_config.market == 'COMMODITY':
@@ -290,6 +310,13 @@ class SellPutScorer:
                 display = trend_info['display_info']
                 if not display.get('is_ideal_trend'):
                     trend_warning = display.get('warning')
+
+            # 生成策略提示（含宏观事件提示）
+            strategy_notes = self._generate_put_notes(current_price, strike, premium_yield, days_to_expiry)
+            event_notes = generate_event_notes(expiry_str, days_to_expiry)
+            strategy_notes.extend(event_notes)
+            if event_penalty['warnings']:
+                strategy_notes.extend(event_penalty['warnings'])
 
             result = {
                 'option_symbol': put_option.get('symbol', f"PUT_{strike}_{put_option.get('expiry')}"),
@@ -313,12 +340,14 @@ class SellPutScorer:
                 'assignment_risk': self._calculate_assignment_risk(current_price, strike),
                 'max_profit': round(time_value * multiplier, 0),
                 'breakeven': round(strike - mid_price, 2),
-                'strategy_notes': self._generate_put_notes(current_price, strike, premium_yield, days_to_expiry),
+                'strategy_notes': strategy_notes,
                 # 新增：ATR安全边际信息
                 'atr_safety': atr_safety,
                 # 新增：趋势信息
                 'trend_warning': trend_warning,
                 'is_ideal_trend': trend_info.get('is_ideal_trend', True) if trend_info else True,
+                # 新增：宏观事件风险
+                'macro_event_risk': event_penalty['event_info'] if event_penalty['has_event_risk'] else None,
             }
 
             if delivery_risk_data:

@@ -14,6 +14,7 @@ from ..scoring.sell_call import SellCallScorer
 from ..scoring.buy_put import BuyPutScorer
 from ..scoring.buy_call import BuyCallScorer
 from ..scoring.risk_return_profile import calculate_risk_return_profile, add_profiles_to_options
+from ..scoring.macro_event_calendar import get_upcoming_events
 from ..advanced.vrp_calculator import VRPCalculator
 from ..advanced.risk_adjuster import RiskAdjuster
 from ..option_market_config import get_option_market_config, OptionMarketConfig, US_OPTIONS_CONFIG
@@ -112,6 +113,9 @@ class OptionsAnalysisEngine:
                     trend_info = result['trend_info']
                     break
 
+            # 获取未来7天内的宏观事件（便于前端展示）
+            upcoming_macro_events = get_upcoming_events(days_ahead=7)
+
             result = {
                 'success': True,
                 'symbol': symbol,
@@ -131,6 +135,16 @@ class OptionsAnalysisEngine:
                     'contract_multiplier': market_config.get_multiplier(symbol),
                     'cash_settlement': market_config.cash_settlement,
                 },
+                # 新增：未来宏观事件提醒
+                'upcoming_macro_events': [
+                    {
+                        'date': e['date'].isoformat(),
+                        'type': e['type'],
+                        'name': e['name'],
+                        'days_until': e['days_until'],
+                    }
+                    for e in upcoming_macro_events
+                ],
             }
 
             # 商品期权：附加商品特有信息
@@ -180,7 +194,14 @@ class OptionsAnalysisEngine:
         """
         try:
             scorer = self.scorers[strategy]
-            result = scorer.score_options(options_data, stock_data, market_config=market_config)
+
+            # 卖方策略传入VIX水平用于风险调整
+            kwargs = {'market_config': market_config}
+            if strategy in ('sell_put', 'sell_call'):
+                vix_level = stock_data.get('vix', 0)
+                kwargs['vix_level'] = vix_level
+
+            result = scorer.score_options(options_data, stock_data, **kwargs)
 
             # 为推荐的期权添加风险收益风格标签
             if result.get('success') and result.get('recommendations'):
