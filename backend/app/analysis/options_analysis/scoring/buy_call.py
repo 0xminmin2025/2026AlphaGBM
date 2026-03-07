@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+from .trend_analyzer import TrendAnalyzer
 from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,14 @@ class BuyCallScorer:
         """初始化Buy Call计分器"""
         self.strategy_name = "buy_call"
         self.weight_config = {
-            'bullish_momentum': 0.25,     # 上涨动量权重
-            'breakout_potential': 0.20,   # 突破潜力权重
-            'value_efficiency': 0.20,     # 价值效率权重 (Delta/价格)
-            'volatility_timing': 0.15,    # 波动率择时权重
+            'bullish_momentum': 0.20,     # 上涨动量权重（略降）
+            'breakout_potential': 0.15,   # 突破潜力权重（略降）
+            'value_efficiency': 0.25,     # 价值效率权重（提升：高delta=高胜率）
+            'volatility_timing': 0.20,    # 波动率择时权重（提升：低IV买入是核心）
             'liquidity': 0.10,            # 流动性权重
             'time_optimization': 0.10     # 时间价值优化权重
         }
+        self.trend_analyzer = TrendAnalyzer()
 
     def score_options(self, options_data: Dict, stock_data: Dict,
                       market_config: OptionMarketConfig = None) -> Dict[str, Any]:
@@ -71,11 +73,21 @@ class BuyCallScorer:
                     'error': '无法获取当前股价'
                 }
 
+            # 趋势分析：下跌趋势中买Call风险高
+            trend_penalty = self._calculate_trend_penalty(stock_data, current_price)
+
             # 筛选和计分期权
             scored_options = []
             for call_option in calls:
                 score_result = self._score_individual_call(call_option, current_price, stock_data, market_config=market_config)
                 if score_result and score_result.get('score', 0) > 0:
+                    # 趋势惩罚
+                    if trend_penalty < 1.0:
+                        score_result['score'] = round(score_result['score'] * trend_penalty, 1)
+                    # IV过滤：高IV环境不推荐买入
+                    vol_score = score_result.get('score_breakdown', {}).get('volatility_timing', 0)
+                    if vol_score < 40:
+                        continue
                     scored_options.append(score_result)
 
             # 排序并选择最佳期权
@@ -146,9 +158,10 @@ class BuyCallScorer:
             # 3. 价值效率得分 (20%)
             scores['value_efficiency'] = self._score_value_efficiency(delta, mid_price, moneyness)
 
-            # 4. 波动率择时得分 (15%)
+            # 4. 波动率择时得分 (20%)
             scores['volatility_timing'] = self._score_volatility_timing(
-                implied_volatility, stock_data.get('volatility_30d', 0.2)
+                implied_volatility, stock_data.get('volatility_30d', 0.2),
+                change_percent=stock_data.get('change_percent', 0)
             )
 
             # 5. 流动性得分 (10%)
@@ -209,6 +222,37 @@ class BuyCallScorer:
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")
             return None
+
+    def _calculate_trend_penalty(self, stock_data: Dict, current_price: float) -> float:
+        """
+        计算趋势惩罚因子。下跌趋势中买Call成功率低。
+
+        Returns:
+            惩罚因子 (0.0-1.0)，1.0表示无惩罚
+        """
+        try:
+            price_history = stock_data.get('price_history', [])
+            if isinstance(price_history, list) and len(price_history) >= 6:
+                price_series = pd.Series(price_history)
+            else:
+                return 1.0
+
+            trend, strength = self.trend_analyzer.determine_intraday_trend(
+                price_series, current_price
+            )
+
+            if trend == 'downtrend':
+                # 下跌趋势：强下跌惩罚35%，弱下跌惩罚20%
+                return 1.0 - strength * 0.35
+            elif trend == 'sideways':
+                # 横盘：轻微惩罚10%
+                return 0.90
+            else:
+                # 上涨趋势：无惩罚
+                return 1.0
+        except Exception as e:
+            logger.error(f"趋势惩罚计算失败: {e}")
+            return 1.0
 
     def _score_bullish_momentum(self, stock_data: Dict) -> float:
         """计分上涨动量"""
@@ -354,7 +398,8 @@ class BuyCallScorer:
             logger.error(f"价值效率评估失败: {e}")
             return 50
 
-    def _score_volatility_timing(self, implied_vol: float, historical_vol: float) -> float:
+    def _score_volatility_timing(self, implied_vol: float, historical_vol: float,
+                                 change_percent: float = 0) -> float:
         """计分波动率择时"""
         try:
             if historical_vol <= 0:
@@ -386,7 +431,6 @@ class BuyCallScorer:
                 score -= 15  # 高波动率环境，期权费贵
 
             # 波动率扩张预期
-            change_percent = stock_data.get('change_percent', 0)
             if abs(change_percent) >= 2:
                 score += 10  # 大幅价格变动可能带来波动率上升
 

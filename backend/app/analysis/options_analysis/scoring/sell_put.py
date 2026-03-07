@@ -29,10 +29,10 @@ class SellPutScorer:
 
         # 优化后的权重配置（基于真实交易者反馈）
         self.weight_config = {
-            'premium_yield': 0.20,       # 期权费收益率 (降低，避免追求高收益)
-            'safety_margin': 0.15,       # 安全边际 (改用ATR自适应)
-            'support_strength': 0.20,    # 新增：支撑位强度
-            'trend_alignment': 0.15,     # 新增：趋势匹配度
+            'premium_yield': 0.20,       # 期权费收益率
+            'safety_margin': 0.15,       # 安全边际 (ATR自适应)
+            'support_strength': 0.20,    # 支撑位强度
+            'trend_alignment': 0.15,     # 趋势匹配度
             'probability_profit': 0.15,  # 盈利概率
             'liquidity': 0.10,           # 流动性
             'time_decay': 0.05,          # 时间衰减
@@ -332,15 +332,18 @@ class SellPutScorer:
 
     def _calculate_atr_safety(self, current_price: float, strike: float,
                              atr_14: float) -> Dict[str, Any]:
-        """计算基于ATR的安全边际"""
+        """计算基于ATR的安全边际，高波动个股使用更严格系数"""
         if atr_14 <= 0:
             return {
                 'safety_ratio': 0,
                 'atr_multiples': 0,
                 'is_safe': False
             }
+        # 高波动个股（ATR > 3%股价）使用2.5倍系数，低波动用2.0倍
+        atr_pct = atr_14 / current_price if current_price > 0 else 0
+        atr_ratio = 2.5 if atr_pct > 0.03 else 2.0
         return self.atr_calculator.calculate_atr_based_safety(
-            current_price, strike, atr_14, atr_ratio=2.0
+            current_price, strike, atr_14, atr_ratio=atr_ratio
         )
 
     def _score_safety_margin_with_atr(self, safety_margin: float,

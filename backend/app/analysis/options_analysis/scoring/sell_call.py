@@ -29,14 +29,14 @@ class SellCallScorer:
 
         # 优化后的权重配置（基于真实交易者反馈）
         self.weight_config = {
-            'premium_yield': 0.20,         # 期权费收益率
-            'resistance_strength': 0.20,   # 新增：阻力位强度
-            'trend_alignment': 0.15,       # 新增：趋势匹配度
-            'upside_buffer': 0.15,         # 上涨缓冲（改用ATR）
+            'premium_yield': 0.18,         # 期权费收益率（略降）
+            'resistance_strength': 0.20,   # 阻力位强度
+            'trend_alignment': 0.12,       # 趋势匹配度（略降）
+            'upside_buffer': 0.25,         # 上涨缓冲（提升：安全性是sell_call核心）
             'liquidity': 0.10,             # 流动性
-            'is_covered': 0.10,            # 新增：是否有现股（Covered Call加分）
+            'is_covered': 0.05,            # 是否有现股（裸卖时权重降低）
             'time_decay': 0.05,            # 时间衰减
-            'overvaluation': 0.05,         # 超买程度（简化）
+            'overvaluation': 0.05,         # 超买程度
         }
 
         # 初始化趋势分析器和ATR计算器

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+from .trend_analyzer import TrendAnalyzer
 from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,14 @@ class BuyPutScorer:
         """初始化Buy Put计分器"""
         self.strategy_name = "buy_put"
         self.weight_config = {
-            'bearish_momentum': 0.25,    # 下跌动量权重
-            'support_break': 0.20,       # 支撑位突破权重
-            'value_efficiency': 0.20,    # 价值效率权重 (Delta/价格)
-            'volatility_expansion': 0.15, # 波动率扩张权重
+            'bearish_momentum': 0.15,    # 下跌动量权重（降低：短期信号不可靠）
+            'support_break': 0.15,       # 支撑位突破权重
+            'value_efficiency': 0.30,    # 价值效率权重（提升：高delta=高盈利概率）
+            'volatility_expansion': 0.20, # 波动率扩张权重（提升：低IV买入是核心）
             'liquidity': 0.10,           # 流动性权重
             'time_value': 0.10           # 时间价值权重
         }
+        self.trend_analyzer = TrendAnalyzer()
 
     def score_options(self, options_data: Dict, stock_data: Dict,
                       market_config: OptionMarketConfig = None) -> Dict[str, Any]:
@@ -71,11 +73,22 @@ class BuyPutScorer:
                     'error': '无法获取当前股价'
                 }
 
+            # 趋势分析：上涨趋势中买Put风险极高，施加惩罚
+            trend_penalty = self._calculate_trend_penalty(stock_data, current_price)
+
             # 筛选和计分期权
             scored_options = []
             for put_option in puts:
                 score_result = self._score_individual_put(put_option, current_price, stock_data, market_config=market_config)
                 if score_result and score_result.get('score', 0) > 0:
+                    # 趋势惩罚
+                    if trend_penalty < 1.0:
+                        score_result['score'] = round(score_result['score'] * trend_penalty, 1)
+                        score_result['trend_penalty'] = round(trend_penalty, 2)
+                    # 价值效率门槛：value_efficiency < 60 不推荐（需要足够高的delta）
+                    value_score = score_result.get('score_breakdown', {}).get('value_efficiency', 0)
+                    if value_score < 60:
+                        continue
                     scored_options.append(score_result)
 
             # 排序并选择最佳期权
@@ -208,6 +221,37 @@ class BuyPutScorer:
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")
             return None
+
+    def _calculate_trend_penalty(self, stock_data: Dict, current_price: float) -> float:
+        """
+        计算趋势惩罚因子。上涨趋势中买Put成功率极低，需大幅降分。
+
+        Returns:
+            惩罚因子 (0.0-1.0)，1.0表示无惩罚
+        """
+        try:
+            price_history = stock_data.get('price_history', [])
+            if isinstance(price_history, list) and len(price_history) >= 6:
+                price_series = pd.Series(price_history)
+            else:
+                return 1.0  # 数据不足，不做惩罚
+
+            trend, strength = self.trend_analyzer.determine_intraday_trend(
+                price_series, current_price
+            )
+
+            if trend == 'uptrend':
+                # 上涨趋势：强上涨惩罚40%，弱上涨惩罚25%
+                return 1.0 - strength * 0.4
+            elif trend == 'sideways':
+                # 横盘：轻微惩罚15%
+                return 0.85
+            else:
+                # 下跌趋势：无惩罚
+                return 1.0
+        except Exception as e:
+            logger.error(f"趋势惩罚计算失败: {e}")
+            return 1.0
 
     def _score_bearish_momentum(self, stock_data: Dict) -> float:
         """计分下跌动量"""
