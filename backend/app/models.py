@@ -425,3 +425,130 @@ class AnalyticsEvent(db.Model):
         db.Index('idx_analytics_type_date', 'event_type', 'created_at'),
         db.Index('idx_analytics_user_date', 'user_id', 'created_at'),
     )
+
+
+# ===== Paper Trading Models =====
+
+class PaperTrade(db.Model):
+    """模拟交易记录"""
+    __tablename__ = 'paper_trades'
+
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    security_type = db.Column(db.String(10), nullable=False)  # STOCK or OPTION
+    action = db.Column(db.String(10), nullable=False)  # BUY or SELL
+    quantity = db.Column(db.Integer, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    strategy = db.Column(db.String(30), nullable=False, index=True)  # momentum, options_seller
+    status = db.Column(db.String(20), nullable=False, default='filled')  # filled, rejected
+
+    # Option-specific fields (nullable for stocks)
+    expiry = db.Column(db.String(20), nullable=True)
+    strike = db.Column(db.Float, nullable=True)
+    option_right = db.Column(db.String(4), nullable=True)  # PUT or CALL
+
+    # Risk management
+    stop_loss = db.Column(db.Float, nullable=True)
+    pnl = db.Column(db.Float, nullable=True)  # Realized P&L (filled on close)
+    notes = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'ticker': self.ticker,
+            'security_type': self.security_type,
+            'action': self.action,
+            'quantity': self.quantity,
+            'price': self.price,
+            'strategy': self.strategy,
+            'status': self.status,
+            'expiry': self.expiry,
+            'strike': self.strike,
+            'option_right': self.option_right,
+            'stop_loss': self.stop_loss,
+            'pnl': self.pnl,
+            'notes': self.notes,
+        }
+
+
+class PaperPosition(db.Model):
+    """模拟持仓"""
+    __tablename__ = 'paper_positions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    security_type = db.Column(db.String(10), nullable=False)  # STOCK or OPTION
+    strategy = db.Column(db.String(30), nullable=False, index=True)
+    quantity = db.Column(db.Integer, nullable=False)
+    avg_cost = db.Column(db.Float, nullable=False)
+    current_price = db.Column(db.Float, nullable=True)
+    unrealized_pnl = db.Column(db.Float, nullable=True)
+
+    # Option-specific fields
+    expiry = db.Column(db.String(20), nullable=True)
+    strike = db.Column(db.Float, nullable=True)
+    option_right = db.Column(db.String(4), nullable=True)  # PUT or CALL
+
+    # Risk
+    stop_loss = db.Column(db.Float, nullable=True)
+
+    opened_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        cost_basis = self.avg_cost * abs(self.quantity)
+        pnl_pct = (self.unrealized_pnl / cost_basis * 100) if cost_basis and self.unrealized_pnl else 0
+        return {
+            'id': self.id,
+            'ticker': self.ticker,
+            'security_type': self.security_type,
+            'strategy': self.strategy,
+            'quantity': self.quantity,
+            'avg_cost': self.avg_cost,
+            'current_price': self.current_price,
+            'unrealized_pnl': self.unrealized_pnl,
+            'pnl_pct': round(pnl_pct, 2),
+            'expiry': self.expiry,
+            'strike': self.strike,
+            'option_right': self.option_right,
+            'stop_loss': self.stop_loss,
+            'opened_at': self.opened_at.isoformat() if self.opened_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PaperPerformance(db.Model):
+    """模拟交易每日业绩快照"""
+    __tablename__ = 'paper_performance'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    strategy = db.Column(db.String(30), nullable=False)  # momentum, options_seller, combined
+    nav = db.Column(db.Float, nullable=False)  # Net asset value (starts at 1.0)
+    daily_return = db.Column(db.Float, nullable=True)  # Daily return %
+    cumulative_return = db.Column(db.Float, nullable=True)  # Cumulative return %
+    drawdown = db.Column(db.Float, nullable=True)  # Current drawdown %
+    max_drawdown = db.Column(db.Float, nullable=True)  # Max drawdown %
+    benchmark_return = db.Column(db.Float, nullable=True)  # SPY cumulative return %
+    position_count = db.Column(db.Integer, nullable=True)
+    cash_balance = db.Column(db.Float, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('date', 'strategy', name='uq_paper_performance_date_strategy'),
+    )
+
+    def to_dict(self):
+        return {
+            'date': self.date.isoformat() if self.date else None,
+            'strategy': self.strategy,
+            'nav': self.nav,
+            'daily_return': self.daily_return,
+            'cumulative_return': self.cumulative_return,
+            'drawdown': self.drawdown,
+            'max_drawdown': self.max_drawdown,
+            'benchmark_return': self.benchmark_return,
+            'position_count': self.position_count,
+            'cash_balance': self.cash_balance,
+        }

@@ -256,8 +256,45 @@ def init_scheduler(app):
             replace_existing=True
         )
 
+        # === Paper Trading Scheduled Jobs ===
+
+        # Daily paper trading performance snapshot - 6:30 PM (after P/L calc)
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _paper_daily_snapshot),
+            trigger='cron',
+            hour=18,
+            minute=30,
+            id='paper_daily_snapshot',
+            name='Paper Trading Daily Snapshot',
+            replace_existing=True
+        )
+
+        # Monthly momentum rebalance - 1st of each month at 10:00 AM
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _paper_momentum_rebalance),
+            trigger='cron',
+            day=1,
+            hour=10,
+            minute=0,
+            id='paper_momentum_rebalance',
+            name='Paper Trading Monthly Momentum Rebalance',
+            replace_existing=True
+        )
+
+        # Weekly options scan - every Monday at 10:00 AM
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _paper_weekly_options_scan),
+            trigger='cron',
+            day_of_week='mon',
+            hour=10,
+            minute=0,
+            id='paper_weekly_options_scan',
+            name='Paper Trading Weekly Options Scan',
+            replace_existing=True
+        )
+
         scheduler.start()
-        logger.info("Scheduler initialized successfully - Daily P/L calculation will run at 6:12 PM, Feishu report at 8:00 PM")
+        logger.info("Scheduler initialized successfully - Daily P/L at 6:12 PM, Feishu at 8:00 PM, Paper trading: daily@6:30PM, rebalance@1st/10AM, options@Mon/10AM")
 
     except Exception as e:
         logger.error(f"Failed to initialize scheduler: {e}")
@@ -266,6 +303,42 @@ def run_with_app_context(app, func):
     """Run function within Flask app context"""
     with app.app_context():
         func()
+
+def _paper_daily_snapshot():
+    """Run daily paper trading snapshot: update prices, check stops, save performance."""
+    try:
+        from .services.paper_trading_service import paper_trading_service
+        logger.info("Running paper trading daily snapshot...")
+        paper_trading_service.update_prices()
+        paper_trading_service.check_stop_losses()
+        paper_trading_service.check_option_expiry()
+        paper_trading_service.calculate_daily_performance()
+        logger.info("Paper trading daily snapshot complete")
+    except Exception as e:
+        logger.error(f"Paper trading daily snapshot failed: {e}")
+
+
+def _paper_momentum_rebalance():
+    """Run monthly momentum portfolio rebalance."""
+    try:
+        from .services.paper_strategies import run_momentum_rebalance
+        logger.info("Running paper trading momentum rebalance...")
+        run_momentum_rebalance()
+        logger.info("Paper trading momentum rebalance complete")
+    except Exception as e:
+        logger.error(f"Paper trading momentum rebalance failed: {e}")
+
+
+def _paper_weekly_options_scan():
+    """Run weekly options selling scan."""
+    try:
+        from .services.paper_strategies import run_weekly_options_scan
+        logger.info("Running paper trading weekly options scan...")
+        run_weekly_options_scan()
+        logger.info("Paper trading weekly options scan complete")
+    except Exception as e:
+        logger.error(f"Paper trading weekly options scan failed: {e}")
+
 
 def shutdown_scheduler():
     """Shutdown the scheduler"""

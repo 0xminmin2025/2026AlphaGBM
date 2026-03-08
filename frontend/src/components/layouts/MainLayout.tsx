@@ -89,6 +89,7 @@ export default function MainLayout() {
                             <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
                             <a href="/stock" onClick={handleStockNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.stock')}</a>
                             <Link to="/knowledge" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.knowledge')}</Link>
+                            <Link to="/performance" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.performance')}</Link>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>
                         </nav>
 
@@ -153,6 +154,13 @@ export default function MainLayout() {
                                 onClick={closeMobileMenu}
                             >
                                 {t('nav.knowledge')}
+                            </Link>
+                            <Link
+                                to="/performance"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.performance')}
                             </Link>
                             <Link
                                 to="/pricing"

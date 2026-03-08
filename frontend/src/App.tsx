@@ -11,6 +11,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import NewLanding from '@/pages/NewLanding';
 import Landing from '@/pages/Landing';
 import KnowledgeBasePage from '@/pages/knowledge-base/KnowledgeBasePage';
+import Performance from '@/pages/Performance';
 import { AnalyticsProvider } from '@/components/analytics/AnalyticsProvider';
 import { ToastProvider } from '@/components/ui/toast';
 
@@ -33,6 +34,7 @@ function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/knowledge" element={<KnowledgeBasePage />} />
               <Route path="/knowledge/:chapterSlug" element={<KnowledgeBasePage />} />
+              <Route path="/performance" element={<Performance />} />
             </Route>
           </Routes>
           </AnalyticsProvider>
