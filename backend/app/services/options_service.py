@@ -1,6 +1,11 @@
 """
 Option Service Backend Logic
 Ported from new_options_module/option_service.py and consolidated with Flask logic
+
+All data access goes through DataProvider (which uses MarketDataService) for:
+- Unified metrics tracking
+- Multi-provider failover
+- Automatic caching
 """
 
 from datetime import datetime, timedelta
@@ -10,12 +15,17 @@ from typing import List, Optional, Union
 import random
 import time
 import numpy as np
+import logging
 
-# Internal services
-from .tiger_client import get_client_manager
-from tigeropen.common.consts import Market
+# Internal services - use DataProvider for all data access
+from .data_provider import DataProvider
 from .option_models import OptionData, OptionChainResponse, ExpirationDate, ExpirationResponse, StockQuote, EnhancedAnalysisResponse, VRPResult as VRPResultModel, RiskAnalysis as RiskAnalysisModel
 from .option_scorer import OptionScorer
+
+# Market-specific option configuration
+from ..analysis.options_analysis.option_market_config import get_option_market_config
+
+logger = logging.getLogger(__name__)
 
 # Try importing Phase 1 modules
 try:
@@ -36,11 +46,32 @@ risk_adjuster = RiskAdjuster() if PHASE1_AVAILABLE else None
 class MockDataGenerator:
     """Generates mock option data for testing"""
 
+    # 支持日权（0DTE / Daily Options）的标的
+    # SPY, QQQ, IWM 等主流 ETF 和指数期权有每日到期
+    DAILY_EXPIRY_SYMBOLS = ['SPY', 'QQQ', 'IWM', 'SPX', 'XSP']
+
     @staticmethod
     def generate_expirations(symbol: str) -> List[ExpirationDate]:
-        """Generate mock expiration dates"""
+        """Generate mock expiration dates - 生成到期日列表"""
         expirations = []
         base_date = datetime.now()
+        seen_dates = set()
+
+        # 日权：为 SPY, QQQ, IWM 等添加每日到期（周一至周五）
+        if symbol.upper() in MockDataGenerator.DAILY_EXPIRY_SYMBOLS:
+            for day_offset in range(0, 14):  # 未来14天
+                exp_date = base_date + timedelta(days=day_offset)
+                # 只包含工作日（周一至周五）
+                if exp_date.weekday() < 5:
+                    date_str = exp_date.strftime("%Y-%m-%d")
+                    if date_str not in seen_dates:
+                        seen_dates.add(date_str)
+                        # period_tag: d=日权, w=周权, m=月权
+                        expirations.append(ExpirationDate(
+                            date=date_str,
+                            timestamp=int(exp_date.timestamp() * 1000),
+                            period_tag="d"  # 日权
+                        ))
 
         # Generate weekly and monthly expirations for next 3 months
         for week in range(1, 13):  # 12 weeks
@@ -51,15 +82,22 @@ class MockDataGenerator:
                 days_until_friday = 7
             exp_date += timedelta(days=days_until_friday)
 
-            # Monthly options on 3rd Friday
-            is_monthly = exp_date.day >= 15 and exp_date.day <= 21
-            period_tag = "m" if is_monthly else "w"
+            date_str = exp_date.strftime("%Y-%m-%d")
+            if date_str not in seen_dates:
+                seen_dates.add(date_str)
+                # Monthly options — market-aware detection
+                market_config = get_option_market_config(symbol)
+                if market_config.monthly_expiry_rule == 'fourth_wednesday':
+                    is_monthly = exp_date.day >= 22 and exp_date.day <= 28 and exp_date.weekday() == 2
+                else:
+                    is_monthly = exp_date.day >= 15 and exp_date.day <= 21
+                period_tag = "m" if is_monthly else "w"
 
-            expirations.append(ExpirationDate(
-                date=exp_date.strftime("%Y-%m-%d"),
-                timestamp=int(exp_date.timestamp() * 1000),
-                period_tag=period_tag
-            ))
+                expirations.append(ExpirationDate(
+                    date=date_str,
+                    timestamp=int(exp_date.timestamp() * 1000),
+                    period_tag=period_tag
+                ))
 
         return sorted(expirations, key=lambda x: x.timestamp)
 
@@ -137,7 +175,7 @@ class MockDataGenerator:
             calls=calls,
             puts=puts,
             data_source=data_source,
-            real_stock_price=real_price
+            real_stock_price=base_price  # Always return the price used for option calculations
         )
 
 mock_generator = MockDataGenerator()
@@ -146,38 +184,56 @@ class OptionsService:
 
     @staticmethod
     def get_expirations(symbol: str) -> ExpirationResponse:
+        """Get option expiration dates using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
             if not USE_MOCK_DATA:
                 try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
+                    # Use DataProvider for unified data access with metrics tracking
+                    provider = DataProvider(symbol)
+                    expiry_dates = provider.options  # Returns tuple of date strings
 
-                    if client.quote_client:
-                        market = Market.US if not symbol.endswith('.HK') else Market.HK
-                        expirations_df = client.get_option_expirations(symbol, market)
+                    if expiry_dates:
                         expirations = []
-                        for _, row in expirations_df.iterrows():
-                            expirations.append(ExpirationDate(
-                                date=row['date'],
-                                timestamp=int(row['timestamp']),
-                                period_tag=row['period_tag']
-                            ))
-                        return ExpirationResponse(symbol=symbol, expirations=expirations)
-                except Exception as e:
-                    print(f"⚠️ Tiger API failed: {e}")
+                        market_config = get_option_market_config(symbol)
+                        for date_str in expiry_dates:
+                            try:
+                                # Parse date and create ExpirationDate
+                                exp_date = datetime.strptime(date_str, "%Y-%m-%d")
+                                # Determine period tag (weekly/monthly) — market-aware
+                                if market_config.monthly_expiry_rule == 'fourth_wednesday':
+                                    # HK/CN: 第四个周三 (day 22-28, weekday=2)
+                                    is_monthly = exp_date.day >= 22 and exp_date.day <= 28 and exp_date.weekday() == 2
+                                else:
+                                    # US: 第三个周五 (day 15-21, weekday=4)
+                                    is_monthly = exp_date.day >= 15 and exp_date.day <= 21 and exp_date.weekday() == 4
+                                period_tag = "m" if is_monthly else "w"
 
+                                expirations.append(ExpirationDate(
+                                    date=date_str,
+                                    timestamp=int(exp_date.timestamp() * 1000),
+                                    period_tag=period_tag
+                                ))
+                            except ValueError:
+                                continue
+
+                        if expirations:
+                            return ExpirationResponse(symbol=symbol, expirations=expirations)
+                except Exception as e:
+                    logger.warning(f"DataProvider options failed for {symbol}: {e}")
+
+            # Fallback to mock data
             expirations = mock_generator.generate_expirations(symbol)
             return ExpirationResponse(symbol=symbol, expirations=expirations)
         except Exception as e:
-             raise e
+            raise e
 
     @staticmethod
     def get_option_chain(symbol: str, expiry_date: str) -> OptionChainResponse:
+        """Get option chain using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
-            
+
             # Validate format
             try:
                 datetime.strptime(expiry_date, "%Y-%m-%d")
@@ -186,153 +242,196 @@ class OptionsService:
 
             if not USE_MOCK_DATA:
                 try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
+                    # Use DataProvider for unified data access with metrics tracking
+                    provider = DataProvider(symbol)
 
-                    if client.quote_client:
-                        market = Market.US if not symbol.endswith('.HK') else Market.HK
-                        option_chain_df = client.get_option_chain(symbol, expiry_date, market)
-                        
+                    # Get stock price first
+                    info = provider.info
+                    real_stock_price = info.get('regularMarketPrice') or info.get('currentPrice') or 150.0
+
+                    # Get option chain
+                    chain = provider.option_chain(expiry_date)
+
+                    if chain and chain.calls is not None and chain.puts is not None:
                         calls = []
                         puts = []
-                        real_stock_price = None
-                        try:
-                            stock_data = client.get_stock_quote([symbol])
-                            if len(stock_data) > 0:
-                                real_stock_price = float(stock_data['latest_price'].iloc[0])
-                        except:
-                            real_stock_price = 150.0
 
-                        for _, row in option_chain_df.iterrows():
-                            option_data = OptionData(
-                                identifier=row['identifier'],
-                                symbol=row['symbol'],
-                                strike=float(row['strike']),
-                                put_call=row['put_call'],
-                                expiry_date=expiry_date,
-                                bid_price=float(row.get('bid_price', 0)) if pd.notna(row.get('bid_price', 0)) else None,
-                                ask_price=float(row.get('ask_price', 0)) if pd.notna(row.get('ask_price', 0)) else None,
-                                latest_price=float(row.get('latest_price', 0)) if pd.notna(row.get('latest_price', 0)) else None,
-                                volume=int(row.get('volume', 0)) if pd.notna(row.get('volume', 0)) else None,
-                                open_interest=int(row.get('open_interest', 0)) if pd.notna(row.get('open_interest', 0)) else None,
-                                implied_vol=float(row.get('implied_vol', 0)) if pd.notna(row.get('implied_vol', 0)) else None,
-                                delta=float(row.get('delta', 0)) if pd.notna(row.get('delta', 0)) else None,
-                                gamma=float(row.get('gamma', 0)) if pd.notna(row.get('gamma', 0)) else None,
-                                theta=float(row.get('theta', 0)) if pd.notna(row.get('theta', 0)) else None,
-                                vega=float(row.get('vega', 0)) if pd.notna(row.get('vega', 0)) else None
-                            )
+                        # Get margin rate for scoring
+                        margin_rate = provider.get_margin_rate()
 
-                            margin_rate = client.get_margin_rate(symbol, market)
-                            option_data.scores = option_scorer.score_option(option_data, real_stock_price, margin_rate)
+                        logger.info(f"[OptionChain] DataProvider returned chain for {symbol} {expiry_date}")
 
-                            if row['put_call'] == 'CALL':
+                        # Process calls
+                        if not chain.calls.empty:
+                            for _, row in chain.calls.iterrows():
+                                option_data = OptionsService._row_to_option_data(row, symbol, expiry_date, 'CALL')
+                                option_data.scores = option_scorer.score_option(option_data, real_stock_price, margin_rate)
                                 calls.append(option_data)
-                            else:
+
+                        # Process puts
+                        if not chain.puts.empty:
+                            for _, row in chain.puts.iterrows():
+                                option_data = OptionsService._row_to_option_data(row, symbol, expiry_date, 'PUT')
+                                option_data.scores = option_scorer.score_option(option_data, real_stock_price, margin_rate)
                                 puts.append(option_data)
 
-                        return OptionChainResponse(
-                            symbol=symbol,
-                            expiry_date=expiry_date,
-                            calls=calls,
-                            puts=puts,
-                            data_source="real",
-                            real_stock_price=real_stock_price
-                        )
+                        if calls or puts:
+                            return OptionChainResponse(
+                                symbol=symbol,
+                                expiry_date=expiry_date,
+                                calls=calls,
+                                puts=puts,
+                                data_source="real",
+                                real_stock_price=real_stock_price
+                            )
                 except Exception as e:
-                    print(f"⚠️ Tiger API failed: {e}")
-            
-            # Mock fallback
+                    logger.warning(f"DataProvider option_chain failed for {symbol}: {e}")
+
+            # Mock fallback - try to get real stock price first
+            real_price = None
             try:
-                 client = get_client_manager()
-                 if client.quote_client:
-                     stock_data = client.get_stock_quote([symbol])
-                     if len(stock_data) > 0:
-                         real_price = float(stock_data['latest_price'].iloc[0])
-                         return mock_generator.generate_option_chain(symbol, expiry_date, real_price)
+                provider = DataProvider(symbol)
+                info = provider.info
+                real_price = info.get('regularMarketPrice') or info.get('currentPrice')
             except:
                 pass
-            return mock_generator.generate_option_chain(symbol, expiry_date)
+
+            return mock_generator.generate_option_chain(symbol, expiry_date, real_price)
 
         except Exception as e:
             raise e
 
     @staticmethod
+    def _row_to_option_data(row: pd.Series, symbol: str, expiry_date: str, put_call: str) -> OptionData:
+        """Convert a DataFrame row to OptionData object."""
+        def safe_float(val, default=None):
+            if pd.notna(val):
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    pass
+            return default
+
+        def safe_int(val, default=None):
+            if pd.notna(val):
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    pass
+            return default
+
+        # Handle different column naming conventions
+        strike = safe_float(row.get('strike') or row.get('strike_price'))
+        latest_price = safe_float(row.get('lastPrice') or row.get('latest_price') or row.get('lastTradePrice'))
+        bid = safe_float(row.get('bid') or row.get('bid_price'))
+        ask = safe_float(row.get('ask') or row.get('ask_price'))
+        volume = safe_int(row.get('volume'))
+        open_interest = safe_int(row.get('openInterest') or row.get('open_interest'))
+        implied_vol = safe_float(row.get('impliedVolatility') or row.get('implied_vol') or row.get('volatility'))
+        delta = safe_float(row.get('delta'))
+        gamma = safe_float(row.get('gamma'))
+        theta = safe_float(row.get('theta'))
+        vega = safe_float(row.get('vega'))
+
+        # Generate identifier if not present
+        identifier = row.get('identifier') or row.get('contractSymbol') or f"{symbol}{expiry_date.replace('-', '')}{put_call[0]}{int((strike or 0)*1000):08d}"
+
+        return OptionData(
+            identifier=identifier,
+            symbol=symbol,
+            strike=strike or 0.0,
+            put_call=put_call,
+            expiry_date=expiry_date,
+            bid_price=bid,
+            ask_price=ask,
+            latest_price=latest_price,
+            volume=volume,
+            open_interest=open_interest,
+            implied_vol=implied_vol,
+            delta=delta,
+            gamma=gamma,
+            theta=theta,
+            vega=vega
+        )
+
+    @staticmethod
     def get_stock_history(symbol: str, days: int = 60):
+        """Get stock OHLC history data using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
-            if not USE_MOCK_DATA:
-                try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
-                    
-                    market = Market.US if not symbol.endswith('.HK') else Market.HK
-                    price_history = client.get_stock_history(symbol, days=days, market=market)
-                    
-                    if price_history and len(price_history) >= 30:
-                        candlestick_data = []
-                        base_date = datetime.now() - timedelta(days=len(price_history))
-                        for i, close_price in enumerate(price_history):
-                            date = base_date + timedelta(days=i)
-                            open_price = close_price * (1 + (i % 3 - 1) * 0.005)
-                            high_price = max(open_price, close_price) * 1.01
-                            low_price = min(open_price, close_price) * 0.99
-                            candlestick_data.append({
-                                "time": int(date.timestamp()),
-                                "open": round(open_price, 2),
-                                "high": round(high_price, 2),
-                                "low": round(low_price, 2),
-                                "close": round(close_price, 2)
-                            })
-                        return {"symbol": symbol, "data": candlestick_data}
-                except Exception as e:
-                    print(f"Tiger API failed: {e}")
-            
-            base_price = 150.0
+            logger.info(f"Fetching {days} days of history for {symbol} using DataProvider...")
+
+            # Use DataProvider with automatic multi-provider fallback
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days + 10)  # Extra days to ensure enough data
+
+            stock = DataProvider(symbol)
+            hist = stock.history(start=start_date, end=end_date)
+
+            if hist.empty:
+                logger.warning(f"No history data returned for {symbol}")
+                return {"symbol": symbol, "data": [], "error": "No data available"}
+
+            # Convert to candlestick format for lightweight-charts
             candlestick_data = []
-            base_date = datetime.now() - timedelta(days=days)
-            for i in range(days):
-                date = base_date + timedelta(days=i)
-                change = random.uniform(-0.02, 0.02) * base_price
-                base_price = max(base_price + change, 50.0)
-                open_price = base_price
-                close_price = base_price * random.uniform(0.98, 1.02)
-                high_price = max(open_price, close_price) * 1.01
-                low_price = min(open_price, close_price) * 0.99
+            for date, row in hist.iterrows():
+                # Convert pandas timestamp to unix timestamp (seconds)
+                timestamp = int(date.timestamp())
                 candlestick_data.append({
-                    "time": int(date.timestamp()),
-                    "open": round(open_price, 2),
-                    "high": round(high_price, 2),
-                    "low": round(low_price, 2),
-                    "close": round(close_price, 2)
+                    "time": timestamp,
+                    "open": round(float(row['Open']), 2),
+                    "high": round(float(row['High']), 2),
+                    "low": round(float(row['Low']), 2),
+                    "close": round(float(row['Close']), 2)
                 })
+
+            # Sort by time ascending
+            candlestick_data.sort(key=lambda x: x['time'])
+
+            # Limit to requested days
+            if len(candlestick_data) > days:
+                candlestick_data = candlestick_data[-days:]
+
+            logger.info(f"Successfully fetched {len(candlestick_data)} days of OHLC data for {symbol}")
             return {"symbol": symbol, "data": candlestick_data}
+
         except Exception as e:
-             raise e
+            logger.error(f"Error fetching stock history for {symbol}: {e}")
+            return {"symbol": symbol, "data": [], "error": str(e)}
 
     @staticmethod
     def get_stock_quote(symbol):
+        """Get stock quote using DataProvider (unified data access)."""
         try:
             symbol = symbol.upper()
             if not USE_MOCK_DATA:
                 try:
-                    client = get_client_manager()
-                    if client.quote_client is None:
-                        client.initialize_client()
-                    quote_df = client.get_stock_quote([symbol])
-                    if len(quote_df) > 0:
-                        row = quote_df.iloc[0]
-                        return StockQuote(
-                            symbol=symbol,
-                            latest_price=float(row['latest_price']),
-                            change=float(row.get('change', 0)),
-                            change_percent=float(row.get('change_percent', 0)),
-                            volume=int(row.get('volume', 0))
-                        )
-                except Exception:
-                    pass
-            
+                    provider = DataProvider(symbol)
+                    info = provider.info
+
+                    if info:
+                        current_price = info.get('regularMarketPrice') or info.get('currentPrice')
+                        prev_close = info.get('regularMarketPreviousClose') or info.get('previousClose')
+                        volume = info.get('regularMarketVolume') or info.get('volume') or 0
+
+                        if current_price:
+                            change = 0.0
+                            change_percent = 0.0
+                            if prev_close and prev_close > 0:
+                                change = current_price - prev_close
+                                change_percent = (change / prev_close) * 100
+
+                            return StockQuote(
+                                symbol=symbol,
+                                latest_price=float(current_price),
+                                change=float(change),
+                                change_percent=float(change_percent),
+                                volume=int(volume)
+                            )
+                except Exception as e:
+                    logger.warning(f"DataProvider get_stock_quote failed for {symbol}: {e}")
+
+            # Mock fallback
             return StockQuote(
                 symbol=symbol,
                 latest_price=150.25,
@@ -345,36 +444,34 @@ class OptionsService:
 
     @staticmethod
     def get_enhanced_analysis(symbol: str, option_identifier: str) -> EnhancedAnalysisResponse:
+        """Get enhanced options analysis using DataProvider (unified data access)."""
         if not PHASE1_AVAILABLE or not vrp_calculator or not risk_adjuster:
-             return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
-        
+            return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
+
         try:
             symbol = symbol.upper()
-            
-            # 1. Price History
-            client = get_client_manager()
-            if client.quote_client is None:
-                client.initialize_client()
-            
-            market = Market.US if not symbol.endswith('.HK') else Market.HK
-            price_history = client.get_stock_history(symbol, days=60, market=market)
-            
-            if not price_history or len(price_history) < 30:
+
+            # 1. Get price history using DataProvider
+            provider = DataProvider(symbol)
+            hist = provider.history(period='3mo')  # ~60 trading days
+
+            if hist.empty or len(hist) < 30:
                 return EnhancedAnalysisResponse(
                     symbol=symbol, option_identifier=option_identifier, vrp_result=None, risk_analysis=None, available=True
                 )
-            
-            # 2. VRP
-            import math
-            import numpy as np
+
+            # Extract close prices as a list
+            price_history = hist['Close'].tolist()
+
+            # 2. Calculate VRP
             returns = []
             for i in range(1, len(price_history)):
                 if price_history[i-1] > 0:
-                     returns.append(math.log(price_history[i] / price_history[i-1]))
-            
+                    returns.append(math.log(price_history[i] / price_history[i-1]))
+
             if returns:
                 hist_vol = np.std(returns) * math.sqrt(252)
-                estimated_iv = hist_vol # Placeholder
+                estimated_iv = hist_vol  # Placeholder
                 vrp_result_data = vrp_calculator.calculate_vrp_result(
                     current_iv=estimated_iv,
                     price_history=price_history
@@ -394,9 +491,331 @@ class OptionsService:
                 symbol=symbol,
                 option_identifier=option_identifier,
                 vrp_result=vrp_result,
-                risk_analysis=None, # Requires specific option data retrieval which is separate
+                risk_analysis=None,  # Requires specific option data retrieval which is separate
                 available=True
             )
         except Exception as e:
-             print(f"Error in enhanced analysis: {e}")
-             return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
+            logger.error(f"Error in enhanced analysis: {e}")
+            return EnhancedAnalysisResponse(symbol=symbol, option_identifier=option_identifier, available=False)
+
+    @staticmethod
+    def reverse_score_option(symbol: str, option_type: str, strike: float,
+                            expiry_date: str, option_price: float,
+                            implied_volatility: float = None) -> dict:
+        """
+        反向查分：根据用户输入的期权参数计算评分
+
+        Args:
+            symbol: 股票代码
+            option_type: 期权类型 ('CALL' 或 'PUT')
+            strike: 执行价
+            expiry_date: 到期日 (YYYY-MM-DD)
+            option_price: 期权价格 (bid/ask中间价)
+            implied_volatility: 隐含波动率 (可选，留空自动估算)
+
+        Returns:
+            包含评分结果的字典
+        """
+        try:
+            from datetime import datetime
+
+            # Import DataProvider for multi-provider support
+            try:
+                from .data_provider import DataProvider
+            except ImportError:
+                DataProvider = None
+
+            symbol = symbol.upper()
+            option_type = option_type.upper()
+
+            # 1. 获取股票当前价格和数据（使用DataProvider统一数据访问）
+            ticker = DataProvider(symbol)
+
+            current_price = None
+            info = {}
+
+            # 方法1: 从 info 获取
+            try:
+                info = ticker.info
+                current_price = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose')
+                if current_price:
+                    current_price = float(current_price)
+            except Exception as e:
+                print(f"从 ticker.info 获取 {symbol} 价格失败: {e}")
+
+            # 方法2: 从最近历史数据获取
+            if not current_price:
+                try:
+                    hist = ticker.history(period="5d")
+                    if not hist.empty:
+                        current_price = float(hist['Close'].iloc[-1])
+                except Exception as e:
+                    print(f"从 ticker.history 获取 {symbol} 价格失败: {e}")
+
+            # 方法3: 从 fast_info 获取 (yfinance only)
+            if not current_price and hasattr(ticker, 'fast_info'):
+                try:
+                    fast_info = ticker.fast_info
+                    current_price = float(fast_info.get('lastPrice', 0) or fast_info.get('previousClose', 0))
+                    if current_price <= 0:
+                        current_price = None
+                except Exception as e:
+                    print(f"从 ticker.fast_info 获取 {symbol} 价格失败: {e}")
+
+            if not current_price:
+                return {
+                    'success': False,
+                    'error': f'无法获取 {symbol} 的当前股价，请检查股票代码是否正确'
+                }
+
+            # 2. 获取股票历史数据用于趋势分析
+            try:
+                hist_3mo = ticker.history(period="3mo")
+                price_history = hist_3mo['Close'].tolist() if not hist_3mo.empty else []
+            except Exception as e:
+                print(f"获取 {symbol} 历史数据失败: {e}")
+                hist_3mo = None
+                price_history = []
+
+            # 计算ATR
+            atr_14 = 0
+            if hist_3mo is not None and not hist_3mo.empty and len(hist_3mo) >= 15:
+                try:
+                    high = hist_3mo['High'].values
+                    low = hist_3mo['Low'].values
+                    close = hist_3mo['Close'].values
+                    tr1 = high[1:] - low[1:]
+                    tr2 = np.abs(high[1:] - close[:-1])
+                    tr3 = np.abs(low[1:] - close[:-1])
+                    tr = np.maximum(np.maximum(tr1, tr2), tr3)
+                    atr_14 = float(np.mean(tr[-14:]))
+                except Exception as e:
+                    print(f"计算 {symbol} ATR 失败: {e}")
+                    atr_14 = 0
+
+            # 3. 如果没有提供隐含波动率，自动估算
+            if implied_volatility is None or implied_volatility <= 0:
+                # 使用历史波动率估算
+                if len(price_history) >= 30:
+                    returns = np.diff(np.log(price_history[-30:]))
+                    implied_volatility = float(np.std(returns) * np.sqrt(252))
+                else:
+                    implied_volatility = 0.25  # 默认25%
+
+            # 4. 计算到期天数
+            try:
+                expiry = datetime.strptime(expiry_date, "%Y-%m-%d")
+                today = datetime.now()
+                days_to_expiry = max(1, (expiry - today).days)
+            except:
+                days_to_expiry = 30
+
+            # 5. 估算Greeks（简化计算）
+            # Delta估算（基于货币性和到期时间）
+            moneyness = strike / current_price
+            time_factor = min(1, days_to_expiry / 365)
+
+            if option_type == "CALL":
+                # Call Delta: 虚值越深delta越小
+                if moneyness > 1.1:  # 深度虚值
+                    delta = max(0.05, 0.5 - (moneyness - 1) * 2)
+                elif moneyness < 0.9:  # 深度实值
+                    delta = min(0.95, 0.5 + (1 - moneyness) * 2)
+                else:
+                    delta = 0.5 + (1 - moneyness) * 0.5
+            else:  # PUT
+                if moneyness < 0.9:  # 深度虚值
+                    delta = max(-0.95, -0.5 - (1 - moneyness) * 2)
+                elif moneyness > 1.1:  # 深度实值
+                    delta = min(-0.05, -0.5 + (moneyness - 1) * 2)
+                else:
+                    delta = -0.5 + (1 - moneyness) * 0.5
+
+            # Gamma 估算 (ATM附近最大)
+            gamma = 0.05 * np.exp(-((moneyness - 1) ** 2) / 0.02) * (1 / np.sqrt(time_factor + 0.01))
+
+            # Theta 估算 (负数，ATM附近最大)
+            theta = -option_price * 0.02 * (1 / np.sqrt(days_to_expiry + 1))
+
+            # 6. 构建 OptionData 对象
+            option_data = OptionData(
+                identifier=f"{symbol}{expiry_date.replace('-', '')}{option_type[0]}{int(strike*1000):08d}",
+                symbol=symbol,
+                strike=strike,
+                put_call=option_type,
+                expiry_date=expiry_date,
+                latest_price=option_price,
+                bid_price=option_price * 0.98,  # 估算
+                ask_price=option_price * 1.02,
+                volume=100,  # 默认值
+                open_interest=500,  # 默认值
+                implied_vol=implied_volatility,
+                delta=delta,
+                gamma=gamma,
+                theta=theta,
+                vega=option_price * 0.1  # 估算
+            )
+
+            # 7. 使用 OptionScorer 计算评分
+            scores = option_scorer.score_option(option_data, current_price)
+
+            # 8. 使用高级评分器计算趋势相关评分
+            # 导入趋势分析器
+            try:
+                from ..analysis.options_analysis.scoring.trend_analyzer import TrendAnalyzer
+                trend_analyzer = TrendAnalyzer()
+
+                import pandas as pd
+                if len(price_history) >= 6:
+                    price_series = pd.Series(price_history)
+                    strategy = 'sell_call' if option_type == 'CALL' else 'sell_put'
+                    trend_info = trend_analyzer.analyze_trend_for_strategy(
+                        price_series, current_price, strategy
+                    )
+                else:
+                    trend_info = {
+                        'trend': 'sideways',
+                        'trend_strength': 0.5,
+                        'trend_alignment_score': 60,
+                        'display_info': {
+                            'trend_name_cn': '横盘整理',
+                            'is_ideal_trend': False,
+                            'warning': '数据不足，无法判断趋势'
+                        }
+                    }
+            except Exception as e:
+                print(f"趋势分析失败: {e}")
+                trend_info = {
+                    'trend': 'unknown',
+                    'trend_strength': 0.5,
+                    'trend_alignment_score': 50,
+                    'display_info': {
+                        'trend_name_cn': '未知',
+                        'is_ideal_trend': False,
+                        'warning': '趋势分析不可用'
+                    }
+                }
+
+            # 9. 计算支撑阻力位
+            support_resistance = {}
+            if hist_3mo is not None and not hist_3mo.empty:
+                try:
+                    high_52w = float(hist_3mo['High'].max())
+                    low_52w = float(hist_3mo['Low'].min())
+                    ma_20 = float(hist_3mo['Close'].rolling(20).mean().iloc[-1]) if len(hist_3mo) >= 20 else current_price
+                    ma_50 = float(hist_3mo['Close'].rolling(50).mean().iloc[-1]) if len(hist_3mo) >= 50 else current_price
+
+                    support_resistance = {
+                        'high_52w': high_52w,
+                        'low_52w': low_52w,
+                        'ma_20': ma_20,
+                        'ma_50': ma_50,
+                        'support_1': current_price * 0.95,
+                        'resistance_1': current_price * 1.05,
+                    }
+                except Exception as e:
+                    print(f"计算 {symbol} 支撑阻力位失败: {e}")
+
+            # 10. 构建返回结果
+            # 根据期权类型计算评分
+            if option_type == 'CALL':
+                sell_score = scores.scrv or 0
+                buy_score = scores.bcrv or 0
+                total_score = max(sell_score, buy_score)
+
+                scores_dict = {
+                    'sell_call': {
+                        'score': sell_score,
+                        'style_label': '稳健收益' if sell_score >= 60 else '风险较高',
+                        'risk_level': 'low' if sell_score >= 70 else ('medium' if sell_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if sell_score >= 70 else ('#F59E0B' if sell_score >= 50 else '#EF4444'),
+                        'trend_warning': trend_info.get('display_info', {}).get('warning') if not trend_info.get('display_info', {}).get('is_ideal_trend') else None,
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                            'assignment_probability': scores.assignment_probability,
+                            'annualized_return': scores.annualized_return,
+                        }
+                    },
+                    'buy_call': {
+                        'score': buy_score,
+                        'style_label': '激进策略' if buy_score >= 60 else '投机性强',
+                        'risk_level': 'low' if buy_score >= 70 else ('medium' if buy_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if buy_score >= 70 else ('#F59E0B' if buy_score >= 50 else '#EF4444'),
+                        'trend_warning': None if trend_info.get('trend') == 'uptrend' else '当前非上涨趋势，买入风险较高',
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                        }
+                    }
+                }
+            else:  # PUT
+                sell_score = scores.sprv or 0
+                buy_score = scores.bprv or 0
+                total_score = max(sell_score, buy_score)
+
+                scores_dict = {
+                    'sell_put': {
+                        'score': sell_score,
+                        'style_label': '稳健收益' if sell_score >= 60 else '风险较高',
+                        'risk_level': 'low' if sell_score >= 70 else ('medium' if sell_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if sell_score >= 70 else ('#F59E0B' if sell_score >= 50 else '#EF4444'),
+                        'trend_warning': trend_info.get('display_info', {}).get('warning') if not trend_info.get('display_info', {}).get('is_ideal_trend') else None,
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                            'assignment_probability': scores.assignment_probability,
+                            'annualized_return': scores.annualized_return,
+                            'premium_income': scores.premium_income,
+                        }
+                    },
+                    'buy_put': {
+                        'score': buy_score,
+                        'style_label': '对冲策略' if buy_score >= 60 else '保险性质',
+                        'risk_level': 'low' if buy_score >= 70 else ('medium' if buy_score >= 50 else 'high'),
+                        'risk_color': '#10B981' if buy_score >= 70 else ('#F59E0B' if buy_score >= 50 else '#EF4444'),
+                        'trend_warning': None if trend_info.get('trend') == 'downtrend' else '当前非下跌趋势，对冲需求可能不高',
+                        'breakdown': {
+                            'iv_rank': scores.iv_rank,
+                            'liquidity': scores.liquidity_factor,
+                        }
+                    }
+                }
+
+            result = {
+                'success': True,
+                'symbol': symbol,
+                'option_type': option_type,
+                'strike': strike,
+                'expiry_date': expiry_date,
+                'days_to_expiry': days_to_expiry,
+                'option_price': option_price,
+                'implied_volatility': round(implied_volatility * 100, 2),  # 转为百分比
+                'current_price': round(current_price, 2),  # 顶层返回当前股价
+                'total_score': round(total_score, 1),       # 总评分（取最高策略分）
+                'stock_data': {
+                    'current_price': round(current_price, 2),
+                    'atr_14': round(atr_14, 4),
+                    'trend': trend_info.get('trend', 'unknown'),
+                    'trend_strength': round(trend_info.get('trend_strength', 0.5), 2),
+                    'support_resistance': support_resistance,
+                },
+                'estimated_greeks': {
+                    'delta': round(delta, 4),
+                    'gamma': round(gamma, 4),
+                    'theta': round(theta, 4),
+                },
+                'scores': scores_dict,
+                'trend_info': trend_info,
+            }
+
+            return result
+
+        except Exception as e:
+            import traceback
+            print(f"反向查分失败: {e}")
+            print(traceback.format_exc())
+            return {
+                'success': False,
+                'error': f'反向查分计算失败: {str(e)}'
+            }

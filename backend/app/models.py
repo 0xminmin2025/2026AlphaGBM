@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, date
 import enum
 
 db = SQLAlchemy()
@@ -83,13 +83,20 @@ class Feedback(db.Model):
     ip_address = db.Column(db.String(50), nullable=True)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+def default_reset_time():
+    """默认重置时间为第二天零点"""
+    from datetime import timedelta
+    today = datetime.utcnow().date()
+    tomorrow = datetime.combine(today + timedelta(days=1), datetime.min.time())
+    return tomorrow
+
 class DailyQueryCount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False)
     query_count = db.Column(db.Integer, default=0)
     max_queries = db.Column(db.Integer, default=5)
-    reset_time = db.Column(db.DateTime, nullable=False)
+    reset_time = db.Column(db.DateTime, nullable=False, default=default_reset_time)
 
 class PortfolioHolding(db.Model):
     __tablename__ = 'portfolio_holdings'
@@ -178,11 +185,12 @@ class Subscription(db.Model):
 
 class Transaction(db.Model):
     __tablename__ = 'transactions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
     stripe_payment_intent_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_checkout_session_id = db.Column(db.String(255), unique=True, nullable=True)
+    stripe_invoice_id = db.Column(db.String(255), unique=True, nullable=True, index=True)  # 用于幂等性检查
     amount = db.Column(db.Integer, nullable=False) # In cents
     currency = db.Column(db.String(10), nullable=False, default='cny')
     status = db.Column(db.String(50), nullable=False) # succeeded, pending, failed
@@ -331,4 +339,216 @@ class AnalysisTask(db.Model):
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'related_history_id': self.related_history_id,
             'related_history_type': self.related_history_type
+        }
+
+
+class DailyRecommendation(db.Model):
+    """每日期权推荐缓存"""
+    __tablename__ = 'daily_recommendations'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # 推荐日期（用于缓存key）
+    recommendation_date = db.Column(db.Date, nullable=False, index=True)
+
+    # 推荐数据（JSON格式存储完整推荐列表）
+    recommendations = db.Column(db.JSON, nullable=False)
+
+    # 市场摘要
+    market_summary = db.Column(db.JSON, nullable=True)
+
+    # 元数据
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 唯一约束：每天只有一条推荐记录
+    __table_args__ = (
+        db.UniqueConstraint('recommendation_date', name='uq_daily_recommendation_date'),
+    )
+
+    def to_dict(self):
+        """Convert to dictionary for API responses"""
+        return {
+            'id': self.id,
+            'recommendation_date': self.recommendation_date.isoformat() if self.recommendation_date else None,
+            'recommendations': self.recommendations,
+            'market_summary': self.market_summary,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class DailyAnalysisCache(db.Model):
+    """每日股票分析缓存 - 每个(ticker, style)组合每天只分析一次"""
+    __tablename__ = 'daily_analysis_cache'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    style = db.Column(db.String(50), nullable=False)
+    analysis_date = db.Column(db.Date, nullable=False, index=True)
+    full_analysis_data = db.Column(db.JSON, nullable=False)
+    source_task_id = db.Column(db.String(36), nullable=True)  # task that generated this cache
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('ticker', 'style', 'analysis_date', name='uq_daily_analysis_cache'),
+        db.Index('idx_daily_cache_lookup', 'ticker', 'style', 'analysis_date'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ticker': self.ticker,
+            'style': self.style,
+            'analysis_date': self.analysis_date.isoformat() if self.analysis_date else None,
+            'source_task_id': self.source_task_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AnalyticsEvent(db.Model):
+    """用户行为分析事件"""
+    __tablename__ = 'analytics_events'
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    event_type = db.Column(db.String(100), nullable=False, index=True)
+    session_id = db.Column(db.String(50), nullable=False, index=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=True, index=True)
+    user_tier = db.Column(db.String(20), nullable=True)  # guest, free, plus, pro
+    properties = db.Column(db.JSON, nullable=True)  # 事件属性
+    url = db.Column(db.String(500), nullable=True)
+    referrer = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    # 添加索引以优化常见查询
+    __table_args__ = (
+        db.Index('idx_analytics_type_date', 'event_type', 'created_at'),
+        db.Index('idx_analytics_user_date', 'user_id', 'created_at'),
+    )
+
+
+# ===== Paper Trading Models =====
+
+class PaperTrade(db.Model):
+    """模拟交易记录"""
+    __tablename__ = 'paper_trades'
+
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    security_type = db.Column(db.String(10), nullable=False)  # STOCK or OPTION
+    action = db.Column(db.String(10), nullable=False)  # BUY or SELL
+    quantity = db.Column(db.Integer, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    strategy = db.Column(db.String(30), nullable=False, index=True)  # momentum, options_seller
+    status = db.Column(db.String(20), nullable=False, default='filled')  # filled, rejected
+
+    # Option-specific fields (nullable for stocks)
+    expiry = db.Column(db.String(20), nullable=True)
+    strike = db.Column(db.Float, nullable=True)
+    option_right = db.Column(db.String(4), nullable=True)  # PUT or CALL
+
+    # Risk management
+    stop_loss = db.Column(db.Float, nullable=True)
+    pnl = db.Column(db.Float, nullable=True)  # Realized P&L (filled on close)
+    notes = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'ticker': self.ticker,
+            'security_type': self.security_type,
+            'action': self.action,
+            'quantity': self.quantity,
+            'price': self.price,
+            'strategy': self.strategy,
+            'status': self.status,
+            'expiry': self.expiry,
+            'strike': self.strike,
+            'option_right': self.option_right,
+            'stop_loss': self.stop_loss,
+            'pnl': self.pnl,
+            'notes': self.notes,
+        }
+
+
+class PaperPosition(db.Model):
+    """模拟持仓"""
+    __tablename__ = 'paper_positions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ticker = db.Column(db.String(20), nullable=False, index=True)
+    security_type = db.Column(db.String(10), nullable=False)  # STOCK or OPTION
+    strategy = db.Column(db.String(30), nullable=False, index=True)
+    quantity = db.Column(db.Integer, nullable=False)
+    avg_cost = db.Column(db.Float, nullable=False)
+    current_price = db.Column(db.Float, nullable=True)
+    unrealized_pnl = db.Column(db.Float, nullable=True)
+
+    # Option-specific fields
+    expiry = db.Column(db.String(20), nullable=True)
+    strike = db.Column(db.Float, nullable=True)
+    option_right = db.Column(db.String(4), nullable=True)  # PUT or CALL
+
+    # Risk
+    stop_loss = db.Column(db.Float, nullable=True)
+
+    opened_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        cost_basis = self.avg_cost * abs(self.quantity)
+        pnl_pct = (self.unrealized_pnl / cost_basis * 100) if cost_basis and self.unrealized_pnl else 0
+        return {
+            'id': self.id,
+            'ticker': self.ticker,
+            'security_type': self.security_type,
+            'strategy': self.strategy,
+            'quantity': self.quantity,
+            'avg_cost': self.avg_cost,
+            'current_price': self.current_price,
+            'unrealized_pnl': self.unrealized_pnl,
+            'pnl_pct': round(pnl_pct, 2),
+            'expiry': self.expiry,
+            'strike': self.strike,
+            'option_right': self.option_right,
+            'stop_loss': self.stop_loss,
+            'opened_at': self.opened_at.isoformat() if self.opened_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PaperPerformance(db.Model):
+    """模拟交易每日业绩快照"""
+    __tablename__ = 'paper_performance'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    strategy = db.Column(db.String(30), nullable=False)  # momentum, options_seller, combined
+    nav = db.Column(db.Float, nullable=False)  # Net asset value (starts at 1.0)
+    daily_return = db.Column(db.Float, nullable=True)  # Daily return %
+    cumulative_return = db.Column(db.Float, nullable=True)  # Cumulative return %
+    drawdown = db.Column(db.Float, nullable=True)  # Current drawdown %
+    max_drawdown = db.Column(db.Float, nullable=True)  # Max drawdown %
+    benchmark_return = db.Column(db.Float, nullable=True)  # SPY cumulative return %
+    position_count = db.Column(db.Integer, nullable=True)
+    cash_balance = db.Column(db.Float, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('date', 'strategy', name='uq_paper_performance_date_strategy'),
+    )
+
+    def to_dict(self):
+        return {
+            'date': self.date.isoformat() if self.date else None,
+            'strategy': self.strategy,
+            'nav': self.nav,
+            'daily_return': self.daily_return,
+            'cumulative_return': self.cumulative_return,
+            'drawdown': self.drawdown,
+            'max_drawdown': self.max_drawdown,
+            'benchmark_return': self.benchmark_return,
+            'position_count': self.position_count,
+            'cash_balance': self.cash_balance,
         }

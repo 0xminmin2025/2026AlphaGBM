@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <!-- 首页 -->
+  <url>
+    <loc>https://alphagbm.com/</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://alphagbm.com/?lang=zh"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://alphagbm.com/?lang=en"/>
+  </url>
+
+  <!-- 期权研究 -->
+  <url>
+    <loc>https://alphagbm.com/options</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://alphagbm.com/options?lang=zh"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://alphagbm.com/options?lang=en"/>
+  </url>
+
+  <!-- 期权历史 -->
+  <url>
+    <loc>https://alphagbm.com/options/history</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 股票分析 -->
+  <url>
+    <loc>https://alphagbm.com/stock</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://alphagbm.com/stock?lang=zh"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://alphagbm.com/stock?lang=en"/>
+  </url>
+
+  <!-- 定价页面 -->
+  <url>
+    <loc>https://alphagbm.com/pricing</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://alphagbm.com/pricing?lang=zh"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://alphagbm.com/pricing?lang=en"/>
+  </url>
+
+  <!-- 登录页面 -->
+  <url>
+    <loc>https://alphagbm.com/login</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- 注册页面 -->
+  <url>
+    <loc>https://alphagbm.com/register</loc>
+    <lastmod>2025-01-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+</urlset>

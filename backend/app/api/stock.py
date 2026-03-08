@@ -1,17 +1,249 @@
 from flask import Blueprint, request, jsonify, g
 from ..services import analysis_engine, ev_model, ai_service
 from ..services.task_queue import create_analysis_task, get_task_status
+from ..services.sector_rotation_service import get_sector_rotation_service
+from ..services.capital_structure_service import get_capital_structure_service
 from ..utils.auth import require_auth, get_user_id
 from ..utils.decorators import check_quota, db_retry
 from ..utils.serialization import convert_numpy_types
-from ..models import db, ServiceType, StockAnalysisHistory, TaskType
-import yfinance as yf
+from ..models import db, ServiceType, StockAnalysisHistory, TaskType, TaskStatus, AnalysisTask, DailyAnalysisCache
+from ..services.data_provider import DataProvider
+from ..constants import detect_market_from_ticker
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, date
+from sqlalchemy import func
+import time
+import threading
+import requests
 
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
 logger = logging.getLogger(__name__)
+
+
+def get_cached_analysis(ticker: str, style: str):
+    """Returns cached analysis for today, or None."""
+    today = date.today()
+    return DailyAnalysisCache.query.filter_by(
+        ticker=ticker, style=style, analysis_date=today
+    ).first()
+
+
+def get_in_progress_task_for_stock(ticker: str, style: str):
+    """Returns an in-progress task for this ticker+style today, or None."""
+    today = date.today()
+    return AnalysisTask.query.filter(
+        AnalysisTask.task_type == TaskType.STOCK_ANALYSIS.value,
+        AnalysisTask.status.in_([TaskStatus.PENDING.value, TaskStatus.PROCESSING.value]),
+        AnalysisTask.input_params['ticker'].as_string() == ticker,
+        AnalysisTask.input_params['style'].as_string() == style,
+        func.date(AnalysisTask.created_at) == today
+    ).first()
+# --------------- Yahoo Finance Search helpers ---------------
+
+class TTLCache:
+    """Simple thread-safe dict cache with per-key TTL and max size."""
+
+    def __init__(self, ttl: int = 300, max_size: int = 500):
+        self._store: dict = {}  # key -> (value, expire_ts)
+        self._lock = threading.Lock()
+        self._ttl = ttl
+        self._max_size = max_size
+
+    def get(self, key: str):
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            value, expire_ts = entry
+            if time.time() > expire_ts:
+                del self._store[key]
+                return None
+            return value
+
+    def set(self, key: str, value):
+        with self._lock:
+            # Evict expired entries when approaching max size
+            if len(self._store) >= self._max_size:
+                now = time.time()
+                expired = [k for k, (_, ts) in self._store.items() if now > ts]
+                for k in expired:
+                    del self._store[k]
+                # If still too large, drop oldest entries
+                if len(self._store) >= self._max_size:
+                    oldest = sorted(self._store, key=lambda k: self._store[k][1])
+                    for k in oldest[:len(self._store) - self._max_size + 1]:
+                        del self._store[k]
+            self._store[key] = (value, time.time() + self._ttl)
+
+
+_search_cache = TTLCache(ttl=300, max_size=500)
+
+EXCHANGE_TO_MARKET = {
+    'NMS': 'US', 'NGM': 'US', 'NCM': 'US', 'NYQ': 'US', 'ASE': 'US',
+    'PCX': 'US', 'BTS': 'US', 'OPR': 'US',
+    'NASDAQ': 'US', 'NYSE': 'US', 'AMEX': 'US', 'NYSEARCA': 'US',
+    'NYSEAMERICAN': 'US',
+    'HKG': 'HK', 'HKSE': 'HK', 'HKS': 'HK',
+    'SHH': 'CN', 'SHZ': 'CN', 'Shanghai': 'CN', 'Shenzhen': 'CN',
+}
+
+
+def _map_exchange_to_market(exchange: str, symbol: str) -> str:
+    """Map Yahoo Finance exchange name to our market code (US/HK/CN)."""
+    market = EXCHANGE_TO_MARKET.get(exchange)
+    if market:
+        return market
+    # Fallback: infer from symbol suffix
+    sym = symbol.upper()
+    if sym.endswith('.HK'):
+        return 'HK'
+    if sym.endswith('.SS') or sym.endswith('.SZ'):
+        return 'CN'
+    return 'US'
+
+
+def _normalize_search_queries(query: str) -> list:
+    """
+    Generate normalized search query variants for better matching.
+
+    Handles:
+    - HK stocks: 700, 0700, 00700 -> search for 0700.HK (4-digit padded)
+    - A-shares: 600519 -> search for 600519.SS
+    - US stocks: AAPL -> search as-is
+
+    Returns list of query variants to try.
+    """
+    query = query.strip().upper()
+    variants = [query]  # Always try original
+
+    # If it's purely numeric, handle market-specific formats
+    if query.isdigit():
+        stripped = query.lstrip('0') or '0'
+        original_len = len(query)
+
+        # A-share patterns: 6 digits starting with 60/68/00/30
+        if original_len == 6:
+            prefix = query[:2]
+            if prefix in ('60', '68'):
+                ss_ticker = f"{query}.SS"
+                if ss_ticker not in variants:
+                    variants.append(ss_ticker)
+            elif prefix in ('00', '30'):
+                sz_ticker = f"{query}.SZ"
+                if sz_ticker not in variants:
+                    variants.append(sz_ticker)
+        # HK stock patterns: 1-5 digit numbers (after stripping leading zeros)
+        # Yahoo Finance uses 4-digit padded format: 0700.HK, 0179.HK
+        elif len(stripped) >= 1 and len(stripped) <= 5:
+            # Primary format: 4-digit padded (Yahoo Finance standard)
+            hk_padded = f"{stripped.zfill(4)}.HK"
+            if hk_padded not in variants:
+                variants.insert(1, hk_padded)  # Insert as high priority
+
+    # If query already has suffix, normalize HK format
+    elif '.HK' in query:
+        base = query.replace('.HK', '')
+        if base.isdigit():
+            stripped = base.lstrip('0') or '0'
+            # Pad to 4 digits for Yahoo Finance
+            padded = stripped.zfill(4)
+            normalized = f"{padded}.HK"
+            if normalized not in variants:
+                variants.insert(0, normalized)  # Highest priority
+
+    return variants
+
+@stock_bp.route('/search', methods=['GET'])
+def search_stocks():
+    """
+    Fuzzy stock search via Yahoo Finance.
+    GET /api/stock/search?q=QUERY&limit=8
+    No auth required — must be fast for autocomplete.
+
+    Supports multiple ticker formats:
+    - US: AAPL, MSFT
+    - HK: 700, 0700, 00700, 0700.HK (all find Tencent)
+    - A-shares: 600519, 600519.SS
+    """
+    query = request.args.get('q', '').strip()
+    limit = min(request.args.get('limit', 8, type=int), 20)
+
+    if not query or len(query) < 1:
+        return jsonify({'success': True, 'results': []})
+
+    cache_key = f"{query.lower()}:{limit}"
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        return jsonify({'success': True, 'results': cached, 'source': 'cache'})
+
+    # Generate search query variants for better matching
+    search_variants = _normalize_search_queries(query)
+    logger.debug(f"Search variants for '{query}': {search_variants}")
+
+    try:
+        ALLOWED_TYPES = {'EQUITY', 'ETF', 'FUND', 'MUTUALFUND'}
+        seen_symbols = set()
+        results = []
+
+        # Try each variant until we have enough results
+        for variant in search_variants:
+            if len(results) >= limit:
+                break
+
+            try:
+                resp = requests.get(
+                    'https://query2.finance.yahoo.com/v1/finance/search',
+                    params={
+                        'q': variant,
+                        'quotesCount': limit,
+                        'newsCount': 0,
+                        'listsCount': 0,
+                        'enableFuzzyQuery': True,
+                    },
+                    headers={'User-Agent': 'Mozilla/5.0'},
+                    timeout=4,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                for quote in data.get('quotes', []):
+                    if len(results) >= limit:
+                        break
+
+                    qtype = quote.get('quoteType', '').upper()
+                    if qtype not in ALLOWED_TYPES:
+                        continue
+
+                    symbol = quote.get('symbol', '')
+                    # Deduplicate by normalized symbol
+                    symbol_key = symbol.upper()
+                    if symbol_key in seen_symbols:
+                        continue
+                    seen_symbols.add(symbol_key)
+
+                    exchange = quote.get('exchange', '')
+                    name_en = quote.get('shortname') or quote.get('longname') or ''
+                    market = _map_exchange_to_market(exchange, symbol)
+                    results.append({
+                        'ticker': symbol,
+                        'nameCn': '',
+                        'nameEn': name_en,
+                        'pinyin': '',
+                        'market': market,
+                    })
+
+            except Exception as e:
+                logger.debug(f"Yahoo search variant '{variant}' failed: {e}")
+                continue
+
+        _search_cache.set(cache_key, results)
+        return jsonify({'success': True, 'results': results})
+
+    except Exception as e:
+        logger.warning(f"Yahoo Finance search failed for '{query}': {e}")
+        return jsonify({'success': True, 'results': []})
+
 
 def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: bool = False) -> dict:
     """
@@ -97,21 +329,41 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
         try:
             # Get 1-month history for ATR calculation
             normalized_ticker = analysis_engine.normalize_ticker(ticker)
-            stock = yf.Ticker(normalized_ticker)
+            stock = DataProvider(normalized_ticker)
             hist = stock.history(period="1mo", timeout=10)
 
             if not hist.empty and len(hist) >= 15:
-                # Use ATR dynamic stop loss
-                stop_loss_price = analysis_engine.calculate_atr_stop_loss(
+                # 获取VIX值用于动态调整ATR倍数
+                vix = None
+                options_data = market_data.get('options_data', {})
+                if options_data:
+                    vix = options_data.get('vix')
+
+                # Use ATR dynamic stop loss with VIX adjustment
+                stop_loss_result = analysis_engine.calculate_atr_stop_loss(
                     buy_price=market_data['price'],
                     hist_data=hist,
                     atr_period=14,
                     atr_multiplier=2.5,
                     min_stop_loss_pct=0.05,
-                    beta=market_data.get('beta')
+                    beta=market_data.get('beta'),
+                    vix=vix
                 )
-                market_data['stop_loss_price'] = stop_loss_price
-                market_data['stop_loss_method'] = 'ATR动态止损'
+
+                # 处理新的返回格式（dict）
+                if isinstance(stop_loss_result, dict):
+                    market_data['stop_loss_price'] = stop_loss_result['stop_loss_price']
+                    market_data['stop_loss_method'] = 'ATR动态止损'
+                    market_data['stop_loss_details'] = {
+                        'atr_multiplier': stop_loss_result.get('atr_multiplier'),
+                        'adjustments': stop_loss_result.get('adjustments', []),
+                        'vix': stop_loss_result.get('vix'),
+                        'beta': stop_loss_result.get('beta')
+                    }
+                else:
+                    # 向后兼容：旧格式返回float
+                    market_data['stop_loss_price'] = stop_loss_result
+                    market_data['stop_loss_method'] = 'ATR动态止损'
             else:
                 # Fallback to fixed stop loss
                 stop_loss_price = market_data['price'] * 0.85
@@ -124,17 +376,84 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
             market_data['stop_loss_price'] = stop_loss_price
             market_data['stop_loss_method'] = '固定15%止损（计算失败）'
 
-        # 4.6 Calculate EV Model (Matching original)
+        # 4.6 板块轮动分析 (Sector Rotation Analysis)
+        sector_analysis = None
         try:
+            # 获取市场类型
+            market = detect_market_from_ticker(ticker)
+            sector = market_data.get('sector', 'Technology')
+            industry = market_data.get('industry')
+
+            sector_service = get_sector_rotation_service()
+            sector_analysis = sector_service.analyze_stock_sector(
+                ticker=ticker,
+                sector=sector,
+                industry=industry,
+                stock_data=market_data,
+                market=market
+            )
+            market_data['sector_analysis'] = sector_analysis
+            logger.info(f"板块分析完成: {ticker}, 板块={sector_analysis.get('sector')}, 强度={sector_analysis.get('sector_strength')}, 溢价={sector_analysis.get('sector_rotation_premium', 0):.2%}")
+        except Exception as e:
+            logger.warning(f"板块分析时发生异常: {e}")
+            sector_analysis = None
+            market_data['sector_analysis'] = {
+                'sector': market_data.get('sector', 'Unknown'),
+                'alignment_score': 50,
+                'is_sector_leader': False,
+                'sector_rotation_premium': 0.0,
+                'error': str(e)
+            }
+
+        # 4.7 资金结构分析 (Capital Structure Analysis)
+        capital_analysis = None
+        try:
+            # 获取历史数据用于资金分析
+            normalized_ticker = analysis_engine.normalize_ticker(ticker)
+            capital_hist = DataProvider(normalized_ticker).history(period="3mo", timeout=10)
+
+            capital_service = get_capital_structure_service()
+            capital_analysis = capital_service.analyze_stock_capital(
+                ticker=ticker,
+                hist_data=capital_hist,
+                market_data=market_data
+            )
+            market_data['capital_analysis'] = capital_analysis
+            logger.info(f"资金分析完成: {ticker}, 集中度={capital_analysis.get('concentration_score')}, 阶段={capital_analysis.get('propagation_stage')}, 因子={capital_analysis.get('capital_factor', 0):.2%}")
+        except Exception as e:
+            logger.warning(f"资金分析时发生异常: {e}")
+            capital_analysis = None
+            market_data['capital_analysis'] = {
+                'concentration_score': 50,
+                'propagation_stage': 'neutral',
+                'capital_factor': 0.0,
+                'signals': [],
+                'error': str(e)
+            }
+
+        # 4.8 Calculate EV Model (基础版本 + 扩展版本)
+        try:
+            # 基础EV模型
             ev_result = ev_model.calculate_ev_model(market_data, risk_result, style)
-            market_data['ev_model'] = ev_result
-            logger.info(f"EV模型计算完成: {ticker}, 加权EV={ev_result.get('ev_weighted_pct', 0):.2f}%")
+
+            # 扩展EV模型（整合板块和资金因子）
+            ev_extended_result = ev_model.calculate_ev_model_extended(
+                market_data, risk_result, style,
+                sector_analysis=sector_analysis,
+                capital_analysis=capital_analysis
+            )
+
+            # 合并结果，扩展版本包含基础版本所有字段
+            market_data['ev_model'] = ev_extended_result
+            logger.info(f"EV模型计算完成: {ticker}, 基础EV={ev_extended_result.get('ev_base_pct', 0):.2f}%, 扩展EV={ev_extended_result.get('ev_extended_pct', 0):.2f}%")
         except Exception as e:
             logger.warning(f"计算EV模型时发生异常: {e}")
             market_data['ev_model'] = {
                 'error': str(e),
                 'ev_weighted': 0.0,
                 'ev_weighted_pct': 0.0,
+                'ev_extended': 0.0,
+                'ev_extended_pct': 0.0,
                 'ev_score': 5.0,
                 'recommendation': {
                     'action': 'HOLD',
@@ -170,7 +489,7 @@ def get_stock_analysis_data(ticker: str, style: str = 'quality', only_history: b
 @check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
 def analyze_stock_async():
     """
-    Create async stock analysis task
+    Create async stock analysis task (with daily cache support)
 
     Request Body:
     {
@@ -202,14 +521,51 @@ def analyze_stock_async():
         if not user_id:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
 
-        # Create async task
+        # CASE A: Check if today's cache exists
+        cache_entry = get_cached_analysis(ticker, style)
+        if cache_entry:
+            logger.info(f"[analyze-async] Cache HIT for {ticker}/{style}")
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={'ticker': ticker, 'style': style},
+                priority=priority,
+                cache_mode='cached',
+                cached_data=cache_entry.full_analysis_data
+            )
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
+
+        # CASE B: Check for in-progress task
+        try:
+            in_progress_task = get_in_progress_task_for_stock(ticker, style)
+        except Exception:
+            in_progress_task = None
+
+        if in_progress_task:
+            logger.info(f"[analyze-async] In-progress task found for {ticker}/{style}")
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={'ticker': ticker, 'style': style},
+                priority=priority,
+                cache_mode='waiting',
+                source_task_id=in_progress_task.id
+            )
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
+
+        # CASE C: No cache — run full analysis
         task_id = create_analysis_task(
             user_id=user_id,
             task_type=TaskType.STOCK_ANALYSIS.value,
-            input_params={
-                'ticker': ticker,
-                'style': style
-            },
+            input_params={'ticker': ticker, 'style': style},
             priority=priority
         )
 
@@ -229,18 +585,19 @@ def analyze_stock_async():
 @check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
 def analyze_stock():
     """
-    Stock Analysis Endpoint - Supports both sync and async mode
+    Stock Analysis Endpoint - Always uses async task queue with daily caching
 
     Accepts: {
         "ticker": "AAPL",
         "style": "quality",  # optional, default quality
-        "onlyHistoryData": false, # optional
-        "async": false  # optional, if true creates async task
+        "onlyHistoryData": false, # optional, for chart data only (sync)
     }
 
     Returns:
-    - Sync mode: JSON with analysis results in original format
-    - Async mode: {"success": true, "task_id": "uuid", "message": "..."}
+    - onlyHistoryData=true: Sync JSON with chart data
+    - Full analysis: {"success": true, "task_id": "uuid", "message": "..."}
+      Always creates an async task. If today's cache exists, the task simulates
+      progress over ~10s then returns cached data. Otherwise runs full analysis.
     """
     ticker = None
     try:
@@ -254,113 +611,77 @@ def analyze_stock():
 
         style = data.get('style', 'quality')
         only_history = data.get('onlyHistoryData', False)
-        use_async = data.get('async', False)
 
-        logger.info(f"Analyzing stock {ticker} with style {style} for user {getattr(g, 'user_id', 'unknown')} (async: {use_async})")
+        user_id = getattr(g, 'user_id', None)
+        logger.info(f"Analyzing stock {ticker} with style {style} for user {user_id}")
 
-        # Check if async mode is requested
-        if use_async:
-            user_id = get_user_id()
-            if not user_id:
-                return jsonify({'success': False, 'error': 'Authentication required for async mode'}), 401
+        # For chart-only data, keep sync mode (no yfinance heavy calls)
+        if only_history:
+            result = get_stock_analysis_data(ticker, style, only_history=True)
+            if 'error' in result:
+                return jsonify({'success': False, 'error': result['error']}), 400
+            return jsonify({'success': True, 'data': result})
 
-            # Create async task
+        # Full analysis — always use async task with cache logic
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        # CASE A: Check if today's cache exists for this (ticker, style)
+        cache_entry = get_cached_analysis(ticker, style)
+        if cache_entry:
+            logger.info(f"Cache HIT for {ticker}/{style} — creating fake-progress task")
             task_id = create_analysis_task(
                 user_id=user_id,
                 task_type=TaskType.STOCK_ANALYSIS.value,
-                input_params={
-                    'ticker': ticker,
-                    'style': style
-                },
-                priority=data.get('priority', 100)
+                input_params={'ticker': ticker, 'style': style},
+                priority=data.get('priority', 100),
+                cache_mode='cached',
+                cached_data=cache_entry.full_analysis_data
             )
-
-            logger.info(f"Created async stock analysis task {task_id} for {ticker} ({style}) - User: {user_id}")
-
             return jsonify({
                 'success': True,
                 'task_id': task_id,
                 'message': 'Analysis task created successfully'
             }), 201
 
-        # Sync mode - use the extracted helper function
-        result = get_stock_analysis_data(ticker, style, only_history)
+        # CASE B: Check if another task for the same (ticker, style) is already in progress
+        try:
+            in_progress_task = get_in_progress_task_for_stock(ticker, style)
+        except Exception as e:
+            # JSON path query may not be supported on SQLite — fall through to CASE C
+            logger.warning(f"In-progress task lookup failed (may not support JSON queries): {e}")
+            in_progress_task = None
 
-        # Handle errors from helper function
-        if 'error' in result:
-            return jsonify({'success': False, 'error': result['error']}), 400
+        if in_progress_task:
+            logger.info(f"In-progress task found ({in_progress_task.id}) for {ticker}/{style} — creating waiting task")
+            task_id = create_analysis_task(
+                user_id=user_id,
+                task_type=TaskType.STOCK_ANALYSIS.value,
+                input_params={'ticker': ticker, 'style': style},
+                priority=data.get('priority', 100),
+                cache_mode='waiting',
+                source_task_id=in_progress_task.id
+            )
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Analysis task created successfully'
+            }), 201
 
-        # If only requesting history data, return it directly
-        if only_history:
-            return jsonify({'success': True, 'data': result})
+        # CASE C: No cache, no in-progress task — run full analysis
+        logger.info(f"Cache MISS for {ticker}/{style} — creating real analysis task")
+        task_id = create_analysis_task(
+            user_id=user_id,
+            task_type=TaskType.STOCK_ANALYSIS.value,
+            input_params={'ticker': ticker, 'style': style},
+            priority=data.get('priority', 100)
+        )
 
-        # For full analysis, result already contains the complete response
-        response = result
-
-        # 7. Save analysis results to history
-        if not only_history:  # Only save history for full analysis, not just chart data
-            try:
-                # Check if user_id is available
-                if not hasattr(g, 'user_id') or not g.user_id:
-                    logger.error(f"No user_id available in Flask globals for history saving")
-                    return jsonify(response)  # Return response without saving history
-
-                # Extract key data for storage from the result
-                market_data = response.get('data', {})
-                risk_result = response.get('risk', {})
-                ai_report = response.get('report', '')
-                ev_result = market_data.get('ev_model', {})
-
-                logger.info(f"Preparing to save analysis history for {ticker} (user: {g.user_id})")
-
-                # Extract summary from AI report for quick preview (first 1000 chars)
-                ai_summary = None
-                if isinstance(ai_report, dict):
-                    ai_summary = ai_report.get('summary', '')[:1000] if ai_report.get('summary') else None
-                elif isinstance(ai_report, str):
-                    ai_summary = ai_report[:1000] if ai_report else None
-
-                # Store the analysis response directly using the new simplified format
-                # This matches the async task queue format and is more efficient
-                complete_analysis_data_clean = convert_numpy_types(response)
-
-                analysis_history = StockAnalysisHistory(
-                    user_id=g.user_id,
-                    ticker=ticker,
-                    style=style,
-                    # Extract key fields for indexing and quick display - also convert numpy types
-                    current_price=convert_numpy_types(market_data.get('price')),
-                    target_price=convert_numpy_types(market_data.get('target_price')),
-                    stop_loss_price=convert_numpy_types(market_data.get('stop_loss_price')),
-                    market_sentiment=convert_numpy_types(market_data.get('market_sentiment')),
-                    risk_score=convert_numpy_types(risk_result.get('score')),
-                    risk_level=risk_result.get('level'),  # String field, no need to convert
-                    position_size=convert_numpy_types(risk_result.get('suggested_position')),
-                    ev_score=convert_numpy_types(ev_result.get('ev_score')),
-                    ev_weighted_pct=convert_numpy_types(ev_result.get('ev_weighted_pct')),
-                    recommendation_action=ev_result.get('recommendation', {}).get('action'),  # String field
-                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),  # String field
-                    ai_summary=ai_summary,
-                    # Store the complete response data directly (new simplified format)
-                    full_analysis_data=complete_analysis_data_clean
-                )
-
-                logger.info(f"Adding analysis history to database session...")
-                db.session.add(analysis_history)
-
-                logger.info(f"Committing analysis history to database...")
-                db.session.commit()
-
-                logger.info(f"Successfully saved analysis history for {ticker} (user: {g.user_id}, id: {analysis_history.id})")
-
-            except Exception as e:
-                logger.error(f"Failed to save analysis history for {ticker}: {str(e)}")
-                import traceback
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-                # Don't fail the entire request if history saving fails
-                db.session.rollback()
-
-        return jsonify(response)
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': 'Analysis task created successfully'
+        }), 201
 
     except Exception as e:
         logger.error(f"Error analyzing stock {ticker}: {e}")
@@ -589,3 +910,164 @@ def test_history():
         logger.error(f"Full traceback: {traceback.format_exc()}")
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/summary/<ticker>', methods=['GET'])
+@require_auth
+def get_stock_summary(ticker):
+    """
+    获取股票分析摘要（用于期权页面联动）
+
+    首次免费逻辑：
+    - 如果用户从未分析过该股票，免费返回摘要
+    - 如果用户已分析过该股票，返回历史数据（不消耗额度）
+    - 如果需要重新分析，消耗额度
+
+    Query Parameters:
+    - force_refresh: 强制重新分析（消耗额度）
+
+    Returns:
+    {
+        "success": true,
+        "summary": {
+            "ticker": "AAPL",
+            "current_price": 185.50,
+            "target_price": 195.00,
+            "target_price_pct": "+5.1%",
+            "stop_loss_price": 175.00,
+            "market_sentiment": 7.5,
+            "risk_score": 3.2,
+            "risk_level": "medium",
+            "position_size": 15.0,
+            "ai_summary": "AAPL近期..."
+        },
+        "is_first_time": true,
+        "from_history": false
+    }
+    """
+    try:
+        ticker = ticker.upper()
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+
+        # 1. 检查历史记录（是否已分析过）
+        existing_history = StockAnalysisHistory.query.filter_by(
+            user_id=g.user_id,
+            ticker=ticker
+        ).order_by(StockAnalysisHistory.created_at.desc()).first()
+
+        is_first_time = existing_history is None
+
+        # 2. 如果有历史记录且不强制刷新，直接返回历史数据
+        if existing_history and not force_refresh:
+            logger.info(f"返回历史分析摘要: {ticker} (用户: {g.user_id})")
+
+            summary = {
+                'ticker': ticker,
+                'current_price': existing_history.current_price,
+                'target_price': existing_history.target_price,
+                'target_price_pct': f"+{((existing_history.target_price - existing_history.current_price) / existing_history.current_price * 100):.1f}%" if existing_history.current_price and existing_history.target_price else None,
+                'stop_loss_price': existing_history.stop_loss_price,
+                'market_sentiment': existing_history.market_sentiment,
+                'risk_score': existing_history.risk_score,
+                'risk_level': existing_history.risk_level,
+                'position_size': existing_history.position_size,
+                'ev_score': existing_history.ev_score,
+                'recommendation_action': existing_history.recommendation_action,
+                'ai_summary': existing_history.ai_summary,
+                'analyzed_at': existing_history.created_at.isoformat() if existing_history.created_at else None
+            }
+
+            return jsonify({
+                'success': True,
+                'summary': summary,
+                'is_first_time': False,
+                'from_history': True,
+                'history_id': existing_history.id
+            })
+
+        # 3. 首次分析或强制刷新 - 执行分析
+        # 首次免费，强制刷新需要额度
+        if force_refresh and not is_first_time:
+            # 检查额度
+            from ..utils.decorators import check_and_deduct_quota
+            quota_result = check_and_deduct_quota(g.user_id, ServiceType.STOCK_ANALYSIS.value, 1)
+            if not quota_result.get('success'):
+                return jsonify({
+                    'success': False,
+                    'error': '额度不足，无法重新分析',
+                    'quota_error': True
+                }), 403
+
+        logger.info(f"执行股票分析摘要: {ticker} (用户: {g.user_id}, 首次: {is_first_time})")
+
+        # 执行简化分析（只获取关键数据）
+        result = get_stock_analysis_data(ticker, 'quality', only_history=False)
+
+        if 'error' in result:
+            return jsonify({'success': False, 'error': result['error']}), 400
+
+        # 提取摘要数据
+        market_data = result.get('data', {})
+        risk_result = result.get('risk', {})
+        ev_result = market_data.get('ev_model', {})
+
+        current_price = market_data.get('price', 0)
+        target_price = market_data.get('target_price', 0)
+
+        summary = {
+            'ticker': ticker,
+            'current_price': current_price,
+            'target_price': target_price,
+            'target_price_pct': f"+{((target_price - current_price) / current_price * 100):.1f}%" if current_price and target_price and target_price > current_price else f"{((target_price - current_price) / current_price * 100):.1f}%" if current_price and target_price else None,
+            'stop_loss_price': market_data.get('stop_loss_price'),
+            'market_sentiment': market_data.get('market_sentiment'),
+            'risk_score': risk_result.get('score'),
+            'risk_level': risk_result.get('level'),
+            'position_size': risk_result.get('suggested_position'),
+            'ev_score': ev_result.get('ev_score'),
+            'recommendation_action': ev_result.get('recommendation', {}).get('action'),
+            'ai_summary': result.get('report', '')[:500] if isinstance(result.get('report'), str) else None,
+            'analyzed_at': datetime.now().isoformat()
+        }
+
+        # 4. 如果是首次分析，保存到历史记录
+        if is_first_time:
+            try:
+                from ..utils.serialization import convert_numpy_types
+                analysis_history = StockAnalysisHistory(
+                    user_id=g.user_id,
+                    ticker=ticker,
+                    style='quality',
+                    current_price=convert_numpy_types(current_price),
+                    target_price=convert_numpy_types(target_price),
+                    stop_loss_price=convert_numpy_types(market_data.get('stop_loss_price')),
+                    market_sentiment=convert_numpy_types(market_data.get('market_sentiment')),
+                    risk_score=convert_numpy_types(risk_result.get('score')),
+                    risk_level=risk_result.get('level'),
+                    position_size=convert_numpy_types(risk_result.get('suggested_position')),
+                    ev_score=convert_numpy_types(ev_result.get('ev_score')),
+                    ev_weighted_pct=convert_numpy_types(ev_result.get('ev_weighted_pct')),
+                    recommendation_action=ev_result.get('recommendation', {}).get('action'),
+                    recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),
+                    ai_summary=summary.get('ai_summary'),
+                    full_analysis_data=convert_numpy_types(result)
+                )
+                db.session.add(analysis_history)
+                db.session.commit()
+                logger.info(f"首次分析已保存: {ticker} (用户: {g.user_id})")
+            except Exception as e:
+                logger.error(f"保存首次分析失败: {e}")
+                db.session.rollback()
+
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'is_first_time': is_first_time,
+            'from_history': False
+        })
+
+    except Exception as e:
+        logger.error(f"获取股票摘要失败 {ticker}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': f'获取摘要失败: {str(e)}'}), 500

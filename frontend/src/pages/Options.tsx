@@ -2,11 +2,17 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import OptionsAnalysisHistory from '@/components/OptionsAnalysisHistory';
 import HistoryStorage from '@/lib/historyStorage';
 import { useTaskPolling } from '@/hooks/useTaskPolling';
-import StockSearchInput from '@/components/ui/StockSearchInput';
+import MultiStockInput from '@/components/ui/MultiStockInput';
+import { KlineChart, type OHLCData } from '@/components/ui/KlineChart';
+import { useTranslation } from 'react-i18next';
+import { Helmet } from 'react-helmet-async';
+import { useToastHelpers } from '@/components/ui/toast';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
+import KBQuickLink from '@/components/KBQuickLink';
 
 // Declare global types for Chart.js
 declare global {
@@ -106,18 +112,23 @@ const styles = `
 
     @media (max-width: 640px) {
         .option-table {
-            font-size: 0.7rem;
+            font-size: 0.75rem;
         }
 
         .option-table th {
-            font-size: 0.65rem;
+            font-size: 0.7rem;
             padding: 0.4rem 0.2rem;
         }
 
         .option-table th,
         .option-table td {
             padding: 0.5rem 0.25rem;
-            min-width: 60px;
+            min-width: 50px;
+        }
+
+        /* 移动端隐藏次要列 */
+        .hidden-mobile {
+            display: none !important;
         }
     }
 
@@ -298,6 +309,36 @@ const styles = `
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
 
+    /* 单行图标版五支柱 */
+    .pillar-icon {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        background: rgba(13, 155, 151, 0.15);
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--primary);
+        cursor: help;
+        transition: all 0.2s;
+    }
+
+    .pillar-icon:hover {
+        background: rgba(13, 155, 151, 0.25);
+    }
+
+    .pillar-icon-text {
+        font-size: 0.7rem;
+    }
+
+    @media (max-width: 640px) {
+        .pillar-icon-text {
+            display: none;
+        }
+        .pillar-icon {
+            padding: 0.35rem;
+        }
+    }
+
     .style-badge {
         background: var(--muted);
         border: 1px solid var(--border);
@@ -401,6 +442,244 @@ const styles = `
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Step Wizard Styles */
+    .step-wizard {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        padding: 0 0.5rem;
+    }
+
+    .step-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 2rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        transition: all 0.3s;
+        white-space: nowrap;
+    }
+
+    .step-indicator.completed {
+        color: var(--bull);
+    }
+
+    .step-indicator.active {
+        color: var(--primary);
+        background: rgba(13, 155, 151, 0.1);
+    }
+
+    .step-indicator.pending {
+        color: var(--muted-foreground);
+        opacity: 0.5;
+    }
+
+    .step-number {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .step-indicator.completed .step-number {
+        background: var(--bull);
+        color: white;
+    }
+
+    .step-indicator.active .step-number {
+        background: var(--primary);
+        color: white;
+        box-shadow: 0 0 0 3px rgba(13, 155, 151, 0.2);
+    }
+
+    .step-indicator.pending .step-number {
+        background: var(--muted);
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+    }
+
+    .step-connector {
+        width: 24px;
+        height: 1px;
+        background: var(--border);
+        flex-shrink: 0;
+    }
+
+    .step-connector.done {
+        background: var(--bull);
+    }
+
+    @media (max-width: 640px) {
+        .step-indicator span:not(.step-number) { display: none; }
+        .step-indicator { padding: 0.25rem; }
+        .step-connector { width: 16px; }
+    }
+
+    /* Step Section Card */
+    .step-section {
+        position: relative;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid var(--border);
+        background: var(--card);
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+        z-index: 1;
+    }
+
+    /* Ensure earlier steps stack above later ones so dropdowns aren't clipped */
+    .step-section:nth-child(2) { z-index: 5; }  /* Step 1 (after wizard) */
+    .step-section:nth-child(3) { z-index: 4; }  /* Step 2 */
+    .step-section:nth-child(4) { z-index: 3; }  /* Step 3 */
+    .step-section:nth-child(5) { z-index: 2; }  /* Step 4 */
+
+    .step-section.active-step {
+        border-color: rgba(13, 155, 151, 0.4);
+        background: linear-gradient(135deg, rgba(13, 155, 151, 0.03) 0%, var(--card) 100%);
+    }
+
+    .step-section.completed-step {
+        border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .step-section.disabled-step {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    .step-section-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: var(--foreground);
+    }
+
+    .step-section-label .step-badge {
+        font-size: 0.65rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.25rem;
+        font-weight: 700;
+    }
+
+    .step-section-label .step-badge.active {
+        background: var(--primary);
+        color: white;
+    }
+
+    .step-section-label .step-badge.done {
+        background: var(--bull);
+        color: white;
+    }
+
+    .step-section-label .step-badge.waiting {
+        background: var(--muted);
+        color: var(--muted-foreground);
+    }
+
+    /* Load Dates Button */
+    .load-dates-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        border: 2px dashed var(--primary);
+        background: rgba(13, 155, 151, 0.05);
+        color: var(--primary);
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .load-dates-btn:hover:not(:disabled) {
+        background: rgba(13, 155, 151, 0.12);
+        border-style: solid;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(13, 155, 151, 0.15);
+    }
+
+    .load-dates-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        border-color: var(--border);
+        color: var(--muted-foreground);
+        background: transparent;
+    }
+
+    .load-dates-btn.loading {
+        border-style: solid;
+        background: rgba(13, 155, 151, 0.08);
+        cursor: wait;
+    }
+
+    /* Skeleton Loading */
+    @keyframes shimmer {
+        0% { background-position: -200px 0; }
+        100% { background-position: calc(200px + 100%) 0; }
+    }
+
+    .skeleton-pill {
+        display: inline-block;
+        height: 32px;
+        border-radius: 0.375rem;
+        background: linear-gradient(90deg, var(--muted) 25%, rgba(255,255,255,0.05) 50%, var(--muted) 75%);
+        background-size: 200px 100%;
+        animation: shimmer 1.5s ease-in-out infinite;
+    }
+
+    /* Start Analysis Button - prominent */
+    .start-analysis-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.9rem 2rem;
+        border-radius: 0.75rem;
+        border: none;
+        background: linear-gradient(135deg, hsl(178, 78%, 32%) 0%, hsl(178, 78%, 26%) 100%);
+        color: white;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 12px rgba(13, 155, 151, 0.25);
+    }
+
+    .start-analysis-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(13, 155, 151, 0.35);
+        filter: brightness(1.1);
+    }
+
+    .start-analysis-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Risk Warning Collapse Animation */
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
     /* Option Detail Modal - Compact */
     .option-modal-overlay {
         position: fixed;
@@ -420,12 +699,18 @@ const styles = `
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 10px;
-        max-width: 480px;
+        max-width: 900px;
         width: 100%;
         max-height: 85vh;
         overflow-y: auto;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
         position: relative;
+    }
+
+    @media (max-width: 768px) {
+        .option-modal {
+            max-width: 95vw;
+        }
     }
 
     .option-modal-header {
@@ -473,30 +758,84 @@ const styles = `
 
     .option-info-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(7, 1fr);
         gap: 0.5rem;
         margin-bottom: 0.75rem;
     }
 
+    @media (max-width: 768px) {
+        .option-info-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+
+    @media (max-width: 480px) {
+        .option-info-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
     .option-info-item {
         background: var(--muted);
-        padding: 0.5rem;
+        padding: 0.5rem 0.625rem;
         border-radius: 6px;
         border-left: 2px solid var(--primary);
+        min-width: 0;
     }
 
     .option-info-label {
         font-size: 0.65rem;
         color: var(--muted-foreground);
         margin-bottom: 0.125rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .option-info-value {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         font-weight: 600;
+        color: var(--foreground);
+        white-space: nowrap;
+    }
+
+    .option-risk-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .option-risk-item {
+        flex: 1;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .option-risk-item.loss {
+        background: var(--bear);
+        color: white;
+    }
+
+    .option-risk-item.margin {
+        background: var(--muted);
+        border: 1px solid var(--border);
         color: var(--foreground);
     }
 
+    .option-risk-label {
+        font-size: 0.75rem;
+        opacity: 0.9;
+    }
+
+    .option-risk-value {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    /* Keep backward compatibility */
     .option-max-loss {
         background: var(--bear);
         color: white;
@@ -549,6 +888,7 @@ type RiskReturnProfile = {
 
 type OptionData = {
     identifier: string;
+    symbol?: string;  // Stock symbol for multi-stock mode
     strike: number;
     latest_price: number;
     bid_price: number;
@@ -561,7 +901,8 @@ type OptionData = {
     theta?: number;
     vega?: number;
     put_call: string;
-    expiry_date: string;
+    expiry_date?: string;  // Expiry date for multi-date mode
+    days_to_expiry?: number;  // Days until expiration
     premium?: number;
     risk_return_profile?: RiskReturnProfile;  // 兼容旧格式
     scores?: {
@@ -574,7 +915,12 @@ type OptionData = {
         bcrv?: number;
         bprv?: number;
         iv_rank?: number;
-        risk_return_profile?: RiskReturnProfile;  // 新增：风险收益风格标签
+        days_to_expiry?: number;
+        margin_requirement?: number;
+        risk_return_profile?: RiskReturnProfile;  // 风险收益风格标签
+        // 临期风险警告（新增）
+        is_daily_option?: boolean;      // 是否为日权(0DTE/1DTE)
+        expiry_warning?: string;        // 临期风险警告标签
     };
 };
 
@@ -590,29 +936,67 @@ type OptionChainResponse = {
     puts: OptionData[];
     real_stock_price?: number;
     data_source?: string;
+    market_info?: {
+        market: string;
+        currency: string;
+        contract_multiplier: number;
+        cash_settlement: boolean;
+    };
+    commodity_info?: {
+        product: string;
+        product_name: string;
+        exchange: string;
+        dominant_contract: string;
+        delivery_risk: {
+            days_to_delivery: number;
+            is_red_zone: boolean;
+            is_warning_zone: boolean;
+            delivery_penalty: number;
+            warning: string;
+            recommendation: string;
+            delivery_month: string;
+        };
+        has_night_session: boolean;
+        product_multiplier: number;
+    };
+};
+
+const getCurrencySymbol = (currency?: string): string => {
+    switch (currency) {
+        case 'HKD': return 'HK$';
+        case 'CNY': return '¥';
+        default: return '$';
+    }
 };
 
 // Strategy types
 type Strategy = 'sell_put' | 'buy_put' | 'sell_call' | 'buy_call';
 
-const strategyLabels: Record<Strategy, string> = {
-    'sell_put': 'Sell Put (卖出看跌)',
-    'buy_put': 'Buy Put (买入看跌)',
-    'sell_call': 'Sell Call (卖出看涨)',
-    'buy_call': 'Buy Call (买入看涨)'
-};
+// Strategy labels will be set inside the component using translations
 
 export default function Options() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    const { t, i18n } = useTranslation();
+    const isZh = i18n.language.startsWith('zh');
 
-    const [ticker, setTicker] = useState('AAPL');
+    // Strategy labels with translations
+    const strategyLabels: Record<Strategy, string> = {
+        'sell_put': `Sell Put (${t('options.strategy.sellPut')})`,
+        'buy_put': `Buy Put (${t('options.strategy.buyPut')})`,
+        'sell_call': `Sell Call (${t('options.strategy.sellCall')})`,
+        'buy_call': `Buy Call (${t('options.strategy.buyCall')})`
+    };
+
+    const [tickers, setTickers] = useState<string[]>([]);
     const [expirations, setExpirations] = useState<ExpirationDate[]>([]);
-    const [selectedExpiry, setSelectedExpiry] = useState('');
+    const [selectedExpiries, setSelectedExpiries] = useState<string[]>([]);  // Multi-date support (max 2)
     const [chain, setChain] = useState<OptionChainResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [expirationsLoading, setExpirationsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [allowedSymbols, setAllowedSymbols] = useState<string[]>([]);
     const [strategy, setStrategy] = useState<Strategy>('sell_put');
     const [stockPrice, setStockPrice] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState('analysis');
@@ -626,6 +1010,13 @@ export default function Options() {
     // Filter state
     const [strikeRange, setStrikeRange] = useState<[number, number]>([0, 0]);
     const [returnRange, setReturnRange] = useState<[number, number]>([0, 0]);
+    const [selectedRiskStyle, setSelectedRiskStyle] = useState<string | null>(null);
+    const [tickerFilter, setTickerFilter] = useState<string[]>([]);  // Multi-stock filter
+    const [expiryFilter, setExpiryFilter] = useState<string[]>([]);  // Multi-expiry filter
+    const [activeExpiryTab, setActiveExpiryTab] = useState<'near' | 'weekly' | 'monthly'>('monthly');  // 到期日标签页
+
+    // View mode state (analysis vs income)
+    const [viewMode, setViewMode] = useState<'analysis' | 'income'>('analysis');
 
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
@@ -634,24 +1025,253 @@ export default function Options() {
     // Option detail modal state
     const [selectedOption, setSelectedOption] = useState<OptionData | null>(null);
     const [stockHistory, setStockHistory] = useState<{ dates: string[], prices: number[] } | null>(null);
+    const [stockHistoryOHLC, setStockHistoryOHLC] = useState<OHLCData[] | null>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
-    // Initialize task polling hook
-    const { startPolling } = useTaskPolling({
+    // Risk warning collapse state - default collapsed, persisted in localStorage
+    const [riskExpanded, setRiskExpanded] = useState(() => {
+        return localStorage.getItem('optionsRiskExpanded') === 'true';
+    });
+
+    // (Quota confirmation dialog removed - analysis starts directly if user has enough credits)
+
+    const toast = useToastHelpers();
+
+    // Filter panel collapse state - default expanded, persisted in localStorage
+    const [filterExpanded, setFilterExpanded] = useState(() => {
+        const stored = localStorage.getItem('optionsFilterExpanded');
+        // Default to true (expanded) if not set
+        return stored === null ? true : stored === 'true';
+    });
+
+    // 表格次要列展开状态 - 默认收起（Delta, IV, Bid/Ask 等）
+    const [showAdvancedColumns, setShowAdvancedColumns] = useState(() => {
+        return localStorage.getItem('optionsShowAdvancedColumns') === 'true';
+    });
+
+    // High liquidity filter state
+    const [highLiquidityOnly, setHighLiquidityOnly] = useState(false);
+
+    // 监听导航栏点击重置状态
+    useEffect(() => {
+        const resetState = (location.state as { reset?: number })?.reset;
+        if (resetState) {
+            // 重置所有状态到初始值
+            setTickers([]);
+            setExpirations([]);
+            setSelectedExpiries([]);
+            setChain(null);
+            setLoading(false);
+            setError('');
+            setAllowedSymbols([]);
+            setStrategy('sell_put');
+            setStockPrice(null);
+            setActiveTab('analysis');
+            setHistoricalChain(null);
+            setIsHistoricalView(false);
+            setSortColumn('score');
+            setSortDirection('desc');
+            setStrikeRange([0, 0]);
+            setReturnRange([0, 0]);
+            setSelectedRiskStyle(null);
+            setTickerFilter([]);
+            setExpiryFilter([]);
+            setViewMode('analysis');
+            setTaskProgress(0);
+            setTaskStep('');
+            setSelectedOption(null);
+            setStockHistory(null);
+            setStockHistoryOHLC(null);
+            // 清除 refs
+            pendingTasksRef.current.clear();
+            completedResultsRef.current.clear();
+            expectedTickersRef.current = [];
+            // 清除导航状态，防止刷新页面时再次触发重置
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [(location.state as { reset?: number })?.reset]);
+
+    // Multi-stock task tracking
+    const pendingTasksRef = useRef<Map<string, { symbol: string; taskId: string }>>(new Map());
+    const completedResultsRef = useRef<Map<string, OptionChainResponse>>(new Map());
+    const expectedTickersRef = useRef<string[]>([]);
+
+    // Helper function to merge multiple chain results (supports multi-symbol + multi-expiry)
+    const mergeChainResults = (results: Map<string, OptionChainResponse>): OptionChainResponse => {
+        const allCalls: OptionData[] = [];
+        const allPuts: OptionData[] = [];
+        let firstSymbol = '';
+        let firstExpiry = '';
+        let avgStockPrice = 0;
+        let priceCount = 0;
+        const uniqueSymbols = new Set<string>();
+        const uniqueExpiries = new Set<string>();
+
+        results.forEach((chainData, taskKey) => {
+            // taskKey format: symbol_expiry
+            const [symbol, expiry] = taskKey.includes('_')
+                ? taskKey.split('_')
+                : [chainData.symbol, chainData.expiry_date];
+
+            uniqueSymbols.add(symbol);
+            uniqueExpiries.add(expiry);
+
+            if (!firstSymbol) {
+                firstSymbol = symbol;
+                firstExpiry = expiry;
+            }
+
+            // Add symbol AND expiry_date to each option for filtering/display
+            const callsWithMeta = (chainData.calls || []).map(opt => ({
+                ...opt,
+                symbol: symbol,
+                expiry_date: expiry
+            }));
+            const putsWithMeta = (chainData.puts || []).map(opt => ({
+                ...opt,
+                symbol: symbol,
+                expiry_date: expiry
+            }));
+
+            allCalls.push(...callsWithMeta);
+            allPuts.push(...putsWithMeta);
+
+            if (chainData.real_stock_price) {
+                avgStockPrice += chainData.real_stock_price;
+                priceCount++;
+            }
+        });
+
+        // Sort by score descending (will be re-sorted by strategy later)
+        const sortByScore = (a: OptionData, b: OptionData) => {
+            const scoreA = a.scores?.total_score || 0;
+            const scoreB = b.scores?.total_score || 0;
+            return scoreB - scoreA;
+        };
+
+        allCalls.sort(sortByScore);
+        allPuts.sort(sortByScore);
+
+        return {
+            symbol: uniqueSymbols.size > 1 ? Array.from(uniqueSymbols).join(', ') : firstSymbol,
+            expiry_date: uniqueExpiries.size > 1 ? Array.from(uniqueExpiries).sort().join(', ') : firstExpiry,
+            calls: allCalls,
+            puts: allPuts,
+            real_stock_price: priceCount > 0 ? avgStockPrice / priceCount : undefined,
+            data_source: 'merged'
+        };
+    };
+
+    // Handle task completion for multi-stock/multi-expiry mode
+    const handleTaskComplete = (taskResult: OptionChainResponse, taskKey: string) => {
+        console.log(`Task completed for ${taskKey}:`, taskResult);
+
+        // Store the result with taskKey (symbol_expiry)
+        completedResultsRef.current.set(taskKey, taskResult);
+
+        // Remove from pending tasks
+        pendingTasksRef.current.delete(taskKey);
+
+        // Check if all tasks are complete
+        const expectedTasks = expectedTickersRef.current;
+        const completedCount = completedResultsRef.current.size;
+        const totalCount = expectedTasks.length;
+
+        setTaskProgress(Math.round((completedCount / totalCount) * 100));
+        setTaskStep(t('options.multiStock.progress', { completed: completedCount, total: totalCount }));
+
+        if (completedCount === totalCount) {
+            // All tasks completed - merge results
+            const mergedChain = mergeChainResults(completedResultsRef.current);
+            setChain(mergedChain);
+
+            if (mergedChain.real_stock_price) {
+                setStockPrice(mergedChain.real_stock_price);
+            }
+
+            setLoading(false);
+            setTaskProgress(100);
+            setTaskStep(t('options.taskComplete'));
+
+            // Save to browser history (use first expiry for backwards compat)
+            HistoryStorage.saveOptionAnalysis({
+                symbol: tickers.join(', '),
+                expiryDate: selectedExpiries[0] || '',
+                analysisType: 'chain',
+                data: mergedChain
+            });
+
+            // Clear refs for next request
+            completedResultsRef.current.clear();
+            pendingTasksRef.current.clear();
+            expectedTickersRef.current = [];
+        }
+    };
+
+    // Helper function to poll a single task with expiry info
+    const pollTaskWithExpiry = async (taskId: string, symbol: string, expiry: string) => {
+        const taskKey = `${symbol}_${expiry}`;
+        const poll = async () => {
+            try {
+                const response = await api.get(`/tasks/${taskId}/status`);
+                const status = response.data;
+
+                if (status.status === 'completed') {
+                    const resultResponse = await api.get(`/tasks/${taskId}/result`);
+                    // Attach expiry_date to result for display purposes
+                    const resultData = {
+                        ...resultResponse.data.result_data,
+                        expiry_date: expiry
+                    };
+                    handleTaskComplete(resultData, taskKey);
+                } else if (status.status === 'failed') {
+                    console.error(`Task failed for ${taskKey}:`, status.error_message);
+                    // Still mark as complete but with empty data
+                    handleTaskComplete({
+                        symbol,
+                        expiry_date: expiry,
+                        calls: [],
+                        puts: [],
+                    }, taskKey);
+                } else {
+                    // Continue polling
+                    setTimeout(poll, 2000);
+                }
+            } catch (error) {
+                console.error(`Polling error for ${taskKey}:`, error);
+                handleTaskComplete({
+                    symbol,
+                    expiry_date: expiry,
+                    calls: [],
+                    puts: [],
+                }, taskKey);
+            }
+        };
+
+        poll();
+    };
+
+    // Initialize task polling hook for single stock fallback
+    useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Options task completed:', taskResult);
+            console.log('real_stock_price in taskResult:', taskResult?.real_stock_price);
+            console.log('taskResult keys:', taskResult ? Object.keys(taskResult) : 'null');
             setChain(taskResult);
-            if (taskResult.real_stock_price) {
+            if (taskResult?.real_stock_price) {
+                console.log('Setting stockPrice to:', taskResult.real_stock_price);
                 setStockPrice(taskResult.real_stock_price);
+            } else {
+                console.warn('real_stock_price not found in taskResult');
             }
             setLoading(false);
             setTaskProgress(100);
-            setTaskStep('期权分析完成！');
+            setTaskStep(t('options.taskComplete'));
 
             // Save to browser history
             HistoryStorage.saveOptionAnalysis({
-                symbol: ticker,
-                expiryDate: selectedExpiry,
+                symbol: tickers[0] || '',
+                expiryDate: selectedExpiries[0] || '',
                 analysisType: 'chain',
                 data: taskResult
             });
@@ -669,34 +1289,77 @@ export default function Options() {
         }
     });
 
-    // Fetch Expirations
+    // Fetch Expirations for multiple stocks
     const fetchExpirations = async () => {
-        if (!ticker) {
-            setError('请输入股票代码');
+        if (tickers.length === 0) {
+            setError(t('options.form.enterTicker'));
             return;
         }
         setExpirationsLoading(true);
         setError('');
+        setAllowedSymbols([]);
         setExpirations([]);
-        setSelectedExpiry('');
+        setSelectedExpiries([]);
         setChain(null);
 
         try {
-            const response = await api.get(`/options/expirations/${ticker}`);
-            setExpirations(response.data.expirations || []);
+            // Parallel fetch expirations for all stocks
+            const results = await Promise.all(
+                tickers.map(t => api.get(`/options/expirations/${t}`))
+            );
+
+            // Get all expiration dates arrays
+            const allExpirations = results.map(r => r.data.expirations || []);
+
+            if (tickers.length === 1) {
+                // Single stock mode - use all expirations
+                setExpirations(allExpirations[0]);
+            } else {
+                // Multi stock mode - calculate intersection
+                const dateMap = new Map<string, { date: string; period_tag?: string; count: number }>();
+
+                allExpirations.forEach(exps => {
+                    exps.forEach((exp: ExpirationDate) => {
+                        const existing = dateMap.get(exp.date);
+                        if (existing) {
+                            existing.count += 1;
+                        } else {
+                            dateMap.set(exp.date, { date: exp.date, period_tag: exp.period_tag, count: 1 });
+                        }
+                    });
+                });
+
+                // Filter to only dates that appear in all stocks
+                const intersection = Array.from(dateMap.values())
+                    .filter(exp => exp.count === tickers.length)
+                    .map(({ date, period_tag }) => ({ date, period_tag }))
+                    .sort((a, b) => a.date.localeCompare(b.date));
+
+                if (intersection.length === 0) {
+                    setError(t('options.multiStock.noCommonExpiry'));
+                    setExpirations([]);
+                } else {
+                    setExpirations(intersection);
+                }
+            }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to fetch expirations');
+            const errorData = err.response?.data;
+            setError(errorData?.error || 'Failed to fetch expirations');
+            if (errorData?.allowed_symbols) {
+                setAllowedSymbols(errorData.allowed_symbols);
+            }
         } finally {
             setExpirationsLoading(false);
         }
     };
 
-    // Fetch Chain
-    const fetchChain = async (expiry: string) => {
-        if (!ticker || !expiry) return;
+    // Fetch Chain for multiple stocks and multiple expiries
+    const fetchChain = async (expiries: string[]) => {
+        if (tickers.length === 0 || expiries.length === 0) return;
         setLoading(true);
         setError('');
+        setAllowedSymbols([]);
         setTaskProgress(0);
         setTaskStep('');
 
@@ -704,35 +1367,121 @@ export default function Options() {
         setIsHistoricalView(false);
         setHistoricalChain(null);
 
+        // Clear previous results
+        completedResultsRef.current.clear();
+        pendingTasksRef.current.clear();
+
+        // Track expected tasks by symbol_expiry key
+        const expectedTasks: string[] = [];
+        tickers.forEach(symbol => {
+            expiries.forEach(expiry => {
+                expectedTasks.push(`${symbol}_${expiry}`);
+            });
+        });
+        expectedTickersRef.current = expectedTasks;
+
         try {
-            // Create async task for options chain analysis
-            const response = await api.post(`/options/chain/${ticker}/${expiry}`, {
-                async: true // Use async mode
+            const totalQueries = tickers.length * expiries.length;
+
+            // Use batch API for all cases (supports multi-symbol + multi-expiry)
+            setTaskStep(t('options.multiStock.startingTasks', { count: totalQueries }));
+
+            const response = await api.post('/options/chain/batch', {
+                symbols: tickers,
+                expiries: expiries
             });
 
-            if (response.data.success && response.data.task_id) {
-                console.log('Options task created:', response.data.task_id);
-                setTaskStep('任务已创建，开始期权分析...');
+            if (response.data.success && response.data.task_ids) {
+                console.log('Batch options tasks created:', response.data.task_ids);
 
-                // Start polling for task status
-                startPolling(response.data.task_id);
+                // Start polling for each task
+                response.data.task_ids.forEach((taskInfo: { symbol: string; expiry: string; task_id: string }) => {
+                    const taskKey = `${taskInfo.symbol}_${taskInfo.expiry}`;
+                    pendingTasksRef.current.set(taskKey, {
+                        symbol: taskKey,
+                        taskId: taskInfo.task_id
+                    });
+                    // Start polling for this task
+                    pollTaskWithExpiry(taskInfo.task_id, taskInfo.symbol, taskInfo.expiry);
+                });
             } else {
-                setError(response.data.error || 'Failed to create options analysis task');
+                setError(response.data.error || 'Failed to create options analysis tasks');
                 setLoading(false);
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.error || 'Failed to start options analysis');
+            const errorData = err.response?.data;
+            setError(errorData?.error || 'Failed to start options analysis');
+            if (errorData?.allowed_symbols) {
+                setAllowedSymbols(errorData.allowed_symbols);
+            }
             setLoading(false);
         }
     };
 
-    // When expiry selected, fetch chain
-    const handleExpirySelect = (expiry: string) => {
-        setSelectedExpiry(expiry);
-        // 选择到期日后立即运行分析（此时策略和股票代码都已选择）
-        if (expiry && strategy && ticker) {
-            fetchChain(expiry);
+    // Check quota before analysis (supports multiple expiries)
+    const checkQuotaAndStart = async (expiries: string[]) => {
+        if (!user) {
+            navigate('/login');
+            return;
+        }
+
+        // Show loading immediately so user gets feedback
+        setLoading(true);
+        setError('');
+
+        // Calculate total queries = symbols × expiries
+        const totalQueries = tickers.length * expiries.length;
+
+        try {
+            const response = await api.post('/payment/check-quota', {
+                service_type: 'option_analysis',
+                amount: totalQueries
+            });
+
+            const data = response.data;
+
+            // 如果额度不足（免费+付费都不够），才提示并跳转
+            if (!data.has_enough) {
+                setLoading(false);
+                const totalAvailable = (data.free_remaining || 0) + (data.paid_credits || 0);
+                toast.error(
+                    t('options.quota.insufficient'),
+                    t('options.quota.insufficientDesc', { needed: totalQueries, remaining: totalAvailable })
+                );
+                navigate('/pricing');
+                return;
+            }
+
+            // 额度充足 → 直接开始分析，不弹窗
+            fetchChain(expiries);
+
+        } catch (err) {
+            console.error('Quota check failed:', err);
+            // 如果检查失败，仍然允许继续（后端会做最终检查）
+            fetchChain(expiries);
+        }
+    };
+
+    // Toggle expiry date selection (max 2)
+    const handleExpiryToggle = (expiry: string) => {
+        setSelectedExpiries(prev => {
+            if (prev.includes(expiry)) {
+                // Deselect
+                return prev.filter(e => e !== expiry);
+            } else if (prev.length < 2) {
+                // Add if under limit
+                return [...prev, expiry].sort();
+            }
+            // At limit, don't add
+            return prev;
+        });
+    };
+
+    // Start analysis with selected expiries
+    const handleStartAnalysis = () => {
+        if (selectedExpiries.length > 0 && strategy && tickers.length > 0) {
+            checkQuotaAndStart(selectedExpiries);
         }
     };
 
@@ -793,12 +1542,59 @@ export default function Options() {
                     });
                 }
             }
+
+            // Apply risk style filter
+            if (selectedRiskStyle) {
+                options = options.filter(opt => {
+                    const profile = opt.scores?.risk_return_profile || opt.risk_return_profile;
+                    return profile?.style === selectedRiskStyle;
+                });
+            }
+
+            // Apply ticker filter (multi-stock mode)
+            if (tickerFilter.length > 0) {
+                options = options.filter(opt => {
+                    const optSymbol = opt.symbol || displayChain?.symbol || '';
+                    return tickerFilter.includes(optSymbol);
+                });
+            }
+
+            // Apply expiry filter (multi-date mode)
+            if (expiryFilter.length > 0) {
+                options = options.filter(opt => {
+                    const optExpiry = opt.expiry_date || displayChain?.expiry_date || '';
+                    return expiryFilter.includes(optExpiry);
+                });
+            }
+
+            // Apply high liquidity filter
+            if (highLiquidityOnly) {
+                options = options.filter(opt => {
+                    return (opt.open_interest || 0) >= 100 && (opt.volume || 0) >= 10;
+                });
+            }
         } catch (error) {
             console.error('Error applying filters:', error);
         }
 
         // Sort based on selected column and direction
         options.sort((a, b) => {
+            // Handle symbol sorting separately (string comparison)
+            if (sortColumn === 'symbol') {
+                const symbolA = (a.symbol || displayChain?.symbol || '').toUpperCase();
+                const symbolB = (b.symbol || displayChain?.symbol || '').toUpperCase();
+                const diff = symbolA.localeCompare(symbolB);
+                return sortDirection === 'asc' ? diff : -diff;
+            }
+
+            // Handle expiry_date sorting (string comparison)
+            if (sortColumn === 'expiry_date') {
+                const expiryA = a.expiry_date || displayChain?.expiry_date || '';
+                const expiryB = b.expiry_date || displayChain?.expiry_date || '';
+                const diff = expiryA.localeCompare(expiryB);
+                return sortDirection === 'asc' ? diff : -diff;
+            }
+
             let valueA: number | null = null;
             let valueB: number | null = null;
 
@@ -881,58 +1677,67 @@ export default function Options() {
     // Use historical chain data if viewing history, otherwise use current chain
     const displayChain = isHistoricalView ? historicalChain : chain;
     const displayStockPrice = isHistoricalView ? (historicalChain?.real_stock_price || stockPrice) : stockPrice;
+    const cs = getCurrencySymbol(displayChain?.market_info?.currency);
 
     // Handle option click to show detail modal
     const handleOptionClick = async (option: OptionData) => {
         setSelectedOption(option);
         setLoadingHistory(true);
-        
+
         // Fetch stock history (1 month)
         try {
-            const response = await api.get(`/options/history/${ticker}`, {
+            const stockSymbol = option.symbol || (tickers.length === 1 ? tickers[0] : displayChain?.symbol) || '';
+            const response = await api.get(`/options/history/${stockSymbol}`, {
                 params: { days: 30 }
             });
-            
+
             console.log('Stock history API response:', response.data);
-            
-            if (response.data) {
-                let dates: string[] = [];
-                let prices: number[] = [];
-                
+
+            if (response.data && response.data.data && Array.isArray(response.data.data)) {
                 // API returns: {symbol: string, data: [{time, open, high, low, close}]}
-                if (response.data.data && Array.isArray(response.data.data)) {
-                    const data = response.data.data;
-                    dates = data.map((item: any) => {
-                        if (item.time) {
-                            const date = new Date(item.time * 1000); // time is in seconds
-                            return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-                        }
-                        return '';
-                    }).filter((d: string) => d);
-                    
-                    prices = data.map((item: any) => {
-                        const price = item.close || item.price || 0;
-                        return typeof price === 'number' ? price : parseFloat(price);
-                    }).filter((p: number) => !isNaN(p) && p > 0);
-                } 
-                // Fallback: if already in {dates, prices} format
-                else if (response.data.dates && response.data.prices) {
-                    dates = response.data.dates;
-                    prices = response.data.prices.map((p: any) => typeof p === 'number' ? p : parseFloat(p)).filter((p: number) => !isNaN(p) && p > 0);
-                }
-                
-                if (dates.length > 0 && prices.length > 0 && dates.length === prices.length) {
-                    console.log('Setting stock history:', { datesCount: dates.length, pricesCount: prices.length });
+                const data = response.data.data;
+
+                // Build OHLC data for KlineChart
+                const ohlcData: OHLCData[] = data
+                    .filter((item: any) => item.time && item.open && item.high && item.low && item.close)
+                    .map((item: any) => ({
+                        time: item.time,
+                        open: typeof item.open === 'number' ? item.open : parseFloat(item.open),
+                        high: typeof item.high === 'number' ? item.high : parseFloat(item.high),
+                        low: typeof item.low === 'number' ? item.low : parseFloat(item.low),
+                        close: typeof item.close === 'number' ? item.close : parseFloat(item.close),
+                    }));
+
+                // Build dates/prices for Chart.js line chart
+                const dates = data.map((item: any) => {
+                    if (item.time) {
+                        const date = new Date(item.time * 1000);
+                        return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                    }
+                    return '';
+                }).filter((d: string) => d);
+
+                const prices = data.map((item: any) => {
+                    const price = item.close || item.price || 0;
+                    return typeof price === 'number' ? price : parseFloat(price);
+                }).filter((p: number) => !isNaN(p) && p > 0);
+
+                if (ohlcData.length > 0 && dates.length > 0 && prices.length > 0) {
+                    console.log('Setting stock history:', { ohlcCount: ohlcData.length, lineCount: prices.length });
+                    setStockHistoryOHLC(ohlcData);
                     setStockHistory({ dates, prices });
                 } else {
-                    console.error('Invalid stock history format:', { datesLength: dates.length, pricesLength: prices.length });
+                    console.error('No valid data found');
+                    setStockHistoryOHLC(null);
                     setStockHistory(null);
                 }
             } else {
+                setStockHistoryOHLC(null);
                 setStockHistory(null);
             }
         } catch (error) {
             console.error('Error fetching stock history:', error);
+            setStockHistoryOHLC(null);
             setStockHistory(null);
         } finally {
             setLoadingHistory(false);
@@ -943,44 +1748,7 @@ export default function Options() {
     const closeModal = () => {
         setSelectedOption(null);
         setStockHistory(null);
-    };
-
-    // Calculate max loss for option
-    const calculateMaxLoss = (option: OptionData, currentStockPrice: number): number => {
-        const premium = option.premium || ((option.bid_price + option.ask_price) / 2) || option.latest_price || 0;
-        
-        if (strategy === 'sell_put') {
-            // Sell Put: Max loss = Strike - Premium (if stock goes to 0)
-            return option.strike - premium;
-        } else if (strategy === 'sell_call') {
-            // Sell Call: Max loss is unlimited, but we calculate theoretical max at 2x current price
-            return (currentStockPrice * 2) - option.strike - premium;
-        } else if (strategy === 'buy_call') {
-            // Buy Call: Max loss = Premium paid
-            return premium;
-        } else { // buy_put
-            // Buy Put: Max loss = Premium paid
-            return premium;
-        }
-    };
-
-    // Calculate stop loss price
-    const calculateStopLoss = (option: OptionData, currentStockPrice: number): number => {
-        const premium = option.premium || ((option.bid_price + option.ask_price) / 2) || option.latest_price || 0;
-        
-        if (strategy === 'sell_put') {
-            // Sell Put: Stop loss when stock price drops below strike - premium * 2
-            return Math.max(0, option.strike - (premium * 2));
-        } else if (strategy === 'sell_call') {
-            // Sell Call: Stop loss when stock price rises above strike + premium * 2
-            return option.strike + (premium * 2);
-        } else if (strategy === 'buy_call') {
-            // Buy Call: Stop loss at 50% of premium
-            return currentStockPrice; // Stop loss is based on option price, not stock price
-        } else { // buy_put
-            // Buy Put: Stop loss at 50% of premium
-            return currentStockPrice; // Stop loss is based on option price, not stock price
-        }
+        setStockHistoryOHLC(null);
     };
 
     // Get all options using useMemo to avoid recalculating on every render
@@ -1053,7 +1821,7 @@ export default function Options() {
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="text-center">
                     <div className="spinner mx-auto mb-4"></div>
-                    <p className="text-white">正在加载...</p>
+                    <p className="text-white">{t('common.loading')}</p>
                 </div>
             </div>
         );
@@ -1062,9 +1830,9 @@ export default function Options() {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 text-white">
-                <h2 className="text-2xl font-bold">请登录以访问期权分析</h2>
+                <h2 className="text-2xl font-bold">{t('options.loginRequired')}</h2>
                 <Button onClick={() => navigate('/login')} className="btn-primary">
-                    登录
+                    {t('auth.login')}
                 </Button>
             </div>
         );
@@ -1089,6 +1857,36 @@ export default function Options() {
 
     const topRecommendations = getTopRecommendations();
 
+    // 计算推荐组合的收入汇总
+    const portfolioSummary = (() => {
+        if (topRecommendations.length === 0) return null;
+
+        let totalPremium = 0;
+        let totalMargin = 0;
+        const daysToExpiry = topRecommendations[0]?.scores?.days_to_expiry || 30;
+
+        topRecommendations.forEach(opt => {
+            const premium = opt.bid_price || opt.latest_price || 0;
+            const margin = opt.scores?.margin_requirement || opt.strike * 100;
+
+            totalPremium += premium * 100;  // 每手100股
+            totalMargin += margin;
+        });
+
+        const portfolioReturn = totalMargin > 0 ? (totalPremium / totalMargin) * 100 : 0;
+        // 年化收益率 = 收益率 * (365 / 到期天数)
+        const annualizedReturn = daysToExpiry > 0 ? portfolioReturn * (365 / daysToExpiry) : 0;
+
+        return {
+            totalPremium,
+            totalMargin,
+            portfolioReturn,
+            annualizedReturn,
+            optionCount: topRecommendations.length,
+            daysToExpiry
+        };
+    })();
+
     // Handle column header click for sorting
     const handleSort = (column: string) => {
         if (sortColumn === column) {
@@ -1109,6 +1907,16 @@ export default function Options() {
 
     return (
         <div className="animate-in fade-in" style={{ color: 'var(--foreground)' }}>
+            <Helmet>
+                <title>{isZh ? '期权研究 - AlphaGBM | 智能期权链分析' : 'Options Research - AlphaGBM | Smart Options Chain Analysis'}</title>
+                <meta name="description" content={isZh
+                    ? '使用 AlphaGBM 智能期权分析工具，获取实时期权评分、策略推荐。支持多股票对比，快速找到最佳期权交易机会。'
+                    : 'Use AlphaGBM smart options analysis tool to get real-time option scoring and strategy recommendations. Compare multiple stocks and find the best options trading opportunities.'}
+                />
+                <link rel="canonical" href="https://alphagbm.com/options" />
+                <meta property="og:url" content="https://alphagbm.com/options" />
+                <meta property="og:title" content={isZh ? '期权研究 - AlphaGBM' : 'Options Research - AlphaGBM'} />
+            </Helmet>
             <style>{styles}</style>
 
             {/* Custom Tabs */}
@@ -1132,7 +1940,7 @@ export default function Options() {
                         }}
                     >
                         <i className="bi bi-graph-up mr-2"></i>
-                        期权分析
+                        {t('options.tab.analysis')}
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
@@ -1152,7 +1960,7 @@ export default function Options() {
                         }}
                     >
                         <i className="bi bi-clock-history mr-2"></i>
-                        分析历史
+                        {t('options.tab.history')}
                     </button>
                 </div>
             </div>
@@ -1161,48 +1969,97 @@ export default function Options() {
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
             {/* Error Alert */}
             {error && (
-                <div className="mb-4 p-4 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--bear)', color: 'var(--bear)' }}>
-                    {error}
+                <div className="mb-4">
+                    <ErrorAlert
+                        error={error}
+                        onRetry={() => { if (tickers.length > 0) fetchExpirations(); }}
+                        onDismiss={() => { setError(''); setAllowedSymbols([]); }}
+                        allowedSymbols={allowedSymbols}
+                        onSelectSymbol={(sym) => { setTickers([sym]); setError(''); setAllowedSymbols([]); }}
+                    />
                 </div>
             )}
 
             {/* Controls */}
             <div className="controls-section">
-                <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                <h5 className="mb-3 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                     <i className="bi bi-graph-up"></i>
-                    期权智能分析
+                    {t('options.form.title')}
                 </h5>
 
-                {/* Step 1: 选择股票代码 - 占一行 */}
-                <div className="mb-4 flex items-center gap-3">
-                    <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                        <span style={{ color: ticker ? 'var(--primary)' : 'var(--muted-foreground)' }}>步骤1：</span> 录入股票代码（Symbol)
-                    </label>
-                    <div className="flex-1">
-                        <StockSearchInput
-                            value={ticker}
-                            onChange={setTicker}
-                            placeholder="如 AAPL, NVDA, 苹果, pg"
-                        />
+                {/* Step Progress Indicator */}
+                {(() => {
+                    const step1Done = tickers.length > 0;
+                    const step2Done = step1Done && !!strategy;
+                    const step3Done = step2Done && expirations.length > 0;
+                    const step4Done = step3Done && selectedExpiries.length > 0;
+
+                    const steps = [
+                        { num: 1, label: isZh ? '选股' : 'Stock', done: step1Done, active: !step1Done },
+                        { num: 2, label: isZh ? '策略' : 'Strategy', done: step2Done, active: step1Done && !step2Done },
+                        { num: 3, label: isZh ? '加载日期' : 'Load', done: step3Done, active: step2Done && !step3Done },
+                        { num: 4, label: isZh ? '选择日期' : 'Select', done: step4Done, active: step3Done && !step4Done },
+                    ];
+
+                    return (
+                        <div className="step-wizard">
+                            {steps.map((step, i) => (
+                                <div key={step.num} style={{ display: 'contents' }}>
+                                    {i > 0 && <div className={`step-connector ${steps[i - 1].done ? 'done' : ''}`} />}
+                                    <div className={`step-indicator ${step.done ? 'completed' : step.active ? 'active' : 'pending'}`}>
+                                        <span className="step-number">
+                                            {step.done ? <i className="bi bi-check-lg" style={{ fontSize: '0.65rem' }}></i> : step.num}
+                                        </span>
+                                        <span>{step.label}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
+
+                {/* Step 1: Enter Stock Symbol(s) */}
+                <div className={`step-section ${tickers.length > 0 ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${tickers.length > 0 ? 'done' : 'active'}`}>
+                            {tickers.length > 0 ? <i className="bi bi-check-lg"></i> : '1'}
+                        </span>
+                        {t('options.form.step1Label')}
+                        {tickers.length > 0 && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--bull)', marginLeft: 'auto' }}>
+                                {tickers.join(', ')}
+                            </span>
+                        )}
                     </div>
+                    <MultiStockInput
+                        values={tickers}
+                        onChange={setTickers}
+                        maxCount={3}
+                        placeholder={t('options.multiStock.placeholder')}
+                    />
+                    <p className="text-xs mt-1.5" style={{ color: '#f59e0b', opacity: 0.8 }}>
+                        {i18n.language.startsWith('zh')
+                            ? '* 每次分析消耗 1 次查询额度 (1只股票 1个日期)'
+                            : '* Each analysis uses 1 query credit (1 stock 1 date)'}
+                    </p>
                 </div>
 
-                {/* Step 2: 选择策略 - 占一行 */}
-                <div className="mb-4">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <label className="flex-shrink-0" style={{ color: 'var(--foreground)', fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <span style={{ color: strategy ? 'var(--primary)' : (ticker ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤2：</span> 选择策略（Strategy)
-                        </label>
-                        <div className="flex gap-2 flex-1 flex-wrap" style={{ minWidth: 0 }}>
+                {/* Step 2: Select Strategy */}
+                <div className={`step-section ${!tickers.length ? 'disabled-step' : strategy ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${strategy && tickers.length > 0 ? 'done' : tickers.length > 0 ? 'active' : 'waiting'}`}>
+                            {strategy && tickers.length > 0 ? <i className="bi bi-check-lg"></i> : '2'}
+                        </span>
+                        {t('options.form.step2Label')}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
                         {(Object.keys(strategyLabels) as Strategy[]).map(s => (
                             <button
                                 key={s}
                                 className={`strategy-btn ${strategy === s ? 'active' : ''}`}
                                 onClick={() => setStrategy(s)}
-                                disabled={!ticker}
-                                style={{ 
-                                    opacity: ticker ? 1 : 0.5, 
-                                    cursor: ticker ? 'pointer' : 'not-allowed',
+                                disabled={tickers.length === 0}
+                                style={{
                                     flex: '1 1 0',
                                     minWidth: '100px'
                                 }}
@@ -1210,64 +2067,260 @@ export default function Options() {
                                 {strategyLabels[s]}
                             </button>
                         ))}
-                        </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={highLiquidityOnly}
+                                onChange={(e) => setHighLiquidityOnly(e.target.checked)}
+                                className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-[#27272A] peer-checked:bg-[#0D9B97] rounded-full relative transition-colors">
+                                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${highLiquidityOnly ? 'translate-x-4' : ''}`} />
+                            </div>
+                            <span className="text-[#A1A1AA]">
+                                {isZh ? '仅高流动性' : 'High Liquidity Only'}
+                            </span>
+                        </label>
+                        <KBQuickLink
+                            slug="beginner-strategies"
+                            label={isZh ? '了解各策略区别' : 'Learn about strategies'}
+                        />
                     </div>
                 </div>
 
-                {/* Step 3 & 4: 加载日期 + 选择到期日 - 占一行 */}
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                    <div className="flex-1 min-w-[200px] flex items-center gap-3">
-                        <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: expirations.length > 0 ? 'var(--primary)' : (ticker && strategy ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤3：</span> 点击加载到期日（Load)
-                        </label>
-                        <Button 
-                            onClick={fetchExpirations} 
-                            disabled={expirationsLoading || !ticker || !strategy} 
-                            className="btn-primary flex-1"
-                        >
-                            {expirationsLoading ? (
-                                <i className="bi bi-arrow-clockwise mr-2"></i>
-                            ) : expirations.length > 0 ? (
-                                <i className="bi bi-check-circle mr-2"></i>
-                            ) : (
-                                <i className="bi bi-arrow-clockwise mr-2"></i>
-                            )}
-                            {expirationsLoading ? '加载中...' : '加载日期'}
-                        </Button>
+                {/* Step 3: Load Expiration Dates */}
+                <div className={`step-section ${!tickers.length || !strategy ? 'disabled-step' : expirations.length > 0 ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${expirations.length > 0 ? 'done' : tickers.length > 0 && strategy ? 'active' : 'waiting'}`}>
+                            {expirations.length > 0 ? <i className="bi bi-check-lg"></i> : '3'}
+                        </span>
+                        {t('options.form.step3Label')}
+                        {expirations.length > 0 && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--bull)', marginLeft: 'auto' }}>
+                                {t('options.form.datesAvailable', { count: expirations.length })}
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        className={`load-dates-btn ${expirationsLoading ? 'loading' : ''}`}
+                        onClick={fetchExpirations}
+                        disabled={expirationsLoading || tickers.length === 0 || !strategy}
+                    >
+                        {expirationsLoading ? (
+                            <>
+                                <i className="bi bi-arrow-clockwise animate-spin"></i>
+                                {t('options.form.loading')}
+                            </>
+                        ) : expirations.length > 0 ? (
+                            <>
+                                <i className="bi bi-arrow-repeat"></i>
+                                {t('options.form.reloadDates')}
+                            </>
+                        ) : (
+                            <>
+                                <i className="bi bi-calendar-event"></i>
+                                {t('options.form.loadDates')}
+                            </>
+                        )}
+                    </button>
+                </div>
+
+                {/* Step 4: Select Expiration Date(s) + Start Analysis */}
+                <div className={`step-section ${expirations.length === 0 ? 'disabled-step' : selectedExpiries.length > 0 ? 'completed-step' : 'active-step'}`}>
+                    <div className="step-section-label">
+                        <span className={`step-badge ${selectedExpiries.length > 0 ? 'done' : expirations.length > 0 ? 'active' : 'waiting'}`}>
+                            {selectedExpiries.length > 0 ? <i className="bi bi-check-lg"></i> : '4'}
+                        </span>
+                        {t('options.form.selectExpiryTitle')}
+                        {selectedExpiries.length > 0 && (
+                            <span style={{
+                                fontSize: '0.7rem',
+                                padding: '0.1rem 0.45rem',
+                                borderRadius: '1rem',
+                                backgroundColor: 'var(--primary)',
+                                color: 'white',
+                                marginLeft: 'auto'
+                            }}>
+                                {t('options.form.selectedCount', { count: selectedExpiries.length, max: 2 })}
+                            </span>
+                        )}
                     </div>
 
-                    <div className="flex-1 min-w-[200px] flex items-center gap-3">
-                        <label className="flex-shrink-0" style={{ color: 'var(--muted-foreground)', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ color: selectedExpiry ? 'var(--primary)' : (expirations.length > 0 ? 'var(--warning)' : 'var(--muted-foreground)') }}>步骤4：</span> 选择到期日(Expiration)
-                        </label>
-                        <select
-                            value={selectedExpiry}
-                            onChange={(e) => handleExpirySelect(e.target.value)}
-                            className="form-select flex-1"
-                            disabled={expirations.length === 0}
-                        >
-                            <option value="">{expirations.length > 0 ? '请选择到期日' : '请先完成步骤 3'}</option>
-                            {expirations.map(exp => (
-                                <option key={exp.date} value={exp.date}>
-                                    {exp.date} {exp.period_tag === 'm' ? '(月权)' : '(周权)'}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                {(() => {
+                    // Show skeleton during loading
+                    if (expirationsLoading) {
+                        return (
+                            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                                <div className="px-3 py-3" style={{ backgroundColor: 'var(--card)' }}>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[80, 95, 80, 95, 80, 95, 80, 95].map((w, i) => (
+                                            <div key={i} className="skeleton-pill" style={{ width: `${w}px` }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    if (expirations.length === 0) {
+                        return (
+                            <div className="text-center py-3" style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>
+                                <i className="bi bi-calendar3 mr-2" style={{ fontSize: '1.1rem', opacity: 0.5 }}></i>
+                                {tickers.length === 0 || !strategy
+                                    ? t('options.form.completeSteps')
+                                    : t('options.form.clickLoadAbove')}
+                            </div>
+                        );
+                    }
+
+                    const now = new Date();
+                    const twoWeeksLater = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+                    const nearTerm: typeof expirations = [];
+                    const weekly: typeof expirations = [];
+                    const monthly: typeof expirations = [];
+
+                    expirations.forEach(exp => {
+                        const expDate = new Date(exp.date);
+                        if (expDate <= twoWeeksLater) {
+                            nearTerm.push(exp);
+                        } else if (exp.period_tag === 'm') {
+                            monthly.push(exp);
+                        } else {
+                            weekly.push(exp);
+                        }
+                    });
+
+                    const tabs = [
+                        { key: 'near' as const, label: t('options.form.nearTerm'), icon: 'bi-lightning-charge', data: nearTerm, color: 'var(--warning)' },
+                        { key: 'weekly' as const, label: t('options.form.weeklyOptions'), icon: 'bi-calendar-week', data: weekly, color: 'var(--muted-foreground)' },
+                        { key: 'monthly' as const, label: t('options.form.monthlyOptions'), icon: 'bi-calendar-month', data: monthly, color: 'var(--primary)' },
+                    ].filter(tab => tab.data.length > 0);
+
+                    const currentTab = tabs.find(t => t.key === activeExpiryTab) || tabs[0];
+                    const activeTabData = currentTab?.data || [];
+
+                    return (
+                        <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                            {/* Tab headers */}
+                            <div className="flex items-center" style={{ backgroundColor: 'var(--muted)', padding: '0.25rem' }}>
+                                <div className="flex gap-0.5 flex-1">
+                                    {tabs.map(tab => (
+                                        <button
+                                            key={tab.key}
+                                            onClick={() => setActiveExpiryTab(tab.key)}
+                                            className="px-3 py-1.5 text-sm transition-all rounded"
+                                            style={{
+                                                backgroundColor: activeExpiryTab === tab.key ? 'var(--card)' : 'transparent',
+                                                color: activeExpiryTab === tab.key ? tab.color : 'var(--muted-foreground)',
+                                                fontWeight: activeExpiryTab === tab.key ? 500 : 400
+                                            }}
+                                        >
+                                            <i className={`bi ${tab.icon} mr-1`}></i>
+                                            {tab.label}
+                                            <span className="ml-1 opacity-60">({tab.data.length})</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Date pills */}
+                            <div className="px-3 py-2.5" style={{ backgroundColor: 'var(--card)' }}>
+                                <div className="flex flex-wrap gap-2">
+                                    {activeTabData.map(exp => {
+                                        const isSelected = selectedExpiries.includes(exp.date);
+                                        const isDisabled = !isSelected && selectedExpiries.length >= 2;
+                                        return (
+                                            <button
+                                                key={exp.date}
+                                                onClick={() => !isDisabled && handleExpiryToggle(exp.date)}
+                                                disabled={isDisabled}
+                                                className="transition-all"
+                                                style={{
+                                                    padding: '0.3rem 0.6rem',
+                                                    borderRadius: '0.375rem',
+                                                    border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                                    backgroundColor: isSelected ? 'rgba(13, 155, 151, 0.15)' : 'var(--muted)',
+                                                    color: isSelected ? 'var(--primary)' : isDisabled ? 'var(--muted-foreground)' : 'var(--foreground)',
+                                                    opacity: isDisabled ? 0.4 : 1,
+                                                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                                    fontWeight: isSelected ? 600 : 400,
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {isSelected && <i className="bi bi-check-lg mr-1"></i>}
+                                                {exp.date}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+                </div>
+
+                {/* Start Analysis - Prominent Bottom Button */}
+                <div style={{ marginTop: '0.5rem' }}>
+                    {selectedExpiries.length > 0 && (
+                        <p className="text-center mb-2" style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
+                            {t('options.form.queryCount', {
+                                count: tickers.length * selectedExpiries.length,
+                                symbols: tickers.length,
+                                dates: selectedExpiries.length
+                            })}
+                        </p>
+                    )}
+                    <button
+                        className="start-analysis-btn"
+                        onClick={handleStartAnalysis}
+                        disabled={loading || selectedExpiries.length === 0 || tickers.length === 0}
+                    >
+                        {loading ? (
+                            <><i className="bi bi-arrow-clockwise animate-spin"></i>{t('options.form.analyzing')}</>
+                        ) : (
+                            <><i className="bi bi-rocket-takeoff"></i>{t('options.form.startAnalysis')}</>
+                        )}
+                    </button>
                 </div>
             </div>
 
-            {/* Header */}
-            <div className="header-section" style={{ marginTop: '1.5rem', marginBottom: '1rem', padding: '1rem' }}>
-                {/* 期权分析五大支柱 */}
-                <div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-2">
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>流动性优先</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>优先选择高成交量、高持仓量的期权</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>IV分析</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>评估隐含波动率的历史分位数，寻找IV异常</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>风险调整</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>计算年化收益与风险比，设置止损点</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>策略匹配</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>根据市场环境选择合适的多空策略</div></div>
-                        <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.2rem', fontSize: '0.8rem' }}>实时监控</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>开市期间实时查看数据，避免依赖过时信息</div></div>
-                    </div>
+            {/* 分析依据 - 单行图标版 */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.5rem 1rem',
+                marginTop: '1rem',
+                marginBottom: '0.5rem',
+                background: 'rgba(13, 155, 151, 0.05)',
+                borderRadius: '0.5rem',
+                flexWrap: 'wrap'
+            }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>{t('options.pillars.label')}:</span>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span className="pillar-icon" title={t('options.pillar.liquidityDesc')}>
+                        <i className="bi bi-droplet" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.liquidity')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.ivDesc')}>
+                        <i className="bi bi-graph-up" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.iv')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.riskDesc')}>
+                        <i className="bi bi-shield-check" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.risk')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.strategyDesc')}>
+                        <i className="bi bi-bullseye" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.strategy')}</span>
+                    </span>
+                    <span className="pillar-icon" title={t('options.pillar.realtimeDesc')}>
+                        <i className="bi bi-clock" style={{ marginRight: '0.25rem' }}></i>
+                        <span className="pillar-icon-text">{t('options.pillar.realtime')}</span>
+                    </span>
                 </div>
             </div>
 
@@ -1279,8 +2332,8 @@ export default function Options() {
                     {taskProgress > 0 && (
                         <div className="max-w-md mx-auto mb-4">
                             <div className="flex justify-between text-sm mb-1">
-                                <span style={{ color: 'var(--muted-foreground)' }}>分析进度</span>
-                                <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{taskProgress}%</span>
+                                <span style={{ color: 'var(--muted-foreground)' }}>{t('options.progress')}</span>
+                                <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 600 }}>{taskProgress}%</span>
                             </div>
                             <div style={{
                                 width: '100%',
@@ -1306,8 +2359,11 @@ export default function Options() {
                         </p>
                     )}
                     {!taskStep && (
-                        <p style={{ color: 'var(--muted-foreground)' }}>正在获取期权数据并进行量化评分...</p>
+                        <p style={{ color: 'var(--muted-foreground)' }}>{t('options.analyzing')}</p>
                     )}
+                    <p style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', marginTop: '0.75rem', opacity: 0.6 }}>
+                        {isZh ? '深度分析中，预计需要1分钟' : 'Deep analysis in progress, estimated 1 minute'}
+                    </p>
                 </div>
             )}
 
@@ -1322,16 +2378,16 @@ export default function Options() {
                         <i className="bi bi-clock-history text-primary" style={{ fontSize: '1.2rem' }}></i>
                         <div>
                             <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
-                                历史期权分析报告
+                                {t('options.historical.title')}
                             </span>
                             <span className="text-muted ml-3" style={{ fontSize: '0.9rem' }}>
-                                查看历史数据
+                                {t('options.historical.viewData')}
                             </span>
                         </div>
                         <div className="ml-auto">
                             <span className="badge-primary">
                                 <i className="bi bi-archive mr-1"></i>
-                                历史数据
+                                {t('options.historical.badge')}
                             </span>
                         </div>
                     </div>
@@ -1345,30 +2401,268 @@ export default function Options() {
                     <div className="card p-4">
                         <div className="text-center">
                             <h2 style={{ fontSize: '1.3rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                                分析结果: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
+                                {t('options.results.title')}: <span style={{ color: 'var(--primary)' }}>{displayChain.symbol}</span>
                             </h2>
                             <div style={{ color: 'var(--muted-foreground)' }}>
-                                当前价格: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>${displayStockPrice?.toFixed(2) || '-'}</span>
+                                {t('options.results.currentPrice')}: <span className="font-mono" style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{cs}{displayStockPrice?.toFixed(2) || '-'}</span>
+                                {displayChain?.market_info && displayChain.market_info.market !== 'US' && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs rounded" style={{
+                                        background: displayChain.market_info.market === 'HK' ? '#f97316'
+                                            : displayChain.market_info.market === 'COMMODITY' ? '#d97706'
+                                            : '#ef4444',
+                                        color: '#fff'
+                                    }}>
+                                        {displayChain.market_info.market === 'COMMODITY' ? '商品' : t(`options.market.${displayChain.market_info.market.toLowerCase()}`)}
+                                    </span>
+                                )}
                                 <span className="mx-3">|</span>
-                                到期日: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{displayChain.expiry_date || selectedExpiry}</span>
+                                {t('options.results.expiry')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{selectedExpiries.length > 1 ? selectedExpiries.join(', ') : (displayChain.expiry_date || selectedExpiries[0] || '')}</span>
                                 <span className="mx-3">|</span>
-                                策略: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{strategyLabels[strategy]}</span>
+                                {t('options.results.strategy')}: <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>{strategyLabels[strategy]}</span>
                                 {isHistoricalView && (
                                     <>
                                         <span className="mx-3">|</span>
-                                        <span style={{ color: 'var(--muted-foreground)', fontWeight: 600 }}>历史数据</span>
+                                        <span style={{ color: 'var(--muted-foreground)', fontWeight: 600 }}>{t('options.results.historicalData')}</span>
                                     </>
                                 )}
+                            </div>
+                            {displayChain?.market_info && displayChain.market_info.contract_multiplier !== 100 && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    {t('options.info.multiplier', { multiplier: displayChain.market_info.contract_multiplier })}
+                                    {displayChain.market_info.cash_settlement && ` · ${t('options.info.cashSettlement')}`}
+                                </div>
+                            )}
+                            {/* 商品期权：交割风险 + 夜盘提示 */}
+                            {displayChain?.commodity_info && (
+                                <div className="text-xs mt-1 flex items-center justify-center gap-2">
+                                    <span style={{ color: 'var(--muted-foreground)' }}>
+                                        {displayChain.commodity_info.product_name} · {displayChain.commodity_info.exchange}
+                                        {displayChain.commodity_info.has_night_session && ' · 有夜盘'}
+                                    </span>
+                                    {displayChain.commodity_info.delivery_risk?.is_red_zone && (
+                                        <span className="px-2 py-0.5 rounded text-xs" style={{ background: '#ef4444', color: '#fff' }}>
+                                            {displayChain.commodity_info.delivery_risk.warning}
+                                        </span>
+                                    )}
+                                    {displayChain.commodity_info.delivery_risk?.is_warning_zone && (
+                                        <span className="px-2 py-0.5 rounded text-xs" style={{ background: '#f59e0b', color: '#fff' }}>
+                                            {displayChain.commodity_info.delivery_risk.warning}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                            {/* View Mode Toggle */}
+                            <div className="flex justify-center gap-2 mt-4">
+                                <button
+                                    onClick={() => setViewMode('analysis')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2`}
+                                    style={{
+                                        backgroundColor: viewMode === 'analysis' ? 'var(--primary)' : 'transparent',
+                                        color: viewMode === 'analysis' ? 'white' : 'var(--muted-foreground)',
+                                        border: `1px solid ${viewMode === 'analysis' ? 'var(--primary)' : 'var(--border)'}`,
+                                    }}
+                                >
+                                    <i className="bi bi-table"></i>
+                                    {t('options.view.analysis')}
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('income')}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2`}
+                                    style={{
+                                        backgroundColor: viewMode === 'income' ? 'var(--primary)' : 'transparent',
+                                        color: viewMode === 'income' ? 'white' : 'var(--muted-foreground)',
+                                        border: `1px solid ${viewMode === 'income' ? 'var(--primary)' : 'var(--border)'}`,
+                                    }}
+                                >
+                                    <i className="bi bi-calendar-check"></i>
+                                    {t('options.view.income')}
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Top Recommendations - 按风格分类 */}
+                    {/* Portfolio Income Preview */}
+                    {viewMode === 'income' && portfolioSummary && (
+                        <div className="card p-6">
+                            {/* 标题 */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{
+                                    background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.3) 0%, rgba(13, 155, 151, 0.1) 100%)',
+                                    border: '1px solid rgba(13, 155, 151, 0.4)'
+                                }}>
+                                    <i className="bi bi-cash-stack text-[#0D9B97] text-lg"></i>
+                                </div>
+                                <span className="text-white text-lg font-semibold">
+                                    {t('options.income.portfolioTitle')}
+                                </span>
+                            </div>
+
+                            {/* 说明文字 */}
+                            <div className="text-slate-400 text-sm mb-4">
+                                {t('options.income.portfolioDesc', { count: portfolioSummary.optionCount })}
+                            </div>
+
+                            {/* 核心汇总卡片 */}
+                            <div className="rounded-xl p-5 mb-6" style={{
+                                background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.15) 0%, rgba(13, 155, 151, 0.03) 100%)',
+                                border: '1px solid rgba(13, 155, 151, 0.25)'
+                            }}>
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    {/* 预期总收入 */}
+                                    <div>
+                                        <div className="flex items-center justify-center gap-1.5 text-slate-400 text-xs mb-1">
+                                            <i className="bi bi-arrow-up-circle text-green-400"></i>
+                                            {t('options.income.totalPremium')}
+                                        </div>
+                                        <div className="text-3xl font-bold text-green-400 font-mono">
+                                            +${portfolioSummary.totalPremium.toLocaleString()}
+                                        </div>
+                                    </div>
+
+                                    {/* 总保证金需求 */}
+                                    <div>
+                                        <div className="flex items-center justify-center gap-1.5 text-slate-400 text-xs mb-1">
+                                            <i className="bi bi-safe text-slate-300"></i>
+                                            {t('options.income.totalMargin')}
+                                        </div>
+                                        <div className="text-3xl font-bold text-white font-mono">
+                                            ${portfolioSummary.totalMargin.toLocaleString()}
+                                        </div>
+                                    </div>
+
+                                    {/* 组合收益率 */}
+                                    <div>
+                                        <div className="flex items-center justify-center gap-1.5 text-slate-400 text-xs mb-1">
+                                            <i className="bi bi-percent text-[#0D9B97]"></i>
+                                            {t('options.income.portfolioReturn')}
+                                        </div>
+                                        <div className="text-3xl font-bold text-[#0D9B97] font-mono">
+                                            {portfolioSummary.portfolioReturn.toFixed(1)}%
+                                        </div>
+                                        <div className="text-sm text-slate-400 mt-1">
+                                            {t('options.income.annualized')}: <span className="text-[#0D9B97] font-semibold font-mono">{portfolioSummary.annualizedReturn.toFixed(0)}%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-center gap-1.5 text-slate-500 text-sm mt-4">
+                                    <i className="bi bi-clock"></i>
+                                    {t('options.income.periodNote', { days: portfolioSummary.daysToExpiry })}
+                                </div>
+                            </div>
+
+                            {/* 推荐明细 */}
+                            <div className="mb-4">
+                                <h4 className="text-slate-400 text-sm mb-3">{t('options.income.detailTitle')}</h4>
+                                <div className="space-y-2">
+                                    {topRecommendations.map((opt, idx) => {
+                                        const premium = opt.bid_price || opt.latest_price || 0;
+                                        const premiumPerContract = premium * 100;
+                                        const margin = opt.scores?.margin_requirement || opt.strike * 100;
+                                        const returnPct = margin > 0 ? (premiumPerContract / margin) * 100 : 0;
+                                        const isPut = opt.put_call?.toLowerCase() === 'put';
+                                        const profile = opt.scores?.risk_return_profile;
+
+                                        return (
+                                            <div
+                                                key={opt.identifier || idx}
+                                                className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:bg-white/5"
+                                                style={{ backgroundColor: 'var(--muted)', border: '1px solid var(--border)' }}
+                                                onClick={() => handleOptionClick(opt)}
+                                            >
+                                                <span className="text-slate-500 font-mono text-sm w-5">{idx + 1}.</span>
+
+                                                {/* 风格图标 */}
+                                                <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                                                    profile?.risk_color === 'green' ? 'bg-green-500/15 text-green-400' :
+                                                    profile?.risk_color === 'yellow' ? 'bg-yellow-500/15 text-yellow-400' :
+                                                    'bg-red-500/15 text-red-400'
+                                                }`}>
+                                                    <i className={`bi ${
+                                                        profile?.risk_color === 'green' ? 'bi-shield-check' :
+                                                        profile?.risk_color === 'yellow' ? 'bi-sliders' : 'bi-lightning-charge'
+                                                    }`}></i>
+                                                </span>
+
+                                                {/* 期权类型 (多股票模式下显示股票代码) */}
+                                                <span className="text-white flex-1 font-medium">
+                                                    {tickers.length > 1 && opt.symbol && (
+                                                        <span className="text-[#0D9B97] font-mono mr-1">{opt.symbol}</span>
+                                                    )}
+                                                    {isPut ? 'Sell Put' : 'Sell Call'} <span className="font-mono">{cs}{opt.strike}</span>
+                                                </span>
+
+                                                {/* 收入 */}
+                                                <span className="text-green-400 font-semibold font-mono">
+                                                    +{cs}{premiumPerContract.toFixed(0)}
+                                                </span>
+
+                                                {/* 保证金 */}
+                                                <span className="text-slate-500 text-sm font-mono">
+                                                    {t('options.income.margin')} {cs}{(margin/1000).toFixed(1)}k
+                                                </span>
+
+                                                {/* 收益率 */}
+                                                <span className="text-[#0D9B97] font-semibold font-mono">
+                                                    ({returnPct.toFixed(1)}%)
+                                                </span>
+
+                                                <i className="bi bi-chevron-right text-slate-600 text-sm"></i>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 风险提示 */}
+                            <div className="rounded-lg p-4" style={{
+                                backgroundColor: 'rgba(251, 146, 60, 0.08)',
+                                border: '1px solid rgba(251, 146, 60, 0.2)'
+                            }}>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded flex items-center justify-center bg-orange-500/20 flex-shrink-0 mt-0.5">
+                                        <i className="bi bi-exclamation-triangle text-orange-400 text-sm"></i>
+                                    </div>
+                                    <div className="text-sm">
+                                        <div className="text-orange-400 font-semibold mb-2">{t('options.income.riskTitle')}</div>
+                                        <ul className="text-slate-400 space-y-1.5">
+                                            <li className="flex items-start gap-2">
+                                                <i className="bi bi-dot text-orange-400/60 mt-0.5"></i>
+                                                {t('options.income.riskSellPut')}
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <i className="bi bi-dot text-orange-400/60 mt-0.5"></i>
+                                                {t('options.income.riskSellCall')}
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <i className="bi bi-dot text-orange-400/60 mt-0.5"></i>
+                                                {t('options.income.riskNote')}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Empty state for income view when no recommendations */}
+                    {viewMode === 'income' && !portfolioSummary && (
+                        <div className="card p-6">
+                            <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
+                                {t('options.table.noData')}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Analysis View Content */}
+                    {viewMode === 'analysis' && (
+                    <>
+                    {/* Top Recommendations */}
                     {topRecommendations.length > 0 && (
                         <div className="card p-4">
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--primary)' }}>
                                 <i className="bi bi-star-fill mr-2"></i>
-                                推荐期权
+                                {t('options.recommended')}
                             </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                                 {topRecommendations.map(opt => {
@@ -1378,25 +2672,25 @@ export default function Options() {
                                         ? `style-tag-${profile.risk_color}`
                                         : 'style-tag-yellow';
 
-                                    // 计算特性标签（多标签，独立判断）
+                                    // Calculate feature tags (multi-tag, independent evaluation)
                                     const featureTags: { label: string; color: string }[] = [];
                                     const assignmentProb = opt.scores?.assignment_probability ?? 100;
                                     const annualReturn = opt.scores?.annualized_return ?? 0;
                                     const premium = opt.bid_price ?? opt.latest_price ?? 0;
-                                    const stockPrice = displayChain?.stock_price ?? 100;
-                                    const premiumPct = stockPrice > 0 ? (premium / stockPrice) * 100 : 0;
+                                    const currentStockPrice = displayChain?.real_stock_price ?? displayStockPrice ?? 100;
+                                    const premiumPct = currentStockPrice > 0 ? (premium / currentStockPrice) * 100 : 0;
 
-                                    // 低行权概率：< 30%
+                                    // Low exercise probability: < 30%
                                     if (assignmentProb < 30) {
-                                        featureTags.push({ label: '低行权概率', color: '#22c55e' });
+                                        featureTags.push({ label: t('options.tag.lowExercise'), color: '#22c55e' });
                                     }
-                                    // 高年化：> 30%
+                                    // High annualized: > 30%
                                     if (annualReturn > 30) {
-                                        featureTags.push({ label: '高年化', color: '#f59e0b' });
+                                        featureTags.push({ label: t('options.tag.highAnnualized'), color: '#f59e0b' });
                                     }
-                                    // 高权利金：权利金占股价 > 3%
+                                    // High premium: premium/stock price > 3%
                                     if (premiumPct > 3) {
-                                        featureTags.push({ label: '高权利金', color: '#3b82f6' });
+                                        featureTags.push({ label: t('options.tag.highPremium'), color: '#3b82f6' });
                                     }
 
                                     return (
@@ -1409,7 +2703,23 @@ export default function Options() {
                                             }}
                                             onClick={() => handleOptionClick(opt)}
                                         >
-                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                            {/* 多股票模式下显示股票代码 */}
+                                            {tickers.length > 1 && opt.symbol && (
+                                                <div style={{
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 700,
+                                                    color: 'white',
+                                                    backgroundColor: 'var(--primary)',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    display: 'inline-block',
+                                                    marginBottom: '0.5rem',
+                                                    fontFamily: 'monospace'
+                                                }}>
+                                                    {opt.symbol}
+                                                </div>
+                                            )}
+                                            <div className="font-mono" style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
                                                 ${opt.strike}
                                             </div>
                                             <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
@@ -1447,24 +2757,71 @@ export default function Options() {
 
                                             <div className="flex justify-between mt-2">
                                                 <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>Score</span>
-                                                <span className={`score-badge ${getScoreClass(getOptionScore(opt))}`}>
+                                                <span className={`score-badge font-mono ${getScoreClass(getOptionScore(opt))}`}>
                                                     {getOptionScore(opt).toFixed(1)}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between mt-1">
-                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>年化收益</span>
-                                                <span style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
-                                                    {opt.scores?.annualized_return?.toFixed(1)}%
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.premiumPerContract')}</span>
+                                                <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                    {cs}{(premium * 100).toFixed(0)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between mt-1">
+                                                <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.annualizedReturn')}</span>
+                                                <span className="font-mono" style={{ color: 'var(--bull)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                    {opt.scores?.annualized_return?.toFixed(1) || (premiumPct * 365 / (opt.days_to_expiry || 30)).toFixed(1)}%
                                                 </span>
                                             </div>
 
-                                            {/* 胜率显示 */}
+                                            {/* Win Rate Display */}
                                             {profile?.win_probability && (
                                                 <div className="flex justify-between mt-1">
-                                                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>胜率</span>
-                                                    <span className="win-prob">
+                                                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>{t('options.card.winRate')}</span>
+                                                    <span className="win-prob font-mono">
                                                         {(profile.win_probability * 100).toFixed(0)}%
                                                     </span>
+                                                </div>
+                                            )}
+
+                                            {/* 临期警告（新增） */}
+                                            {opt.scores?.expiry_warning && (
+                                                <div style={{
+                                                    marginTop: '0.5rem',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.7rem',
+                                                    backgroundColor: opt.scores.expiry_warning.includes('⚠️') || opt.scores.expiry_warning.includes('⛔')
+                                                        ? 'rgba(239, 68, 68, 0.2)'
+                                                        : opt.scores.expiry_warning.includes('⚡')
+                                                        ? 'rgba(245, 158, 11, 0.2)'
+                                                        : 'rgba(59, 130, 246, 0.2)',
+                                                    color: opt.scores.expiry_warning.includes('⚠️') || opt.scores.expiry_warning.includes('⛔')
+                                                        ? '#F87171'
+                                                        : opt.scores.expiry_warning.includes('⚡')
+                                                        ? '#FBBF24'
+                                                        : '#93C5FD',
+                                                    border: `1px solid ${
+                                                        opt.scores.expiry_warning.includes('⚠️') || opt.scores.expiry_warning.includes('⛔')
+                                                            ? 'rgba(239, 68, 68, 0.3)'
+                                                            : opt.scores.expiry_warning.includes('⚡')
+                                                            ? 'rgba(245, 158, 11, 0.3)'
+                                                            : 'rgba(59, 130, 246, 0.3)'
+                                                    }`
+                                                }}>
+                                                    {opt.scores.expiry_warning}
+                                                </div>
+                                            )}
+
+                                            {/* 日权标识（新增） */}
+                                            {opt.scores?.is_daily_option && (
+                                                <div style={{
+                                                    marginTop: '0.25rem',
+                                                    fontSize: '0.65rem',
+                                                    color: '#EF4444',
+                                                    fontWeight: 600
+                                                }}>
+                                                    ⚠️ {t('options.dailyOption', '日权 - 不建议卖方策略')}
                                                 </div>
                                             )}
                                         </div>
@@ -1474,51 +2831,82 @@ export default function Options() {
                         </div>
                     )}
 
-                    {/* Risk Warning */}
-                    <div className="card p-4" style={{
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        border: '2px solid var(--warning)',
-                        borderRadius: '0.5rem',
-                        marginBottom: '1.5rem'
+                    {/* 风险提示 - 精简单行版 */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '0.375rem',
+                        marginBottom: '0.75rem',
+                        fontSize: '0.8rem'
                     }}>
-                        <div className="flex items-start gap-3">
-                            <i className="bi bi-exclamation-triangle-fill" style={{
+                        <i className="bi bi-exclamation-triangle-fill" style={{ color: 'var(--warning)', fontSize: '0.9rem' }}></i>
+                        <span style={{ color: 'var(--muted-foreground)', flex: 1 }}>{t('options.risk.compact')}</span>
+                        <button
+                            onClick={() => {
+                                const newState = !riskExpanded;
+                                setRiskExpanded(newState);
+                                localStorage.setItem('optionsRiskExpanded', String(newState));
+                            }}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
                                 color: 'var(--warning)',
-                                fontSize: '1.5rem',
-                                flexShrink: 0,
-                                marginTop: '0.2rem'
-                            }}></i>
-                            <div style={{ flex: 1 }}>
-                                <h3 style={{
-                                    fontSize: '1.1rem',
-                                    fontWeight: 600,
-                                    color: 'var(--warning)',
-                                    marginBottom: '0.75rem'
-                                }}>
-                                    期权交易风险提示
-                                </h3>
-                                <div style={{ color: 'var(--foreground)', lineHeight: 1.8 }}>
-                                    <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>高风险警告：</strong>期权交易具有极高的风险，可能导致全部本金损失。期权价格波动剧烈，杠杆效应显著，不适合风险承受能力较低的投资者。请充分了解期权交易的风险特性，谨慎决策。
-                                    </p>
-                                    <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>财报前后高风险期：</strong>财报发布前后（通常为财报日前3-5天至财报日后1-2天）是期权交易的极高风险期。在此期间，股价可能出现剧烈波动，隐含波动率（IV）通常会显著上升，期权价格波动幅度可能远超预期。建议在财报期间避免或大幅减少期权交易，或使用更保守的策略。
-                                    </p>
-                                    <p style={{ marginBottom: '0.5rem' }}>
-                                        <strong>数据说明：</strong>当前分析结果基于历史数据和实时市场数据计算得出，仅供参考。期权市场瞬息万变，数据具有时效性。
-                                    </p>
-                                    <p style={{ marginBottom: 0, fontWeight: 600, color: 'var(--warning)' }}>
-                                        <strong>实盘操作建议：</strong>实盘交易时，请务必在开市期间直接查看实时行情，结合最新市场动态进行决策。建议一边查看实时数据，一边进行操作，避免依赖过时数据。
-                                    </p>
-                                </div>
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '0.25rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                            }}
+                            className="hover:bg-[rgba(245,158,11,0.15)] transition-colors"
+                        >
+                            {riskExpanded ? t('options.risk.collapse') : t('options.risk.expand')}
+                            <i className={`bi bi-chevron-${riskExpanded ? 'up' : 'down'}`}></i>
+                        </button>
+                    </div>
+
+                    {/* 风险提示详情 - 展开内容 */}
+                    {riskExpanded && (
+                        <div style={{
+                            padding: '0.75rem 1rem',
+                            marginBottom: '0.75rem',
+                            backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                            border: '1px solid rgba(245, 158, 11, 0.2)',
+                            borderRadius: '0.375rem',
+                            fontSize: '0.8rem',
+                            lineHeight: 1.6,
+                            animation: 'slideDown 0.2s ease-out'
+                        }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.5rem' }}>
+                                <p style={{ margin: 0 }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.highRisk')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.highRiskDesc')}</span>
+                                </p>
+                                <p style={{ margin: 0 }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.earnings')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.earningsDesc')}</span>
+                                </p>
+                                <p style={{ margin: 0 }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.dataNote')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.dataDesc')}</span>
+                                </p>
+                                <p style={{ margin: 0 }}>
+                                    <strong style={{ color: 'var(--warning)' }}>{t('options.risk.liveAdvice')}</strong>
+                                    <span style={{ color: 'var(--muted-foreground)' }}>{t('options.risk.liveAdviceDesc')}</span>
+                                </p>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Options Table */}
                     <div className="option-col-section">
                         <div className={strategy.includes('call') ? 'header-calls' : 'header-puts'}>
-                            {strategy.includes('call') ? 'CALLS (看涨)' : 'PUTS (看跌)'} - {strategyLabels[strategy]}
+                            {strategy.includes('call') ? t('options.table.calls') : t('options.table.puts')} - {strategyLabels[strategy]}
                         </div>
                         
                         {/* Filter Controls */}
@@ -1557,79 +2945,297 @@ export default function Options() {
                                 const currentReturnMin = Math.min(returnRange[0], returnRange[1]);
                                 const currentReturnMax = Math.max(returnRange[0], returnRange[1]);
                                 
-                                return (
-                                    <div className="p-4" style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {/* Strike Price Filter */}
-                                            <div>
-                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    行权价范围: ${currentStrikeMin.toFixed(2)} - ${currentStrikeMax.toFixed(2)}
-                                                </label>
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="range"
-                                                        min={strikeMin}
-                                                        max={strikeMax}
-                                                        step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
-                                                        value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[0]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setStrikeRange([val, Math.max(val, strikeRange[1])]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
-                                                    <input
-                                                        type="range"
-                                                        min={strikeMin}
-                                                        max={strikeMax}
-                                                        step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
-                                                        value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[1]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setStrikeRange([Math.min(val, strikeRange[0]), val]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
-                                                </div>
-                                            </div>
+                                // Risk style options
+                                const riskStyles = [
+                                    { id: 'steady_income', label: '稳健收益', labelEn: 'Steady Income', color: '#22c55e' },
+                                    { id: 'balanced', label: '稳中求进', labelEn: 'Balanced', color: '#f59e0b' },
+                                    { id: 'high_risk_high_reward', label: '高风险高收益', labelEn: 'High Risk', color: '#ef4444' },
+                                    { id: 'hedge', label: '保护对冲', labelEn: 'Hedge', color: '#3b82f6' },
+                                ];
 
-                                            {/* Annualized Return Filter */}
-                                            <div>
-                                                <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                    年化收益范围: {currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%
-                                                </label>
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="range"
-                                                        min={returnMin}
-                                                        max={returnMax}
-                                                        step={Math.max(0.1, (returnMax - returnMin) / 100)}
-                                                        value={Math.max(returnMin, Math.min(returnMax, returnRange[0]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setReturnRange([val, Math.max(val, returnRange[1])]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
-                                                    <input
-                                                        type="range"
-                                                        min={returnMin}
-                                                        max={returnMax}
-                                                        step={Math.max(0.1, (returnMax - returnMin) / 100)}
-                                                        value={Math.max(returnMin, Math.min(returnMax, returnRange[1]))}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setReturnRange([Math.min(val, returnRange[0]), val]);
-                                                        }}
-                                                        className="flex-1 range-filter"
-                                                        style={{ accentColor: '#FFD700', cursor: 'pointer' }}
-                                                    />
+                                return (
+                                    <div style={{ borderBottom: '1px solid var(--border)' }}>
+                                        {/* 筛选面板 - 可折叠标题栏 */}
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                padding: '0.5rem 1rem',
+                                                background: 'var(--muted)',
+                                                cursor: 'pointer'
+                                            }}
+                                            onClick={() => {
+                                                const newState = !filterExpanded;
+                                                setFilterExpanded(newState);
+                                                localStorage.setItem('optionsFilterExpanded', String(newState));
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <i className="bi bi-funnel" style={{ color: 'var(--primary)', fontSize: '0.9rem' }}></i>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{t('options.filter.title')}</span>
+                                                {/* 显示当前筛选条件摘要 */}
+                                                {(selectedRiskStyle || tickerFilter.length > 0 || expiryFilter.length > 0) && (
+                                                    <span style={{
+                                                        fontSize: '0.7rem',
+                                                        padding: '0.15rem 0.4rem',
+                                                        background: 'rgba(13, 155, 151, 0.2)',
+                                                        borderRadius: '0.25rem',
+                                                        color: 'var(--primary)'
+                                                    }}>
+                                                        {t('options.filter.active')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                {/* 快速风格筛选按钮（始终可见） */}
+                                                <div className="hidden sm:flex gap-1">
+                                                    {riskStyles.slice(0, 3).map(s => (
+                                                        <button
+                                                            key={s.id}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedRiskStyle(selectedRiskStyle === s.id ? null : s.id);
+                                                            }}
+                                                            style={{
+                                                                padding: '0.2rem 0.5rem',
+                                                                fontSize: '0.7rem',
+                                                                borderRadius: '0.25rem',
+                                                                border: `1px solid ${selectedRiskStyle === s.id ? s.color : 'var(--border)'}`,
+                                                                background: selectedRiskStyle === s.id ? `${s.color}20` : 'transparent',
+                                                                color: selectedRiskStyle === s.id ? s.color : 'var(--muted-foreground)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {t(`options.style.${s.id}`)}
+                                                        </button>
+                                                    ))}
                                                 </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedRiskStyle(null);
+                                                        setTickerFilter([]);
+                                                        setExpiryFilter([]);
+                                                        setStrikeRange([strikeMin, strikeMax]);
+                                                        setReturnRange([returnMin, returnMax]);
+                                                    }}
+                                                    style={{
+                                                        padding: '0.2rem 0.5rem',
+                                                        fontSize: '0.7rem',
+                                                        borderRadius: '0.25rem',
+                                                        border: '1px solid var(--border)',
+                                                        background: 'transparent',
+                                                        color: 'var(--muted-foreground)',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    {t('options.filter.reset')}
+                                                </button>
+                                                <i className={`bi bi-chevron-${filterExpanded ? 'up' : 'down'}`} style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}></i>
                                             </div>
                                         </div>
+
+                                        {/* 筛选面板 - 展开内容 */}
+                                        {filterExpanded && (
+                                            <div className="p-4" style={{ background: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
+                                                {/* Stock Filter (Multi-stock mode only) */}
+                                                {tickers.length > 1 && (
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.byStock')}
+                                                        </label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                onClick={() => setTickerFilter([])}
+                                                                className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                style={{
+                                                                    backgroundColor: tickerFilter.length === 0 ? 'var(--primary)' : 'transparent',
+                                                                    color: tickerFilter.length === 0 ? 'white' : 'var(--muted-foreground)',
+                                                                    borderColor: tickerFilter.length === 0 ? 'var(--primary)' : 'var(--border)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                {t('options.filter.allStocks')}
+                                                            </button>
+                                                            {tickers.map(ticker => (
+                                                                <button
+                                                                    key={ticker}
+                                                                    onClick={() => {
+                                                                        if (tickerFilter.includes(ticker)) {
+                                                                            setTickerFilter(tickerFilter.filter(t => t !== ticker));
+                                                                        } else {
+                                                                            setTickerFilter([...tickerFilter, ticker]);
+                                                                        }
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-full text-sm transition-all border font-mono font-semibold`}
+                                                                    style={{
+                                                                        backgroundColor: tickerFilter.includes(ticker) ? 'rgba(13, 155, 151, 0.2)' : 'transparent',
+                                                                        color: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--muted-foreground)',
+                                                                        borderColor: tickerFilter.includes(ticker) ? 'var(--primary)' : 'var(--border)',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {ticker}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Expiry Filter (Multi-date mode only) */}
+                                                {selectedExpiries.length > 1 && (
+                                                    <div className="mb-4">
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.byExpiry')}
+                                                        </label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                onClick={() => setExpiryFilter([])}
+                                                                className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                style={{
+                                                                    backgroundColor: expiryFilter.length === 0 ? 'var(--primary)' : 'transparent',
+                                                                    color: expiryFilter.length === 0 ? 'white' : 'var(--muted-foreground)',
+                                                                    borderColor: expiryFilter.length === 0 ? 'var(--primary)' : 'var(--border)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                {t('options.filter.allDates')}
+                                                            </button>
+                                                            {selectedExpiries.map(expiry => (
+                                                                <button
+                                                                    key={expiry}
+                                                                    onClick={() => {
+                                                                        if (expiryFilter.includes(expiry)) {
+                                                                            setExpiryFilter(expiryFilter.filter(e => e !== expiry));
+                                                                        } else {
+                                                                            setExpiryFilter([...expiryFilter, expiry]);
+                                                                        }
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                    style={{
+                                                                        backgroundColor: expiryFilter.includes(expiry) ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                                                                        color: expiryFilter.includes(expiry) ? 'var(--warning)' : 'var(--muted-foreground)',
+                                                                        borderColor: expiryFilter.includes(expiry) ? 'var(--warning)' : 'var(--border)',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {expiry}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Risk Style Filter */}
+                                                <div className="mb-4">
+                                                    <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                        {t('options.filter.riskStyle')}
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            onClick={() => setSelectedRiskStyle(null)}
+                                                            className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                            style={{
+                                                                backgroundColor: !selectedRiskStyle ? 'var(--primary)' : 'transparent',
+                                                                color: !selectedRiskStyle ? 'white' : 'var(--muted-foreground)',
+                                                                borderColor: !selectedRiskStyle ? 'var(--primary)' : 'var(--border)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {t('options.filter.allStyles')}
+                                                        </button>
+                                                        {riskStyles.map(s => (
+                                                            <button
+                                                                key={s.id}
+                                                                onClick={() => setSelectedRiskStyle(selectedRiskStyle === s.id ? null : s.id)}
+                                                                className={`px-3 py-1.5 rounded-full text-sm transition-all border`}
+                                                                style={{
+                                                                    backgroundColor: selectedRiskStyle === s.id ? `${s.color}20` : 'transparent',
+                                                                    color: selectedRiskStyle === s.id ? s.color : 'var(--muted-foreground)',
+                                                                    borderColor: selectedRiskStyle === s.id ? s.color : 'var(--border)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                {t(`options.style.${s.id}`)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {/* Strike Price Filter */}
+                                                    <div>
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.strikeRange')}: <span className="font-mono">{cs}{currentStrikeMin.toFixed(2)} - {cs}{currentStrikeMax.toFixed(2)}</span>
+                                                        </label>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="range"
+                                                                min={strikeMin}
+                                                                max={strikeMax}
+                                                                step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
+                                                                value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[0]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setStrikeRange([val, Math.max(val, strikeRange[1])]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                            <input
+                                                                type="range"
+                                                                min={strikeMin}
+                                                                max={strikeMax}
+                                                                step={Math.max(0.01, (strikeMax - strikeMin) / 100)}
+                                                                value={Math.max(strikeMin, Math.min(strikeMax, strikeRange[1]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setStrikeRange([Math.min(val, strikeRange[0]), val]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Annualized Return Filter */}
+                                                    <div>
+                                                        <label className="block mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                            {t('options.filter.annualizedRange')}: <span className="font-mono">{currentReturnMin.toFixed(1)}% - {currentReturnMax.toFixed(1)}%</span>
+                                                        </label>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="range"
+                                                                min={returnMin}
+                                                                max={returnMax}
+                                                                step={Math.max(0.1, (returnMax - returnMin) / 100)}
+                                                                value={Math.max(returnMin, Math.min(returnMax, returnRange[0]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setReturnRange([val, Math.max(val, returnRange[1])]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                            <input
+                                                                type="range"
+                                                                min={returnMin}
+                                                                max={returnMax}
+                                                                step={Math.max(0.1, (returnMax - returnMin) / 100)}
+                                                                value={Math.max(returnMin, Math.min(returnMax, returnRange[1]))}
+                                                                onChange={(e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    setReturnRange([Math.min(val, returnRange[0]), val]);
+                                                                }}
+                                                                className="flex-1 range-filter"
+                                                                style={{ accentColor: '#FFD700', cursor: 'pointer' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             } catch (error) {
@@ -1639,111 +3245,169 @@ export default function Options() {
                         })()}
 
                         <div style={{ overflowX: 'auto' }}>
+                            {/* 展开/收起高级列按钮 */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'flex-end',
+                                padding: '0.5rem 0.75rem',
+                                borderBottom: '1px solid var(--border)'
+                            }}>
+                                <button
+                                    onClick={() => {
+                                        const newState = !showAdvancedColumns;
+                                        setShowAdvancedColumns(newState);
+                                        localStorage.setItem('optionsShowAdvancedColumns', String(newState));
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.4rem',
+                                        padding: '0.35rem 0.75rem',
+                                        fontSize: '0.75rem',
+                                        background: showAdvancedColumns ? 'rgba(13, 155, 151, 0.15)' : 'transparent',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '0.375rem',
+                                        color: showAdvancedColumns ? 'var(--primary)' : 'var(--muted-foreground)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                    className="hover:bg-[var(--muted)]"
+                                >
+                                    <i className={`bi bi-${showAdvancedColumns ? 'eye-slash' : 'eye'}`}></i>
+                                    {showAdvancedColumns ? t('options.table.hideAdvanced') : t('options.table.showAdvanced')}
+                                </button>
+                            </div>
                             <div className="table-container">
                                 <table className="option-table">
                                 <thead>
                                     <tr>
-                                        <th 
-                                            onClick={() => handleSort('strike')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>行权价</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Strike{getSortIndicator('strike')}</div>
-                                        </th>
-                                        <th 
-                                            onClick={() => handleSort('latest')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>最新价</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
-                                        </th>
-                                        <th 
-                                            onClick={() => handleSort('bid')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>买/卖价</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
-                                        </th>
-                                        <th 
-                                            onClick={() => handleSort('volume')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>成交量/持仓量</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
-                                        </th>
-                                        <th 
-                                            onClick={() => handleSort('iv')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>隐含波动率</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
-                                        </th>
-                                        <th 
-                                            onClick={() => handleSort('delta')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>Delta值</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
-                                        </th>
-                                        <th 
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>行权概率</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
-                                        </th>
-                                        <th 
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>价格差</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
-                                        </th>
-                                        <th 
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>权利金</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Premium</div>
-                                        </th>
-                                        <th 
-                                            onClick={() => handleSort('annualized_return')}
-                                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                                        >
-                                            <div>年化收益</div>
-                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized Return{getSortIndicator('annualized_return')}</div>
-                                        </th>
-                                        <th 
+                                        {/* 评分放第一位 - 用户最关注 */}
+                                        <th
                                             onClick={() => handleSort('score')}
                                             style={{ cursor: 'pointer', userSelect: 'none' }}
                                         >
-                                            <div>评分</div>
+                                            <div>{t('options.table.score')}</div>
                                             <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Score{getSortIndicator('score')}</div>
                                         </th>
+                                        {/* 股票代码 - 始终显示 */}
+                                        <th
+                                            onClick={() => handleSort('symbol')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.symbol')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Symbol{getSortIndicator('symbol')}</div>
+                                        </th>
+                                        {/* 到期日 - 仅在多日期模式下显示 */}
+                                        {selectedExpiries.length > 1 && (
+                                            <th
+                                                onClick={() => handleSort('expiry_date')}
+                                                style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            >
+                                                <div>{t('options.table.expiry')}</div>
+                                                <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Expiry{getSortIndicator('expiry_date')}</div>
+                                            </th>
+                                        )}
+                                        <th
+                                            onClick={() => handleSort('strike')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.strike')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Strike{getSortIndicator('strike')}</div>
+                                        </th>
+                                        {/* 权利金和年化 - 核心收益信息 */}
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.premium')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Premium×100</div>
+                                        </th>
+                                        <th
+                                            onClick={() => handleSort('annualized_return')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.annualized')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Annualized{getSortIndicator('annualized_return')}</div>
+                                        </th>
+                                        {/* 默认显示的重要列 */}
+                                        <th
+                                            onClick={() => handleSort('latest')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.latest')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Latest{getSortIndicator('latest')}</div>
+                                        </th>
+                                        <th
+                                            onClick={() => handleSort('volume')}
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.volOI')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Vol/OI{getSortIndicator('volume')}</div>
+                                        </th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.exerciseProb')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Exercise Prob.</div>
+                                        </th>
+                                        <th
+                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                        >
+                                            <div>{t('options.table.priceDiff')}</div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Price Diff.</div>
+                                        </th>
+                                        {/* 高级列 - 默认隐藏，可展开：Delta、IV、买/卖价 */}
+                                        {showAdvancedColumns && (
+                                            <>
+                                                <th
+                                                    onClick={() => handleSort('delta')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.delta')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Delta{getSortIndicator('delta')}</div>
+                                                </th>
+                                                <th
+                                                    onClick={() => handleSort('iv')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.iv')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>IV{getSortIndicator('iv')}</div>
+                                                </th>
+                                                <th
+                                                    onClick={() => handleSort('bid')}
+                                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                >
+                                                    <div>{t('options.table.bidAsk')}</div>
+                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>Bid/Ask{getSortIndicator('bid')}</div>
+                                                </th>
+                                            </>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredOptions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
-                                                没有符合条件的期权数据
+                                            <td colSpan={showAdvancedColumns ? (selectedExpiries.length > 1 ? 13 : 12) : (selectedExpiries.length > 1 ? 10 : 9)} style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted-foreground)' }}>
+                                                {t('options.table.noData')}
                                             </td>
                                         </tr>
                                     ) : (
                                         filteredOptions.map(opt => {
                                             const totalScore = getOptionScore(opt);
                                             const isRecommended = totalScore >= 60;
-                                            
+
                                             // 计算行权概率：优先使用assignment_probability（已是0-100%格式），否则用delta的绝对值
                                             const exerciseProb = opt.scores?.assignment_probability
                                                 ? opt.scores.assignment_probability  // 已经是百分比格式，不需要再乘100
                                                 : (opt.delta ? Math.abs(opt.delta) * 100 : 0);
-                                            
+
                                             // 计算价格差百分比：CALL是(strike - stockPrice)/stockPrice，PUT是(stockPrice - strike)/stockPrice
                                             const stockPrice = displayStockPrice || 0;
-                                            const priceDiffPercent = stockPrice > 0 
-                                                ? (opt.put_call === 'CALL' 
+                                            const priceDiffPercent = stockPrice > 0
+                                                ? (opt.put_call === 'CALL'
                                                     ? ((opt.strike - stockPrice) / stockPrice) * 100
                                                     : ((stockPrice - opt.strike) / stockPrice) * 100)
                                                 : 0;
-                                            
+
                                             // 计算权利金：优先使用premium，否则用中间价
                                             const premium = opt.premium ||
                                                 ((opt.bid_price && opt.ask_price)
@@ -1757,31 +3421,49 @@ export default function Options() {
                                                     onClick={() => handleOptionClick(opt)}
                                                     style={{ cursor: 'pointer' }}
                                                 >
-                                                    <td style={{ fontWeight: 600 }}>
-                                                        ${opt.strike}
-                                                    </td>
-                                                    <td>${formatNumber(opt.latest_price)}</td>
-                                                    <td><small>${formatNumber(opt.bid_price)} / ${formatNumber(opt.ask_price)}</small></td>
-                                                    <td><small>{opt.volume} / {opt.open_interest}</small></td>
-                                                    <td>{formatPercent(opt.implied_vol)}</td>
-                                                    <td>{formatNumber(opt.delta, 3)}</td>
-                                                    <td style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
-                                                        {exerciseProb.toFixed(1)}%
-                                                    </td>
-                                                    <td style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
-                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
-                                                    </td>
-                                                    <td style={{ fontWeight: 500 }}>
-                                                        ${formatNumber(premium, 2)}
-                                                    </td>
-                                                    <td style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
-                                                        {opt.scores?.annualized_return?.toFixed(1)}%
-                                                    </td>
+                                                    {/* 评分放第一位 */}
                                                     <td>
-                                                        <span className={`score-badge ${getScoreClass(totalScore)}`}>
+                                                        <span className={`score-badge font-mono ${getScoreClass(totalScore)}`}>
                                                             {totalScore.toFixed(1)}
                                                         </span>
                                                     </td>
+                                                    {/* 股票代码 - 始终显示 */}
+                                                    <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                                                        {opt.symbol || displayChain?.symbol}
+                                                    </td>
+                                                    {/* 到期日 - 仅在多日期模式下显示 */}
+                                                    {selectedExpiries.length > 1 && (
+                                                        <td style={{ fontSize: '0.85rem', color: 'var(--warning)' }}>
+                                                            {opt.expiry_date || displayChain?.expiry_date}
+                                                        </td>
+                                                    )}
+                                                    <td className="font-mono" style={{ fontWeight: 600 }}>
+                                                        ${opt.strike}
+                                                    </td>
+                                                    {/* 权利金和年化 */}
+                                                    <td className="font-mono" style={{ fontWeight: 500, color: 'var(--primary)' }}>
+                                                        ${formatNumber(premium * 100, 0)}
+                                                    </td>
+                                                    <td className="font-mono" style={{ color: totalScore >= 50 ? 'var(--bull)' : 'inherit', fontWeight: totalScore >= 50 ? 600 : 400 }}>
+                                                        {opt.scores?.annualized_return?.toFixed(1) || ((premium / (opt.strike || 1) * 100) / (opt.days_to_expiry || 30) * 365).toFixed(1)}%
+                                                    </td>
+                                                    {/* 默认显示的重要列 */}
+                                                    <td className="font-mono">{cs}{formatNumber(opt.latest_price)}</td>
+                                                    <td className="font-mono"><small>{opt.volume} / {opt.open_interest}</small></td>
+                                                    <td className="font-mono" style={{ color: exerciseProb > 50 ? 'var(--warning)' : 'inherit' }}>
+                                                        {exerciseProb.toFixed(1)}%
+                                                    </td>
+                                                    <td className="font-mono" style={{ color: priceDiffPercent > 0 ? 'var(--bull)' : priceDiffPercent < 0 ? 'var(--bear)' : 'inherit' }}>
+                                                        {priceDiffPercent >= 0 ? '+' : ''}{formatNumber(priceDiffPercent, 2)}%
+                                                    </td>
+                                                    {/* 高级列 - 根据状态显示/隐藏：Delta、IV、买/卖价 */}
+                                                    {showAdvancedColumns && (
+                                                        <>
+                                                            <td className="font-mono">{formatNumber(opt.delta, 3)}</td>
+                                                            <td className="font-mono">{formatPercent(opt.implied_vol)}</td>
+                                                            <td className="font-mono"><small>{cs}{formatNumber(opt.bid_price)} / {cs}{formatNumber(opt.ask_price)}</small></td>
+                                                        </>
+                                                    )}
                                                 </tr>
                                             );
                                         })
@@ -1791,6 +3473,8 @@ export default function Options() {
                             </div>
                         </div>
                     </div>
+                    </>
+                    )}
                 </div>
             )}
 
@@ -1798,7 +3482,7 @@ export default function Options() {
             {!displayChain && !loading && (
                 <div className="text-center py-20" style={{ color: 'var(--muted-foreground)' }}>
                     <i className="bi bi-graph-down text-6xl mb-4 opacity-30" style={{ display: 'block' }}></i>
-                    <p>输入股票代码，加载日期，选择到期日开始分析</p>
+                    <p>{t('options.empty')}</p>
                 </div>
             )}
             </div>
@@ -1807,12 +3491,12 @@ export default function Options() {
             <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
                 <OptionsAnalysisHistory
                     onSelectHistory={(symbol, _analysisType, _optionIdentifier, expiryDate) => {
-                        setTicker(symbol);
+                        setTickers([symbol]);
                         setActiveTab('analysis');
                         // Try to load the expiry date if it matches available expirations
                         if (expiryDate && expirations.find(exp => exp.date === expiryDate)) {
-                            setSelectedExpiry(expiryDate);
-                            fetchChain(expiryDate);
+                            setSelectedExpiries([expiryDate]);
+                            fetchChain([expiryDate]);
                         }
                     }}
                     onViewFullReport={(optionData) => {
@@ -1822,7 +3506,7 @@ export default function Options() {
                         // Check if data exists
                         if (!optionData) {
                             console.error('No option data provided');
-                            setError('无法加载历史分析数据：数据为空');
+                            setError(t('options.error.emptyData'));
                             return;
                         }
                         
@@ -1833,14 +3517,15 @@ export default function Options() {
                         
                         // If no 'data' field, the optionData itself might be the chain data
                         // Check if it has chain-like properties (symbol, calls, puts, etc.)
-                        if (!chainData && (optionData.symbol || optionData.calls || optionData.puts)) {
-                            chainData = optionData;
+                        const optionDataAny = optionData as any;
+                        if (!chainData && (optionDataAny.symbol || optionDataAny.calls || optionDataAny.puts)) {
+                            chainData = optionDataAny;
                         }
                         
                         if (!chainData) {
                             console.error('No chain data found in optionData:', optionData);
                             console.error('Available keys:', Object.keys(optionData));
-                            setError('无法加载历史分析数据：缺少期权链数据');
+                            setError(t('options.error.noChainData'));
                             return;
                         }
                         
@@ -1848,7 +3533,7 @@ export default function Options() {
                         if (!chainData.symbol && !chainData.calls && !chainData.puts) {
                             console.error('Invalid chain data structure:', chainData);
                             console.error('Available keys:', Object.keys(chainData));
-                            setError('无法加载历史分析数据：数据格式不正确');
+                            setError(t('options.error.invalidFormat'));
                             return;
                         }
                         
@@ -1862,10 +3547,10 @@ export default function Options() {
                         const expiryDate = optionData.history_metadata?.expiry_date || chainData.expiry_date;
                         
                         if (symbol) {
-                            setTicker(symbol);
+                            setTickers([symbol]);
                         }
                         if (expiryDate) {
-                            setSelectedExpiry(expiryDate);
+                            setSelectedExpiries([expiryDate]);
                         }
                         if (chainData?.real_stock_price) {
                             setStockPrice(chainData.real_stock_price);
@@ -1883,6 +3568,20 @@ export default function Options() {
                 />
             </div>
 
+            {/* Risk Disclaimer Banner */}
+            <div className="mt-8 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <p className="text-xs text-amber-400/80">
+                        {isZh
+                            ? '期权交易涉及重大风险，可能导致全部投入资金的损失。过往表现不代表未来收益。投资有风险，入市需谨慎。'
+                            : 'Options trading involves significant risk and may result in the loss of all invested capital. Past performance does not guarantee future results. Please invest carefully.'}
+                    </p>
+                </div>
+            </div>
+
             {/* Option Detail Modal */}
             {selectedOption && (
                 <OptionDetailModal
@@ -1890,10 +3589,16 @@ export default function Options() {
                     stockPrice={displayStockPrice || 0}
                     strategy={strategy}
                     stockHistory={stockHistory}
+                    stockHistoryOHLC={stockHistoryOHLC}
                     loadingHistory={loadingHistory}
                     onClose={closeModal}
+                    currencySymbol={cs}
+                    marketInfo={displayChain?.market_info}
                 />
             )}
+
+            {/* Quota Confirmation Dialog */}
+            {/* Quota confirmation dialog removed - analysis starts directly */}
         </div>
     );
 }
@@ -1904,24 +3609,33 @@ function OptionDetailModal({
     stockPrice,
     strategy,
     stockHistory,
+    stockHistoryOHLC,
     loadingHistory,
-    onClose
+    onClose,
+    currencySymbol: cs = '$',
+    marketInfo,
 }: {
     option: OptionData;
     stockPrice: number;
     strategy: Strategy;
     stockHistory: { dates: string[], prices: number[] } | null;
+    stockHistoryOHLC: OHLCData[] | null;
     loadingHistory: boolean;
     onClose: () => void;
+    currencySymbol?: string;
+    marketInfo?: { market: string; currency: string; contract_multiplier: number; cash_settlement: boolean };
 }) {
+    const { t } = useTranslation();
+    // Chart type - fixed to kline (line chart removed)
+    const chartType = 'kline' as 'kline' | 'line';
     // Create refs inside the modal component
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
     const strategyLabels: Record<Strategy, string> = {
-        'sell_put': '卖出看跌 (Sell Put)',
-        'sell_call': '卖出看涨 (Sell Call)',
-        'buy_call': '买入看涨 (Buy Call)',
-        'buy_put': '买入看跌 (Buy Put)'
+        'sell_put': `${t('options.strategy.sellPut')} (Sell Put)`,
+        'sell_call': `${t('options.strategy.sellCall')} (Sell Call)`,
+        'buy_call': `${t('options.strategy.buyCall')} (Buy Call)`,
+        'buy_put': `${t('options.strategy.buyPut')} (Buy Put)`
     };
 
     // Calculate premium correctly
@@ -1959,29 +3673,66 @@ function OptionDetailModal({
     };
 
     const maxLoss = calculateMaxLoss();
-    
+
+    // Calculate minimum margin requirement
+    const calculateMargin = (): number => {
+        // 如果后端返回了保证金数据，优先使用
+        if (option.scores?.margin_requirement) {
+            return option.scores.margin_requirement;
+        }
+
+        // 否则使用简化公式估算
+        if (strategy === 'sell_put') {
+            // Sell Put: 保证金 ≈ max(20% × 现价, 10% × 行权价) × 100 - 权利金收入
+            const margin1 = stockPrice * 0.20 * 100;
+            const margin2 = option.strike * 0.10 * 100;
+            return Math.max(margin1, margin2) - (premium * 100);
+        } else if (strategy === 'sell_call') {
+            // Sell Call (无担保): 保证金 ≈ max(20% × 现价 + (现价-行权价), 10% × 行权价) × 100
+            const itm = Math.max(0, stockPrice - option.strike);
+            const margin1 = (stockPrice * 0.20 + itm) * 100;
+            const margin2 = option.strike * 0.10 * 100;
+            return Math.max(margin1, margin2);
+        } else {
+            // Buy Call/Put: 无保证金要求，只需付权利金
+            return premium * 100;
+        }
+    };
+
+    const minMargin = calculateMargin();
+
     // Calculate stop loss price
+    // 止损价代表当股价达到此价格时，应该考虑止损
     const calculateStopLoss = (): number => {
         if (strategy === 'sell_put') {
-            // Sell Put: Stop loss when stock price drops below strike - premium * 2
+            // Sell Put: 卖出看跌期权
+            // 当股价下跌低于 (行权价 - 2倍权利金) 时止损
+            // 止损价在行权价下方
             return Math.max(0, option.strike - (premium * 2));
         } else if (strategy === 'sell_call') {
-            // Sell Call: Stop loss when stock price rises above strike + premium * 2
+            // Sell Call: 卖出看涨期权
+            // 当股价上涨超过 (行权价 + 2倍权利金) 时止损
+            // 止损价在行权价上方
             return option.strike + (premium * 2);
-        } else if (strategy === 'buy_call' || strategy === 'buy_put') {
-            // Buy Call/Put: Stop loss is based on option price (50% loss)
-            // For display purposes, show stock price where option would be worthless
-            return stockPrice;
+        } else if (strategy === 'buy_call') {
+            // Buy Call: 买入看涨期权
+            // 当股价下跌到行权价以下一定距离时止损（期权可能变得毫无价值）
+            // 止损价在行权价下方
+            return Math.max(0, option.strike - (option.strike * 0.05));
+        } else if (strategy === 'buy_put') {
+            // Buy Put: 买入看跌期权
+            // 当股价上涨超过行权价一定距离时止损（期权可能变得毫无价值）
+            // 止损价在行权价上方
+            return option.strike + (option.strike * 0.05);
         }
         return stockPrice;
     };
 
     const stopLossPrice = calculateStopLoss();
 
-    // Render chart with reference lines
+    // Render Chart.js line chart (only when chartType is 'line')
     useEffect(() => {
-        if (!stockHistory || !chartRef.current) {
-            console.log('Chart conditions not met:', { stockHistory: !!stockHistory, chartRef: !!chartRef.current });
+        if (chartType !== 'line' || !stockHistory || !chartRef.current) {
             return;
         }
 
@@ -1991,7 +3742,6 @@ function OptionDetailModal({
             const checkChart = setInterval(() => {
                 if (window.Chart) {
                     clearInterval(checkChart);
-                    // Retry after Chart.js is loaded
                     setTimeout(() => {
                         if (stockHistory && chartRef.current) {
                             renderChart();
@@ -2019,51 +3769,43 @@ function OptionDetailModal({
 
             // Ensure prices are numbers
             const prices = stockHistory.prices
-                .map(p => typeof p === 'number' ? p : parseFloat(p))
-                .filter(p => !isNaN(p) && p > 0);
-            
+                .map((p: number | string) => typeof p === 'number' ? p : parseFloat(p))
+                .filter((p: number) => !isNaN(p) && p > 0);
+
             if (prices.length === 0) {
                 console.error('No valid prices in stockHistory:', stockHistory);
                 return;
             }
 
-            // Ensure dates match prices length
             const dates = stockHistory.dates.slice(0, prices.length);
-            
-            // Check if history data matches current stock price (within 20% tolerance)
-            const lastHistoryPrice = prices[prices.length - 1];
-            const priceDiscrepancy = Math.abs(lastHistoryPrice - stockPrice) / stockPrice;
-            const useHistoryData = priceDiscrepancy < 0.20; // Only use history if within 20%
 
-            console.log('Chart rendering:', {
-                datesCount: dates.length,
-                pricesCount: prices.length,
-                firstPrice: prices[0],
-                lastPrice: lastHistoryPrice,
-                stockPrice,
-                priceDiscrepancy: (priceDiscrepancy * 100).toFixed(1) + '%',
-                useHistoryData,
-                strike: option.strike,
-                stopLossPrice
-            });
+            const allPrices = [...prices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
+            if (allPrices.length === 0) return;
 
-            // If history data doesn't match, scale it to current price range
-            let displayPrices = prices;
-            if (!useHistoryData && stockPrice > 0) {
-                const scaleFactor = stockPrice / lastHistoryPrice;
-                displayPrices = prices.map(p => p * scaleFactor);
-            }
+            // 以现价为绝对中心计算Y轴范围
+            // 只考虑行权价和止损价，忽略历史价格的极端值
+            const keyPrices = [option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
 
-            const allPrices = [...displayPrices, stockPrice, option.strike, stopLossPrice].filter(p => p > 0 && !isNaN(p));
-            if (allPrices.length === 0) {
-                console.error('No valid prices for chart');
-                return;
-            }
-            
-            const minPrice = Math.min(...allPrices);
-            const maxPrice = Math.max(...allPrices);
-            const priceRange = maxPrice - minPrice;
-            const padding = priceRange > 0 ? priceRange * 0.1 : maxPrice * 0.05;
+            // 计算行权价和止损价到现价的最大距离
+            const maxKeyDistance = keyPrices.length > 0
+                ? Math.max(...keyPrices.map(p => Math.abs(p - stockPrice)))
+                : stockPrice * 0.1; // 默认10%范围
+
+            // 使用较大的padding确保关键价格线清晰可见
+            // 最小范围为现价的8%，确保视图不会太窄
+            const minRange = stockPrice * 0.08;
+            const chartPadding = Math.max(maxKeyDistance * 1.3, minRange);
+
+            // Y轴严格以现价为中心
+            const yAxisMin = stockPrice - chartPadding;
+            const yAxisMax = stockPrice + chartPadding;
+
+            // 确保最小值不为负
+            const adjustedMinPrice = Math.max(0, yAxisMin);
+            // 如果调整了最小值，相应增加最大值保持现价居中
+            const adjustedMaxPrice = adjustedMinPrice === 0
+                ? stockPrice + (stockPrice - 0) // 镜像到上方
+                : yAxisMax;
 
             try {
                 chartInstance.current = new window.Chart(ctx, {
@@ -2072,45 +3814,50 @@ function OptionDetailModal({
                         labels: dates,
                         datasets: [
                             {
-                                label: '股价',
-                                data: displayPrices,
+                                label: t('options.modal.chartStockPrice'),
+                                data: prices,
                                 borderColor: 'hsl(178, 78%, 32%)',
-                                backgroundColor: 'rgba(13, 155, 151, 0.1)',
+                                backgroundColor: 'rgba(13, 155, 151, 0.08)',
                                 fill: true,
                                 tension: 0.4,
                                 pointRadius: 0,
                                 borderWidth: 1.5,
-                                spanGaps: false
+                                spanGaps: false,
+                                order: 4
                             },
                             {
-                                label: '执行价',
-                                data: Array(dates.length).fill(option.strike),
-                                borderColor: 'hsl(38, 92%, 50%)',
-                                borderDash: [5, 5],
-                                borderWidth: 1.5,
-                                pointRadius: 0,
-                                fill: false,
-                                spanGaps: false
-                            },
-                            {
-                                label: '现价',
+                                label: `★ ${t('options.modal.chartCurrentPrice')} ${cs}${stockPrice.toFixed(2)}`,
                                 data: Array(dates.length).fill(stockPrice),
-                                borderColor: 'hsl(142, 76%, 36%)',
-                                borderDash: [5, 5],
-                                borderWidth: 1.5,
+                                borderColor: '#4ade80',
+                                backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                                borderDash: [],
+                                borderWidth: 3,
                                 pointRadius: 0,
                                 fill: false,
-                                spanGaps: false
+                                spanGaps: false,
+                                order: 1
                             },
                             {
-                                label: '止损价',
-                                data: Array(dates.length).fill(stopLossPrice),
-                                borderColor: 'hsl(0, 72%, 51%)',
-                                borderDash: [5, 5],
-                                borderWidth: 1.5,
+                                label: t('options.modal.chartStrikePrice') + ` (${cs}${option.strike.toFixed(2)})`,
+                                data: Array(dates.length).fill(option.strike),
+                                borderColor: '#f59e0b',
+                                borderDash: [8, 4],
+                                borderWidth: 2,
                                 pointRadius: 0,
                                 fill: false,
-                                spanGaps: false
+                                spanGaps: false,
+                                order: 2
+                            },
+                            {
+                                label: t('options.modal.chartStopLoss') + ` (${cs}${stopLossPrice.toFixed(2)})`,
+                                data: Array(dates.length).fill(stopLossPrice),
+                                borderColor: '#ef4444',
+                                borderDash: [4, 4],
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false,
+                                spanGaps: false,
+                                order: 3
                             }
                         ]
                     },
@@ -2158,14 +3905,14 @@ function OptionDetailModal({
                                 }
                             },
                             y: {
-                                min: Math.max(0, minPrice - padding),
-                                max: maxPrice + padding,
+                                min: adjustedMinPrice,
+                                max: adjustedMaxPrice,
                                 ticks: {
                                     color: 'hsl(240, 5%, 64.9%)',
                                     font: { size: 8 },
                                     padding: 4,
-                                    callback: function(value: any) {
-                                        return '$' + value.toFixed(2);
+                                    callback: function(value: number) {
+                                        return cs + value.toFixed(2);
                                     }
                                 },
                                 grid: {
@@ -2187,14 +3934,14 @@ function OptionDetailModal({
                 chartInstance.current = null;
             }
         };
-    }, [stockHistory, stockPrice, option.strike, stopLossPrice]);
+    }, [chartType, stockHistory, stockPrice, option.strike, stopLossPrice]);
 
     return (
         <div className="option-modal-overlay" onClick={onClose}>
             <div className="option-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="option-modal-header">
                     <div className="option-modal-title">
-                        {strategyLabels[strategy]} - ${option.strike}
+                        {strategyLabels[strategy]} - <span className="font-mono">{cs}{option.strike}</span>
                     </div>
                     <button className="option-modal-close" onClick={onClose}>
                         ×
@@ -2204,53 +3951,77 @@ function OptionDetailModal({
                     {/* Important Info Grid */}
                     <div className="option-info-grid">
                         <div className="option-info-item">
-                            <div className="option-info-label">行权价</div>
-                            <div className="option-info-value">${option.strike.toFixed(2)}</div>
+                            <div className="option-info-label">{t('options.modal.strike')}</div>
+                            <div className="option-info-value font-mono">{cs}{option.strike.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">当前股价</div>
-                            <div className="option-info-value">${stockPrice.toFixed(2)}</div>
+                            <div className="option-info-label">{t('options.modal.stockPrice')}</div>
+                            <div className="option-info-value font-mono">{cs}{stockPrice.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">期权价格</div>
-                            <div className="option-info-value">${premium.toFixed(2)}</div>
+                            <div className="option-info-label">{t('options.modal.optionPrice')}</div>
+                            <div className="option-info-value font-mono">{cs}{premium.toFixed(2)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">隐含波动率</div>
-                            <div className="option-info-value">{(option.implied_vol * 100).toFixed(1)}%</div>
+                            <div className="option-info-label">{t('options.modal.premium')}</div>
+                            <div className="option-info-value font-mono" style={{ color: 'var(--primary)', fontWeight: 600 }}>{cs}{(premium * 100).toFixed(0)}</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">Delta</div>
-                            <div className="option-info-value">{option.delta.toFixed(3)}</div>
+                            <div className="option-info-label">{t('options.modal.iv')}</div>
+                            <div className="option-info-value font-mono">{(option.implied_vol * 100).toFixed(1)}%</div>
                         </div>
                         <div className="option-info-item">
-                            <div className="option-info-label">到期日</div>
+                            <div className="option-info-label">{t('options.modal.delta')}</div>
+                            <div className="option-info-value font-mono">{option.delta.toFixed(3)}</div>
+                        </div>
+                        <div className="option-info-item">
+                            <div className="option-info-label">{t('options.modal.expiry')}</div>
                             <div className="option-info-value">{option.expiry_date}</div>
                         </div>
                     </div>
 
-                    {/* Max Loss */}
-                    <div className="option-max-loss">
-                        <span className="option-max-loss-label">最大亏损 (每手)</span>
-                        <span className="option-max-loss-value">${maxLoss.toFixed(0)}</span>
+                    {/* Contract multiplier info for non-US markets */}
+                    {marketInfo && marketInfo.contract_multiplier !== 100 && (
+                        <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
+                            <span>{t('options.info.multiplier', { multiplier: marketInfo.contract_multiplier })}</span>
+                            {marketInfo.cash_settlement && (
+                                <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t('options.info.cashSettlement')}</span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Max Loss & Min Margin */}
+                    <div className="option-risk-row">
+                        <div className="option-risk-item loss">
+                            <span className="option-risk-label">{t('options.modal.maxLoss')}</span>
+                            <span className="option-risk-value font-mono">{cs}{maxLoss.toFixed(0)}</span>
+                        </div>
+                        <div className="option-risk-item margin">
+                            <span className="option-risk-label">{t('options.modal.minMargin')}</span>
+                            <span className="option-risk-value font-mono">{cs}{minMargin.toFixed(0)}</span>
+                        </div>
                     </div>
 
-                    {/* Chart */}
+                    {/* K-Line Chart Only */}
                     <div>
-                        <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--muted-foreground)' }}>
-                            近一月走势
+                        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted-foreground)', marginBottom: '0.5rem' }}>
+                            {t('options.modal.chartTitle')}
                         </div>
                         {loadingHistory ? (
-                            <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <div className="spinner" style={{ width: '24px', height: '24px' }}></div>
                             </div>
-                        ) : stockHistory ? (
-                            <div className="option-chart-container">
-                                <canvas ref={chartRef}></canvas>
-                            </div>
+                        ) : stockHistoryOHLC && stockHistoryOHLC.length > 0 ? (
+                            <KlineChart
+                                data={stockHistoryOHLC}
+                                currentPrice={stockPrice}
+                                strikePrice={option.strike}
+                                stopLossPrice={stopLossPrice}
+                                height={200}
+                            />
                         ) : (
-                            <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>
-                                无法加载历史数据
+                            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>
+                                {t('options.modal.noHistory')}
                             </div>
                         )}
                     </div>

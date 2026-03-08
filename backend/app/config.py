@@ -89,8 +89,10 @@ class Config:
         }
     
     # Supabase
-    SUPABASE_URL = os.getenv('SUPABASE_URL')
-    SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY') or os.getenv('SUPABASE_KEY')
+    SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('NEXT_PUBLIC_SUPABASE_URL')
+    SUPABASE_KEY = (os.getenv('SUPABASE_ANON_KEY') or
+                    os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY') or
+                    os.getenv('SUPABASE_KEY'))
     
     # Mail
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -101,7 +103,8 @@ class Config:
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', ''))
     
     # Business Logic
-    REGULAR_USER_DAILY_MAX_QUERIES = int(os.getenv('REGULAR_USER_DAILY_MAX_QUERIES', '5'))
+    # 免费用户每日最大查询次数（所有服务共享：股票+期权）
+    REGULAR_USER_DAILY_MAX_QUERIES = int(os.getenv('REGULAR_USER_DAILY_MAX_QUERIES', '2'))
     
     # Stripe
     STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
@@ -113,3 +116,6 @@ class Config:
         'pro_yearly': os.getenv('STRIPE_PRICE_PRO_YEARLY', ''),
         'topup_100': os.getenv('STRIPE_PRICE_TOPUP_100', '')
     }
+
+    # Google Gemini API (for image recognition)
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')

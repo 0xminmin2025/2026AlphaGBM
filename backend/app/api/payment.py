@@ -7,7 +7,7 @@ import os
 import stripe
 from ..services.payment_service import PaymentService
 from ..utils.auth import require_auth
-from ..models import db, DailyQueryCount
+from ..models import db, DailyQueryCount, ServiceType
 
 payment_bp = Blueprint('payment', __name__, url_prefix='/api/payment')
 
@@ -51,44 +51,60 @@ def create_checkout_session():
 @payment_bp.route('/webhook', methods=['POST'])
 def webhook():
     """Stripe Webhook回调处理"""
+    import logging
+    logger = logging.getLogger(__name__)
+
     payload = request.data
     sig_header = request.headers.get('Stripe-Signature')
     endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET', '')
-    
+
     if not endpoint_secret:
+        logger.error("[Webhook] Webhook密钥未配置")
         return jsonify({'error': 'Webhook密钥未配置'}), 500
-    
+
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, endpoint_secret
         )
     except ValueError as e:
+        logger.error(f"[Webhook] Invalid payload: {e}")
         return jsonify({'error': 'Invalid payload'}), 400
     except stripe.error.SignatureVerificationError as e:
+        logger.error(f"[Webhook] Invalid signature: {e}")
         return jsonify({'error': 'Invalid signature'}), 400
     except Exception as e:
+        logger.error(f"[Webhook] Event construction error: {e}")
         return jsonify({'error': str(e)}), 400
-    
+
+    event_type = event['type']
+    event_id = event['id']
+    logger.info(f"[Webhook] Received event: {event_type} [{event_id}]")
+
     # 处理事件
     try:
-        if event['type'] == 'checkout.session.completed':
+        if event_type == 'checkout.session.completed':
             session = event['data']['object']
+            logger.info(f"[Webhook] Processing checkout.session.completed for session {session.get('id')}")
             success, message = PaymentService.handle_checkout_completed(session)
+            logger.info(f"[Webhook] checkout.session.completed result: success={success}, message={message}")
             if not success:
                 db.session.rollback()
                 return jsonify({'error': message}), 500
-        
-        elif event['type'] == 'invoice.payment_succeeded':
-            # 处理订阅续费
+
+        elif event_type == 'invoice.payment_succeeded' or event_type == 'invoice.paid':
+            # 处理订阅付款成功 (包括首次订阅和续费)
             invoice = event['data']['object']
+            logger.info(f"[Webhook] Processing {event_type} for invoice {invoice.get('id')}, subscription={invoice.get('subscription')}, billing_reason={invoice.get('billing_reason')}")
             success, message = PaymentService.handle_subscription_renewal(invoice)
+            logger.info(f"[Webhook] {event_type} result: success={success}, message={message}")
             if not success:
                 db.session.rollback()
                 return jsonify({'error': message}), 500
-        
-        elif event['type'] == 'customer.subscription.deleted':
+
+        elif event_type == 'customer.subscription.deleted':
             # 订阅取消
             subscription_id = event['data']['object']['id']
+            logger.info(f"[Webhook] Processing customer.subscription.deleted for {subscription_id}")
             from ..models import Subscription
             subscription = Subscription.query.filter_by(
                 stripe_subscription_id=subscription_id
@@ -96,12 +112,61 @@ def webhook():
             if subscription:
                 subscription.status = 'canceled'
                 db.session.commit()
-        
+                logger.info(f"[Webhook] Subscription {subscription_id} marked as canceled")
+
+        elif event_type == 'customer.subscription.created':
+            # 订阅创建 - 只记录日志，实际处理在 checkout.session.completed
+            logger.info(f"[Webhook] Subscription created: {event['data']['object'].get('id')}")
+
+        elif event_type == 'customer.subscription.updated':
+            # 订阅更新 - 只记录日志
+            logger.info(f"[Webhook] Subscription updated: {event['data']['object'].get('id')}")
+
+        else:
+            logger.info(f"[Webhook] Unhandled event type: {event_type}")
+
         return jsonify({'status': 'success'}), 200
-        
+
     except Exception as e:
+        logger.error(f"[Webhook] Error processing {event_type}: {str(e)}", exc_info=True)
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@payment_bp.route('/check-quota', methods=['POST'])
+@require_auth
+def check_quota():
+    """
+    检查额度是否足够（不扣减）
+    用于前端在分析前显示确认弹窗
+    """
+    user_id = g.user_id
+    data = request.get_json() or {}
+
+    service_type = data.get('service_type', 'stock_analysis')
+    amount = data.get('amount', 1)  # 期权分析时为 symbol 数量
+
+    # 获取免费额度信息
+    free_info = PaymentService.get_daily_free_quota_info(user_id, service_type)
+
+    # 获取付费额度（订阅额度统一存储为 stock_analysis 类型，作为通用额度）
+    total_credits = PaymentService.get_total_credits(user_id, ServiceType.STOCK_ANALYSIS.value)
+
+    # 检查是否有足够额度（免费 + 付费合计，扣减时优先用免费再用付费）
+    total_available = free_info['remaining'] + total_credits
+    has_enough = total_available >= amount
+    can_use_free = free_info['remaining'] >= amount
+
+    return jsonify({
+        'has_enough': has_enough,
+        'will_use_free': can_use_free,
+        'free_quota': free_info['quota'],
+        'free_used': free_info['used'],
+        'free_remaining': free_info['remaining'],
+        'paid_credits': total_credits,
+        'amount_needed': amount,
+        'message': '额度充足' if has_enough else f'额度不足，需要 {amount} 次，剩余总额度 {total_available} 次（免费 {free_info["remaining"]} + 付费 {total_credits}）'
+    }), 200
 
 
 @payment_bp.route('/credits', methods=['GET'])
@@ -109,9 +174,8 @@ def webhook():
 def get_credits():
     """获取用户额度信息"""
     user_id = g.user_id
-    service_type = request.args.get('service_type', 'stock_analysis') # Using literal value 'stock_analysis' or mapping from enum
-    # ServiceType enum in models: STOCK_ANALYSIS = 'stock_analysis'
-    
+    service_type = request.args.get('service_type', 'stock_analysis')
+
     # 获取总剩余额度
     total_credits = PaymentService.get_total_credits(user_id, service_type)
     
@@ -157,16 +221,16 @@ def get_transactions():
         
     transactions = []
     for t in pagination.items:
+        # Stripe 金额以最小货币单位存储（美分/分），需要除以 100 转换为标准单位
+        amount_display = float(t.amount) / 100.0
         transactions.append({
-            'period_start': '', # Not applicable for single transaction usually, unless subscription period?
+            'period_start': '',
             'date': t.created_at.isoformat(),
             'description': t.description,
-            'amount': float(t.amount) / 100.0 if t.currency == 'cny' else t.amount, # Amount is usually in cents for Stripe? My payment service uses amount_total from session.
-            # In handle_checkout_completed, amount=session['amount_total']. Stripe amounts are in smallest unit (cents).
-            # So I should divide by 100 if currency is cny/usd.
+            'amount': amount_display,
             'currency': t.currency,
             'status': t.status,
-            'invoice_pdf': '' # We don't store invoice URL readily in Transaction model yet?
+            'invoice_pdf': ''
         })
     
     return jsonify({
@@ -211,66 +275,118 @@ def get_usage_history():
 
 @payment_bp.route('/pricing', methods=['GET'])
 def get_pricing():
-    """获取定价信息"""
+    """获取定价信息 - USD 版本"""
     return jsonify({
         'plans': {
             'free': {
                 'name': '免费版',
                 'price': 0,
                 'credits': '每天2次查询',
-                'features': ['每日2次', '股票分析', '行业报告']
+                'features': ['每日2次', '期权分析', '股票分析']
             },
             'plus': {
                 'name': 'Plus会员',
                 'monthly': {
-                    'price': 399,
-                    'currency': 'cny',
+                    'price': 58.8,
+                    'currency': 'usd',
                     'credits': 1000,
                     'period': 'month'
                 },
                 'yearly': {
-                    'price': 3990,
-                    'currency': 'cny',
+                    'price': 588,
+                    'currency': 'usd',
                     'credits': 12000,
                     'period': 'year',
                     'savings': '节省17%'
                 },
-                'features': ['1000次查询/月', '股票分析', '期权分析', '行业报告']
+                'features': ['1000次查询/月', '期权分析', '反向查分', '股票分析']
             },
             'pro': {
                 'name': 'Pro会员',
                 'monthly': {
-                    'price': 999,
-                    'currency': 'cny',
+                    'price': 99.8,
+                    'currency': 'usd',
                     'credits': 5000,
                     'period': 'month'
                 },
                 'yearly': {
-                    'price': 9990,
-                    'currency': 'cny',
+                    'price': 998,
+                    'currency': 'usd',
                     'credits': 60000,
                     'period': 'year',
                     'savings': '节省17%'
                 },
-                'features': ['5000次查询/月', '股票分析', '期权分析', '智能体服务', '行业报告', '投资回顾']
+                'features': ['5000次查询/月', '期权分析', '反向查分', '股票分析', '投资回顾']
             },
             'enterprise': {
                 'name': '企业客户',
                 'price': None,
                 'credits': '定制化',
-                'features': ['API接入', '定制化服务', '联系客服咨询']
+                'features': ['API接入', '批量期权分析', '定制化策略', '专属客服']
             }
         },
         'topups': {
             '100': {
                 'name': '额度加油包（100次）',
-                'price': 29,
-                'currency': 'cny',
+                'price': 4.99,
+                'currency': 'usd',
                 'credits': 100,
                 'validity': '3个月有效'
             }
         }
     }), 200
+
+
+@payment_bp.route('/upgrade', methods=['POST'])
+@require_auth
+def upgrade_subscription():
+    """升级订阅"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    user_id = g.user_id
+    logger.info(f"[Upgrade] User {user_id} requesting subscription upgrade")
+
+    data = request.get_json() or {}
+    new_price_key = data.get('price_key')
+
+    if not new_price_key:
+        return jsonify({'error': '请指定升级的套餐'}), 400
+
+    logger.info(f"[Upgrade] User {user_id} upgrading to {new_price_key}")
+
+    result, error = PaymentService.upgrade_subscription(user_id, new_price_key)
+
+    if error:
+        logger.error(f"[Upgrade] User {user_id} upgrade failed: {error}")
+        return jsonify({'error': error}), 400
+
+    logger.info(f"[Upgrade] User {user_id} upgrade successful: {result}")
+    return jsonify(result), 200
+
+
+@payment_bp.route('/cancel', methods=['POST'])
+@require_auth
+def cancel_subscription():
+    """取消订阅（周期结束后生效）"""
+    user_id = g.user_id
+
+    result, error = PaymentService.cancel_subscription(user_id)
+
+    if error:
+        return jsonify({'error': error}), 400
+
+    return jsonify(result), 200
+
+
+@payment_bp.route('/upgrade-options', methods=['GET'])
+@require_auth
+def get_upgrade_options():
+    """获取用户可升级的选项"""
+    user_id = g.user_id
+
+    options = PaymentService.get_upgrade_options(user_id)
+    return jsonify(options), 200
 
 
 @payment_bp.route('/customer-portal', methods=['POST'])

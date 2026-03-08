@@ -5,7 +5,6 @@ import { Menu, X } from 'lucide-react';
 import axios from 'axios';
 import FeedbackButton from '@/components/FeedbackButton';
 import PrivacyPolicy from '@/components/PrivacyPolicy';
-import i18n from '@/lib/i18n';
 import { translateStockName } from '@/lib/i18n';
 
 // Original CSS from home/index.html
@@ -142,7 +141,7 @@ export default function Landing() {
     
     // Rebalance history state
     const [rebalanceHistory, setRebalanceHistory] = useState<any[]>([]);
-    const [rebalanceLoading, setRebalanceLoading] = useState(false);
+    const [_rebalanceLoading, setRebalanceLoading] = useState(false);
     const [expandedRebalance, setExpandedRebalance] = useState<number | null>(null);
 
     const toggleLang = () => {
@@ -917,7 +916,7 @@ export default function Landing() {
                             </div>
                             
                             <div className="space-y-3 sm:space-y-4 max-w-5xl mx-auto">
-                                {rebalanceHistory.map((rebalance, idx) => {
+                                {rebalanceHistory.map((rebalance) => {
                                     const isExpanded = expandedRebalance === rebalance.id;
                                     const changes = rebalance.changes_detail || {};
                                     const added = changes.added || [];
@@ -1138,6 +1137,7 @@ export default function Landing() {
                         <div className="flex items-center justify-center gap-2 mb-6 sm:mb-8">
                             <span className="font-bold text-lg sm:text-xl tracking-tight">Alpha<span style={{ color: '#0D9B97' }}>GBM</span></span>
                         </div>
+                        <p className="text-slate-600 text-xs sm:text-sm mb-4">FLAT 1503 15/F CARNIVAL COMMERCIAL BUILDING 18 JAVA ROAD NORTH POINT HK</p>
                         <p className="text-slate-600 text-xs sm:text-sm max-w-2xl mx-auto mb-4 leading-relaxed px-4 sm:px-0">{content.footer.disclaimer}</p>
                         <div className="flex items-center gap-4 flex-wrap justify-center">
                             <p className="text-slate-700 text-xs sm:text-sm">{content.footer.copy}</p>

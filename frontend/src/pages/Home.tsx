@@ -1,14 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import StockAnalysisHistory from '@/components/StockAnalysisHistory';
 import CustomSelect from '@/components/ui/CustomSelect';
 import StockSearchInput from '@/components/ui/StockSearchInput';
+// import { NarrativeRadar } from '@/components/NarrativeRadar'; // 暂时隐藏叙事雷达功能
 import { useTaskPolling } from '@/hooks/useTaskPolling';
 import { useTranslation } from 'react-i18next';
+import { Helmet } from 'react-helmet-async';
 import i18n from '@/lib/i18n';
+import { StockSectorCard } from '@/components/SectorRotation/StockSectorCard';
+import { ConcentrationGauge } from '@/components/CapitalStructure/ConcentrationGauge';
+import { PropagationStage } from '@/components/CapitalStructure/PropagationStage';
 
 // Declare global types for Chart.js and marked
 declare global {
@@ -18,14 +23,100 @@ declare global {
     }
 }
 
+// Sector & Industry English→Chinese translation map
+const SECTOR_ZH: Record<string, string> = {
+    'Technology': '科技', 'Healthcare': '医疗保健', 'Financial Services': '金融服务',
+    'Financials': '金融', 'Consumer Cyclical': '可选消费', 'Consumer Discretionary': '可选消费',
+    'Consumer Defensive': '必需消费', 'Consumer Staples': '必需消费',
+    'Communication Services': '通信服务', 'Industrials': '工业', 'Energy': '能源',
+    'Utilities': '公用事业', 'Real Estate': '房地产', 'Basic Materials': '基础材料',
+    'Materials': '基础材料',
+};
+
+const INDUSTRY_ZH: Record<string, string> = {
+    // Technology
+    'Semiconductors': '半导体', 'Semiconductor Equipment & Materials': '半导体设备与材料',
+    'Software—Application': '应用软件', 'Software—Infrastructure': '基础软件',
+    'Information Technology Services': '信息技术服务',
+    'Internet Content & Information': '互联网内容与信息', 'Internet Retail': '互联网零售',
+    'Consumer Electronics': '消费电子', 'Computer Hardware': '计算机硬件',
+    'Electronic Components': '电子元器件', 'Scientific & Technical Instruments': '科学与技术仪器',
+    'Electronic Gaming & Multimedia': '电子游戏与多媒体',
+    // Healthcare
+    'Biotechnology': '生物科技', 'Drug Manufacturers—General': '综合制药',
+    'Drug Manufacturers—Specialty & Generic': '特种与仿制药', 'Medical Devices': '医疗器械',
+    'Health Information Services': '健康信息服务', 'Medical Instruments & Supplies': '医疗器材与用品',
+    'Diagnostics & Research': '诊断与研究', 'Pharmaceutical Retailers': '医药零售',
+    // Finance
+    'Banks—Diversified': '综合银行', 'Banks—Regional': '区域银行',
+    'Insurance—Life': '人寿保险', 'Insurance—Property & Casualty': '财产与意外保险',
+    'Insurance—Diversified': '综合保险', 'Asset Management': '资产管理',
+    'Capital Markets': '资本市场', 'Credit Services': '信贷服务',
+    'Financial Data & Stock Exchanges': '金融数据与证券交易所',
+    // Consumer
+    'Auto Manufacturers': '汽车制造', 'Auto Parts': '汽车零部件',
+    'Restaurants': '餐饮', 'Apparel Retail': '服装零售', 'Specialty Retail': '专业零售',
+    'Home Improvement Retail': '家居建材零售', 'Discount Stores': '折扣零售',
+    'Household & Personal Products': '家居与个人用品', 'Packaged Foods': '包装食品',
+    'Beverages—Non-Alcoholic': '非酒精饮料', 'Beverages—Alcoholic': '酒精饮料',
+    'Tobacco': '烟草', 'Luxury Goods': '奢侈品', 'Footwear & Accessories': '鞋类与配饰',
+    'Apparel Manufacturing': '服装制造', 'Residential Construction': '住宅建设',
+    // Communication & Entertainment
+    'Telecom Services': '电信服务', 'Entertainment': '娱乐', 'Advertising Agencies': '广告代理',
+    'Publishing': '出版', 'Broadcasting': '广播',
+    // Industrials
+    'Aerospace & Defense': '航空航天与国防', 'Airlines': '航空公司', 'Railroads': '铁路',
+    'Trucking': '货运', 'Industrial Distribution': '工业分销',
+    'Specialty Industrial Machinery': '特种工业机械',
+    'Farm & Heavy Construction Machinery': '农机与重型建筑机械',
+    'Waste Management': '废弃物管理', 'Consulting Services': '咨询服务',
+    'Staffing & Employment Services': '人力资源服务', 'Electrical Equipment & Parts': '电气设备与零件',
+    // Energy
+    'Oil & Gas Integrated': '综合油气', 'Oil & Gas E&P': '油气勘探与生产',
+    'Oil & Gas Midstream': '油气中游', 'Oil & Gas Equipment & Services': '油气设备与服务',
+    'Solar': '太阳能', 'Uranium': '铀矿',
+    // Utilities & Real Estate
+    'Utilities—Regulated Electric': '受管制电力', 'Utilities—Renewable': '可再生能源',
+    'Utilities—Diversified': '综合公用事业',
+    'REIT—Residential': '住宅REIT', 'REIT—Retail': '零售REIT',
+    'REIT—Office': '办公REIT', 'REIT—Industrial': '工业REIT',
+    'REIT—Diversified': '综合REIT', 'REIT—Specialty': '特种REIT',
+    // Materials
+    'Gold': '黄金', 'Copper': '铜', 'Steel': '钢铁', 'Aluminum': '铝',
+    'Chemicals': '化工', 'Specialty Chemicals': '特种化工', 'Building Materials': '建筑材料',
+    'Lumber & Wood Production': '木材与木制品', 'Paper & Paper Products': '纸与纸制品',
+};
+
+/** Translate sector/industry to Chinese when UI is in Chinese; otherwise return as-is */
+function translateField(value: string | undefined, map: Record<string, string>): string {
+    if (!value) return '';
+    if (i18n.language?.startsWith('zh')) {
+        return map[value] || value;
+    }
+    return value;
+}
+
 // Price Chart Component using Chart.js
 function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) {
     const { t } = useTranslation();
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
+    const [timeRange, setTimeRange] = useState<'30D' | '90D' | '180D' | '1Y'>('90D');
+
+    // Filter data based on selected time range
+    const filteredData = useMemo(() => {
+        if (!dates || !prices || dates.length === 0) return { dates: [], prices: [] };
+        const rangeDays = { '30D': 30, '90D': 90, '180D': 180, '1Y': 365 };
+        const days = rangeDays[timeRange];
+        const sliceCount = Math.min(days, dates.length);
+        return {
+            dates: dates.slice(-sliceCount),
+            prices: prices.slice(-sliceCount),
+        };
+    }, [dates, prices, timeRange]);
 
     useEffect(() => {
-        if (!chartRef.current || !dates || !prices || dates.length === 0) return;
+        if (!chartRef.current || filteredData.dates.length === 0) return;
 
         if (chartInstance.current) {
             chartInstance.current.destroy();
@@ -37,10 +128,10 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
         chartInstance.current = new window.Chart(ctx, {
             type: 'line',
             data: {
-                labels: dates,
+                labels: filteredData.dates,
                 datasets: [{
                     label: 'Price',
-                    data: prices,
+                    data: filteredData.prices,
                     borderColor: '#0D9B97',
                     backgroundColor: 'rgba(13, 155, 151, 0.1)',
                     fill: true,
@@ -67,8 +158,8 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
                 chartInstance.current.destroy();
             }
         };
-    }, [dates, prices]);
-    
+    }, [filteredData]);
+
     if (!dates || !prices || dates.length === 0) {
         return (
             <div className="h-48 flex items-center justify-center text-muted">
@@ -77,14 +168,32 @@ function PriceChart({ dates, prices }: { dates?: string[], prices?: number[] }) 
         );
     }
 
+    const ranges: Array<'30D' | '90D' | '180D' | '1Y'> = ['30D', '90D', '180D', '1Y'];
+
     return (
         <div>
+            <div className="flex justify-end gap-1 mb-3">
+                {ranges.map((r) => (
+                    <button
+                        key={r}
+                        onClick={() => setTimeRange(r)}
+                        className="px-3 py-1 text-xs rounded-full transition-colors"
+                        style={{
+                            backgroundColor: timeRange === r ? '#0D9B97' : '#27272A',
+                            color: timeRange === r ? '#FAFAFA' : '#A1A1AA',
+                            border: timeRange === r ? '1px solid #0D9B97' : '1px solid transparent',
+                        }}
+                    >
+                        {r}
+                    </button>
+                ))}
+            </div>
             <div style={{ height: '200px' }}>
                 <canvas ref={chartRef}></canvas>
             </div>
             <div className="mt-4 text-center">
                 <small style={{ color: '#9CA3AF', fontWeight: 400, fontSize: '0.85rem' }}>
-                    {t('stock.chart.dateRange', { start: dates[0], end: dates[dates.length - 1] })}
+                    {t('stock.chart.dateRange', { start: filteredData.dates[0], end: filteredData.dates[filteredData.dates.length - 1] })}
                 </small>
             </div>
         </div>
@@ -169,52 +278,56 @@ const styles = `
         font-weight: 500;
     }
 
-    /* Philosophy Card */
-    .philosophy-card {
-        background: var(--card);
-        border: 1px solid var(--primary);
-        border-radius: 8px;
+    /* Philosophy - compact single-line bar (matching Options page design) */
+    .philosophy-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        background: rgba(13, 155, 151, 0.05);
+        border-radius: 0.5rem;
+        flex-wrap: wrap;
     }
 
-    .philosophy-formula {
-        display: inline-block;
+    .philosophy-formula-pill {
+        display: inline-flex;
+        align-items: center;
         background: var(--primary);
         color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 6px;
+        padding: 0.2rem 0.6rem;
+        border-radius: 0.375rem;
         font-weight: 700;
-        font-size: 0.9rem;
-        margin: 0 0.25rem;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        font-size: 0.8rem;
     }
 
-    .philosophy-formula.bull { background: var(--bull); }
-    .philosophy-formula.warning { background: var(--warning); }
-
-    .pillar-item {
-        background: var(--muted);
-        border-left: 3px solid var(--primary);
-        padding: 0.6rem 0.9rem;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        line-height: 1.4;
+    .pillar-icon {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        background: rgba(13, 155, 151, 0.15);
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--primary);
+        cursor: help;
         transition: all 0.2s;
     }
 
-    .pillar-item:hover {
-        background: var(--card-hover);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    .pillar-icon:hover {
+        background: rgba(13, 155, 151, 0.25);
     }
 
-    .style-badge {
-        background: var(--muted);
-        border: 1px solid var(--border);
-        padding: 0.4rem 0.9rem;
-        border-radius: 24px;
-        font-size: 0.8rem;
-        color: var(--foreground);
-        text-align: center;
+    .pillar-icon-text {
+        font-size: 0.7rem;
+    }
+
+    @media (max-width: 640px) {
+        .pillar-icon-text {
+            font-size: 0.65rem;
+        }
+        .pillar-icon {
+            padding: 0.2rem 0.4rem;
+        }
     }
 
     /* Warning Card */
@@ -301,6 +414,11 @@ const styles = `
         to { transform: rotate(360deg); }
     }
 
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
     .form-select, .form-control {
         background: var(--muted);
         border: 1px solid var(--border);
@@ -352,7 +470,7 @@ function renderMarkdown(text: string): string {
 function generateEntryStrategy(
     currentPrice: number,
     targetPrice: number,
-    style: string,
+    _style: string, // prefixed with _ to indicate intentionally unused
     riskScore: number,
     suggestedPosition: number,
     t: (key: string, params?: any) => string
@@ -433,62 +551,38 @@ function generateTakeProfitStrategy(
     }
 }
 
-// Investment Philosophy Component (constant)
+// Investment Philosophy Component - compact single-line bar (matching Options page design)
 function InvestmentPhilosophy() {
     const { t } = useTranslation();
-    const [expanded, setExpanded] = useState(true);
 
     return (
-        <div className="philosophy-card shadow-md mb-4">
-            <div
-                className="cursor-pointer"
-                style={{ padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: expanded ? '1px solid var(--border)' : 'none' }}
-                onClick={() => setExpanded(!expanded)}
-            >
-                <div className="flex items-center gap-2" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>
-                    <i className="bi bi-lightbulb-fill"></i>
-                    <span>{t('stock.philosophy.title')}</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted" style={{ fontSize: '0.8rem' }}>
-                    <span>{expanded ? t('stock.philosophy.collapse') : t('stock.philosophy.expand')}</span>
-                    <i className={`bi bi-chevron-${expanded ? 'up' : 'down'}`}></i>
-                </div>
+        <div className="philosophy-bar">
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                {t('stock.philosophy.label')}:
+            </span>
+            <span className="philosophy-formula-pill">G = B + M</span>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar1.desc')}>
+                    <i className="bi bi-search" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar1.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar2.desc')}>
+                    <i className="bi bi-bug" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar2.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar3.desc')}>
+                    <i className="bi bi-shield-check" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar3.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar4.desc')}>
+                    <i className="bi bi-compass" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar4.title')}</span>
+                </span>
+                <span className="pillar-icon" title={t('stock.philosophy.pillar5.desc')}>
+                    <i className="bi bi-bar-chart-line" style={{ marginRight: '0.25rem' }}></i>
+                    <span className="pillar-icon-text">{t('stock.philosophy.pillar5.title')}</span>
+                </span>
             </div>
-            {expanded && (
-                <div style={{ padding: '1rem' }}>
-                    {/* Core Model */}
-                    <div style={{ marginBottom: '1.2rem' }}>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('stock.philosophy.coreModel') }}>
-                        </div>
-                    </div>
-
-                    {/* Five Pillars */}
-                    <div style={{ marginBottom: '1.2rem' }}>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>{t('stock.philosophy.fivePillars')}</strong>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 mt-2">
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar1.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar1.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar2.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar2.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar3.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar3.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar4.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar4.desc')}</div></div>
-                            <div className="pillar-item"><strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem' }}>{t('stock.philosophy.pillar5.title')}</strong><div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.philosophy.pillar5.desc')}</div></div>
-                        </div>
-                    </div>
-
-                    {/* Investment Styles */}
-                    <div>
-                        <strong style={{ color: 'var(--foreground)', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>{t('stock.philosophy.styles')}</strong>
-                        <div style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', marginBottom: '0.5rem', lineHeight: 1.4 }}>
-                            {t('stock.philosophy.stylesDesc')}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Quality</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.quality')}</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Value</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.value')}</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Growth</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.growth')}</span></div>
-                            <div className="style-badge"><strong style={{ color: 'var(--primary)', marginRight: '0.3rem', fontSize: '0.8rem' }}>Momentum</strong><span style={{ fontSize: '0.75rem' }}>{t('stock.philosophy.style.momentum')}</span></div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
@@ -553,6 +647,7 @@ function MarketWarnings({ warnings }: { warnings?: any[] }) {
 export default function Home() {
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const { t } = useTranslation();
 
     const [ticker, setTicker] = useState('');
@@ -562,12 +657,54 @@ export default function Home() {
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState('analysis');
 
+    // Ref for left column to sync AI Report height
+    const leftColumnRef = useRef<HTMLDivElement>(null);
+    const [aiCardHeight, setAiCardHeight] = useState<number | undefined>(undefined);
+
+    // Sync AI Report card height with left column
+    useEffect(() => {
+        if (!leftColumnRef.current) return;
+
+        const updateHeight = () => {
+            if (leftColumnRef.current) {
+                setAiCardHeight(leftColumnRef.current.offsetHeight);
+            }
+        };
+
+        // Initial measurement
+        updateHeight();
+
+        // Use ResizeObserver for dynamic updates
+        const resizeObserver = new ResizeObserver(updateHeight);
+        resizeObserver.observe(leftColumnRef.current);
+
+        return () => resizeObserver.disconnect();
+    }, [result]); // Re-run when result changes
+    // 叙事雷达功能暂时隐藏
+    // const [searchParams] = useSearchParams();
+    // const initialMode = searchParams.get('mode') === 'narrative' ? 'narrative' : 'manual';
+    // const [stockMode, setStockMode] = useState<'manual' | 'narrative'>(initialMode);
+
+    // 监听路由变化：当导航到 /stock（无参数）时，重置分析状态
+    // 使用 location.state.reset 来检测导航栏点击事件（即使已经在 /stock 页面）
+    useEffect(() => {
+        // 如果是纯净的 /stock 路径（没有查询参数），重置状态开始新分析
+        if (location.pathname === '/stock' && !location.search) {
+            setTicker('');
+            setResult(null);
+            setError('');
+            setActiveTab('analysis');
+            setTaskProgress(0);
+            setTaskStep('');
+        }
+    }, [location.pathname, location.search, (location.state as any)?.reset]); // 监听 state.reset 变化
+
     // Task progress state
     const [taskProgress, setTaskProgress] = useState(0);
     const [taskStep, setTaskStep] = useState('');
 
     // Initialize task polling hook
-    const { taskStatus, startPolling } = useTaskPolling({
+    const { startPolling } = useTaskPolling({
         onTaskComplete: (taskResult) => {
             console.log('Task completed:', taskResult);
             setResult(taskResult);
@@ -588,8 +725,8 @@ export default function Home() {
         }
     });
 
-    const handleAnalyze = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleAnalyze = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!user) {
             navigate('/login');
             return;
@@ -626,6 +763,16 @@ export default function Home() {
         }
     };
 
+    // 从叙事雷达选择股票后，切换到手动模式并触发分析 - 暂时隐藏
+    // const handleSelectStockFromNarrative = (symbol: string) => {
+    //     setTicker(symbol);
+    //     setStockMode('manual');
+    //     // 延迟触发分析，等待状态更新
+    //     setTimeout(() => {
+    //         handleAnalyze();
+    //     }, 100);
+    // };
+
     const getRiskClass = (score: number) => {
         if (score >= 6) return 'risk-high';
         if (score >= 4) return 'risk-med';
@@ -654,7 +801,11 @@ export default function Home() {
         return 'text-danger';
     };
 
-    const getRating = (score: number) => {
+    const getRating = (score: number, suggestedPosition?: number) => {
+        // 如果建议仓位为0，无论风险评分如何，都返回"观望"
+        if (suggestedPosition !== undefined && suggestedPosition <= 0) {
+            return { text: t('stock.rating.watch'), class: 'text-warning' };
+        }
         if (score >= 6) return { text: t('stock.rating.watch'), class: 'text-warning' };
         if (score >= 4) return { text: t('stock.rating.neutral'), class: 'text-warning' };
         if (score >= 2) return { text: t('stock.rating.add'), class: 'text-success' };
@@ -696,8 +847,20 @@ export default function Home() {
         );
     }
 
+    const isZh = i18n.language.startsWith('zh');
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ color: 'var(--foreground)' }}>
+            <Helmet>
+                <title>{isZh ? '股票分析 - AlphaGBM | AI智能选股工具' : 'Stock Analysis - AlphaGBM | AI Smart Stock Picker'}</title>
+                <meta name="description" content={isZh
+                    ? '使用 AlphaGBM AI 智能股票分析工具，获取基本面评分、情绪分析、目标价格预测。支持多种投资风格，帮助您做出明智的投资决策。'
+                    : 'Use AlphaGBM AI stock analysis tool to get fundamental scoring, sentiment analysis, and price target predictions. Supports multiple investment styles.'}
+                />
+                <link rel="canonical" href="https://alphagbm.com/stock" />
+                <meta property="og:url" content="https://alphagbm.com/stock" />
+                <meta property="og:title" content={isZh ? '股票分析 - AlphaGBM' : 'Stock Analysis - AlphaGBM'} />
+            </Helmet>
             <style>{styles}</style>
 
             {/* Custom Tabs */}
@@ -744,13 +907,40 @@ export default function Home() {
 
             {/* Stock Analysis Tab */}
             <div style={{ display: activeTab === 'analysis' ? 'block' : 'none' }}>
-                {/* 股票查询表单 */}
+                {/* 选股模式切换 */}
                 <div className="card shadow-lg mb-4 p-4 sm:p-6">
                     <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.3rem', fontWeight: 600 }}>
                         <i className="bi bi-search"></i>
                         {t('stock.form.title')}
                     </h5>
 
+                    {/* 模式切换按钮 - 叙事雷达暂时隐藏 */}
+                    {/* <div className="flex gap-3 mb-5">
+                        <button
+                            onClick={() => setStockMode('manual')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border transition-all ${
+                                stockMode === 'manual'
+                                    ? 'bg-[#0D9B97]/20 border-[#0D9B97] text-[#0D9B97]'
+                                    : 'bg-[#1c1c1e] border-[#3f3f46] text-slate-400 hover:border-[#0D9B97]/50'
+                            }`}
+                        >
+                            <i className="bi bi-pencil-square"></i>
+                            <span className="font-medium">{i18n.language === 'zh' ? '自选股票' : 'Manual Selection'}</span>
+                        </button>
+                        <button
+                            onClick={() => setStockMode('narrative')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border transition-all ${
+                                stockMode === 'narrative'
+                                    ? 'bg-[#0D9B97]/20 border-[#0D9B97] text-[#0D9B97]'
+                                    : 'bg-[#1c1c1e] border-[#3f3f46] text-slate-400 hover:border-[#0D9B97]/50'
+                            }`}
+                        >
+                            <i className="bi bi-broadcast"></i>
+                            <span className="font-medium">{i18n.language === 'zh' ? '叙事雷达' : 'Narrative Radar'}</span>
+                        </button>
+                    </div> */}
+
+                    {/* 自选股票模式 - 现在是唯一模式 */}
                     <form onSubmit={handleAnalyze} className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-[1fr_2fr_auto] sm:gap-4">
                         <div>
                             <label className="block text-muted mb-2" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{t('stock.form.style')}</label>
@@ -758,19 +948,19 @@ export default function Home() {
                                 options={[
                                     {
                                         value: 'quality',
-                                        label: 'Quality (质量)'
+                                        label: i18n.language === 'zh' ? 'Quality (质量)' : 'Quality'
                                     },
                                     {
                                         value: 'value',
-                                        label: 'Value (价值)'
+                                        label: i18n.language === 'zh' ? 'Value (价值)' : 'Value'
                                     },
                                     {
                                         value: 'growth',
-                                        label: 'Growth (成长)'
+                                        label: i18n.language === 'zh' ? 'Growth (成长)' : 'Growth'
                                     },
                                     {
                                         value: 'momentum',
-                                        label: 'Momentum (趋势)'
+                                        label: i18n.language === 'zh' ? 'Momentum (趋势)' : 'Momentum'
                                     }
                                 ]}
                                 value={style}
@@ -798,6 +988,17 @@ export default function Home() {
                     <div className="mt-4 p-3 rounded" style={{ background: 'var(--muted)', fontSize: '0.9rem', color: 'var(--muted-foreground)' }}>
                         {t(`stock.style.${style}.desc`)}
                     </div>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>
+                        ⚡ {isZh ? '每次分析消耗 1 次查询额度' : '1 query credit per analysis'}
+                    </p>
+
+                    {/* 叙事雷达模式 - 暂时隐藏 */}
+                    {/* {stockMode === 'narrative' && (
+                        <NarrativeRadar
+                            onSelectStock={handleSelectStockFromNarrative}
+                            hideTitle={true}
+                        />
+                    )} */}
 
                     {error && (
                         <div className="mt-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -867,8 +1068,9 @@ export default function Home() {
                         <p className="text-muted">
                             {taskStep || t('stock.loading.connecting')}
                         </p>
-
-                        {/* Task Status Info - Hidden per user request */}
+                        <p style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem', marginTop: '0.75rem', opacity: 0.6 }}>
+                            {i18n.language.startsWith('zh') ? '深度分析中，预计需要3分钟' : 'Deep analysis in progress, estimated 3 minutes'}
+                        </p>
                     </div>
                 )}
 
@@ -906,7 +1108,7 @@ export default function Home() {
                     const d = result.data;
                     const r = result.risk;
                     const sentiment = d.market_sentiment ?? 5.0;
-                    const rating = getRating(r.score);
+                    const rating = getRating(r.score, r.suggested_position);
                     const styleName = style === 'quality' ? t('landing.styles.quality.name') : 
                                      style === 'value' ? t('landing.styles.value.name') :
                                      style === 'growth' ? t('landing.styles.growth.name') :
@@ -963,9 +1165,9 @@ export default function Home() {
                             </div>
 
                             {/* Second Row: Chart + Risk | AI Report */}
-                            <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6 items-start">
                                 {/* Left Column */}
-                                <div className="space-y-4">
+                                <div ref={leftColumnRef} className="space-y-4">
                                     {/* Price Chart */}
                                     <div className="card shadow-md" style={{ padding: '1.5rem' }}>
                                         <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
@@ -991,30 +1193,94 @@ export default function Home() {
                                             )}
                                         </ul>
                                     </div>
+
+                                    {/* Sector Analysis Card */}
+                                    {d.sector_analysis && (
+                                        <StockSectorCard
+                                            sectorAnalysis={d.sector_analysis}
+                                            stockTicker={d.symbol}
+                                        />
+                                    )}
+
+                                    {/* Capital Structure Card */}
+                                    {d.capital_analysis && (
+                                        <div className="card shadow-md" style={{ padding: '1.5rem' }}>
+                                            <h5 className="mb-4 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                                                <i className="bi bi-cash-stack"></i>
+                                                {t('capital.title', '资金结构分析')}
+                                            </h5>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="flex flex-col items-center">
+                                                    <p className="text-sm text-gray-400 mb-2">{t('capital.concentration', '资金集中度')}</p>
+                                                    <ConcentrationGauge
+                                                        score={d.capital_analysis.concentration_score || 50}
+                                                        size="md"
+                                                    />
+                                                </div>
+                                                <PropagationStage
+                                                    stage={d.capital_analysis.propagation_stage || 'neutral'}
+                                                    stageInfo={d.capital_analysis.stage_info}
+                                                    signals={d.capital_analysis.signals || []}
+                                                    showDetails={true}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Right Column: AI Report */}
-                                <div className="card shadow-md" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div className="card shadow-md" style={{ display: 'flex', flexDirection: 'column', height: aiCardHeight ? `${aiCardHeight}px` : 'auto' }}>
                                     <div style={{
                                         padding: '1.5rem',
                                         display: 'flex',
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
-                                        borderBottom: '1px solid var(--border)'
+                                        borderBottom: '1px solid var(--border)',
+                                        flexShrink: 0
                                     }}>
                                         <h5 className="mb-0 flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
                                             <i className="bi bi-stars"></i>
                                             {t('stock.aiReport.title')}
                                         </h5>
-                                        <span className="badge-primary">{t('stock.aiReport.generated')}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="badge-primary">{t('stock.aiReport.generated')}</span>
+                                            <button
+                                                onClick={() => {
+                                                    const printContent = document.querySelector('.ai-summary');
+                                                    if (printContent) {
+                                                        const w = window.open('', '_blank');
+                                                        if (w) {
+                                                            w.document.write(`<html><head><title>${d.name} - AI Report</title><style>body{font-family:Inter,sans-serif;padding:2rem;max-width:800px;margin:0 auto;line-height:1.8;}h1,h2,h3{color:#0D9B97;}table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ddd;padding:8px;}</style></head><body>${printContent.innerHTML}</body></html>`);
+                                                            w.document.close();
+                                                            w.print();
+                                                        }
+                                                    }
+                                                }}
+                                                className="px-2 py-1 text-xs rounded border border-white/20 text-slate-400 hover:text-[#0D9B97] hover:border-[#0D9B97] transition-colors"
+                                            >
+                                                PDF
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="overflow-auto" style={{ maxHeight: '650px', padding: '1.5rem' }}>
+                                    <div className="overflow-auto" style={{ flex: 1, padding: '1.5rem', minHeight: 0 }}>
                                         <div
                                             className="ai-summary"
                                             dangerouslySetInnerHTML={{ __html: renderMarkdown(result.report || t('stock.report.noDataAvailable')) }}
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div className="flex flex-wrap gap-3">
+                                <button
+                                    onClick={() => navigate(`/options?ticker=${d.symbol}`)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                                    style={{ backgroundColor: '#0D9B97', color: '#FAFAFA' }}
+                                >
+                                    {i18n.language === 'zh' ? '分析该股期权' : 'Analyze Options'}
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                </button>
                             </div>
 
                             {/* Full Text Report */}
@@ -1099,15 +1365,20 @@ export default function Home() {
                                             <div><div className="text-report-label">{t('stock.report.overview.name')}</div><div className="text-report-value">{d.name}</div></div>
                                             {!d.is_etf_or_fund && (
                                                 <>
-                                                    <div><div className="text-report-label">{t('stock.report.overview.sector')}</div><div className="text-report-value">{d.sector || t('stock.report.overview.noData')}</div></div>
-                                                    <div><div className="text-report-label">{t('stock.report.overview.industry')}</div><div className="text-report-value">{d.industry || t('stock.report.overview.noData')}</div></div>
+                                                    <div><div className="text-report-label">{t('stock.report.overview.sector')}</div><div className="text-report-value">{translateField(d.sector, SECTOR_ZH) || t('stock.report.overview.noData')}</div></div>
+                                                    <div><div className="text-report-label">{t('stock.report.overview.industry')}</div><div className="text-report-value">{translateField(d.industry, INDUSTRY_ZH) || t('stock.report.overview.noData')}</div></div>
                                                 </>
                                             )}
                                         </div>
                                         {/* Company News */}
                                         {d.company_news && Array.isArray(d.company_news) && d.company_news.length > 0 && (
                                             <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
-                                                <div style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.8rem' }}>{t('stock.report.overview.news')}</div>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                                                    <span style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '1rem' }}>{t('stock.report.overview.news')}</span>
+                                                    {i18n.language?.startsWith('zh') && !d.symbol?.endsWith('.SS') && !d.symbol?.endsWith('.SZ') && (
+                                                        <span style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem' }}>{t('stock.report.overview.newsSourceEn')}</span>
+                                                    )}
+                                                </div>
                                                 <ul style={{ color: 'var(--muted-foreground)', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, paddingLeft: '1.5rem' }}>
                                                     {d.company_news.slice(0, 5).map((news: any, idx: number) => (
                                                         <li key={idx} style={{ marginBottom: '0.8rem' }}>
@@ -1407,6 +1678,149 @@ export default function Home() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    );
+                })()}
+
+                {/* Option Trading Opportunities Guide */}
+                {result && result.success && (() => {
+                    const d = result.data;
+                    // Determine trend based on price vs MA
+                    const trend = d.price > d.ma50 && d.ma50 > d.ma200 ? 'uptrend' :
+                                  d.price < d.ma200 ? 'downtrend' : 'sideways';
+
+                    return (
+                        <div className="option-opportunity-guide" style={{
+                            marginTop: '2rem',
+                            padding: '1.5rem',
+                            background: 'linear-gradient(135deg, rgba(13, 155, 151, 0.1) 0%, rgba(13, 155, 151, 0.05) 100%)',
+                            border: '1px solid rgba(13, 155, 151, 0.3)',
+                            borderRadius: '12px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                                <i className="bi bi-lightning-charge-fill" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                                    {t('stock.optionOpportunity.title')}
+                                </h3>
+                            </div>
+
+                            <p style={{ color: 'var(--muted-foreground)', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
+                                {t('stock.optionOpportunity.desc')}
+                            </p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                                {trend === 'uptrend' && (
+                                    <>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(34, 197, 94, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-graph-up-arrow" style={{ fontSize: '1.25rem', color: 'var(--bull)' }}></i>
+                                                <strong style={{ color: 'var(--bull)' }}>Sell Put</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellPutDesc')}
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(34, 197, 94, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-rocket-takeoff" style={{ fontSize: '1.25rem', color: 'var(--bull)' }}></i>
+                                                <strong style={{ color: 'var(--bull)' }}>Buy Call</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.buyCallDesc')}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                                {trend === 'downtrend' && (
+                                    <>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-graph-down-arrow" style={{ fontSize: '1.25rem', color: 'var(--bear)' }}></i>
+                                                <strong style={{ color: 'var(--bear)' }}>Sell Call</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellCallDesc')}
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-shield-check" style={{ fontSize: '1.25rem', color: 'var(--bear)' }}></i>
+                                                <strong style={{ color: 'var(--bear)' }}>Buy Put</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.buyPutDesc')}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                                {trend === 'sideways' && (
+                                    <>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(245, 158, 11, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(245, 158, 11, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-cash-stack" style={{ fontSize: '1.25rem', color: 'var(--warning)' }}></i>
+                                                <strong style={{ color: 'var(--warning)' }}>Sell Put</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellPutSidewaysDesc')}
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'rgba(245, 158, 11, 0.1)',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(245, 158, 11, 0.2)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <i className="bi bi-currency-dollar" style={{ fontSize: '1.25rem', color: 'var(--warning)' }}></i>
+                                                <strong style={{ color: 'var(--warning)' }}>Sell Call</strong>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>
+                                                {t('stock.optionOpportunity.sellCallSidewaysDesc')}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <Button
+                                onClick={() => navigate(`/options?ticker=${d.symbol}`)}
+                                className="btn-primary"
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    background: 'var(--primary)',
+                                    border: 'none'
+                                }}
+                            >
+                                <i className="bi bi-arrow-right-circle"></i>
+                                {t('stock.optionOpportunity.viewOptions', { symbol: d.symbol })}
+                            </Button>
                         </div>
                     );
                 })()}

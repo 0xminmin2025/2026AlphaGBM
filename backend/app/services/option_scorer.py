@@ -5,7 +5,7 @@ Ported from new_options_module/scoring/option_scorer.py
 
 import math
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 from scipy.stats import norm
 from .option_models import OptionData, OptionScores, ScoringParams, RiskReturnProfile
 
@@ -23,6 +23,68 @@ class OptionScorer:
             return max(1, (expiry - today).days)  # Minimum 1 day to avoid division by zero
         except:
             return 30  # Default fallback
+
+    def is_daily_option(self, dte: int) -> bool:
+        """
+        判断是否为日权（0DTE/1DTE）
+        日权风险特性与周权/月权完全不同：
+        - Theta 卖方不利（权利金太少）
+        - Gamma 极高风险
+        - 接股风险无法管理
+        """
+        return dte <= 1
+
+    def calculate_expiry_risk_penalty(self, dte: int, moneyness_ratio: float) -> Tuple[float, str]:
+        """
+        临期风险惩罚
+
+        Args:
+            dte: 距到期天数
+            moneyness_ratio: 价内/价外比率 (strike/stock_price for PUT)
+
+        Returns:
+            (penalty_factor, warning_label)
+            - penalty_factor: 0.0-1.0，越小惩罚越重
+            - warning_label: 风险警告标签，None表示无警告
+
+        基于用户实战经验：临期接近行权价时要提前平仓，避免夜盘震荡导致意外接股
+        """
+        if dte <= 0:
+            return 0.0, "⛔ 已过期"
+
+        # 计算与平值的距离（ATM = 1.0）
+        distance_from_atm = abs(1 - moneyness_ratio)
+
+        if dte <= 1:  # 日权
+            if distance_from_atm < 0.03:  # 3%以内，极高风险
+                return 0.3, "⚠️ 日权高风险：临期接近平值，建议避免"
+            elif distance_from_atm < 0.05:  # 5%以内
+                return 0.5, "⚠️ 日权高风险：接近行权价，波动风险大"
+            else:  # 较远的虚值
+                return 0.7, "⚡ 日权注意：到期日内，需密切关注"
+        elif dte <= 3:  # 临期（2-3天）
+            if distance_from_atm < 0.03:  # 3%以内
+                return 0.6, "⚡ 临期注意：接近行权价，关注收盘价"
+            elif distance_from_atm < 0.05:  # 5%以内
+                return 0.8, "⚡ 临期提醒：建议设置止损"
+            else:
+                return 0.95, None  # 轻微惩罚
+        elif dte <= 7:  # 一周内
+            if distance_from_atm < 0.02:  # 非常接近平值
+                return 0.9, "💡 即将临期：关注价格变动"
+            return 1.0, None  # 无惩罚
+
+        return 1.0, None  # 无惩罚
+
+    def get_expiry_warning(self, dte: int, moneyness_ratio: float) -> Optional[str]:
+        """
+        获取临期风险警告标签
+
+        Returns:
+            风险警告字符串，无警告时返回 None
+        """
+        _, warning = self.calculate_expiry_risk_penalty(dte, moneyness_ratio)
+        return warning
 
     def calculate_liquidity_factor(self, bid_price: float, ask_price: float,
                                  open_interest: Optional[int] = None,
@@ -135,9 +197,13 @@ class OptionScorer:
     def calculate_sprv(self, option: OptionData, stock_price: float) -> float:
         """
         Calculate Sell Put Recommendation Value (SPRV)
-        归一化到 0-100 分，包含 Theta 权重和 Gamma 风险惩罚
+        归一化到 0-100 分，包含 Theta 权重、Gamma 风险惩罚和临期风险惩罚
+
+        基于用户实战经验优化：
+        - 日权（0DTE/1DTE）评分封顶30分，不推荐卖Put
+        - 临期（DTE<=3）接近平值时降低评分
         """
-        if (not option.latest_price or not option.delta or not option.strike or
+        if (option.latest_price is None or option.delta is None or option.strike is None or
             option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0
 
@@ -202,17 +268,33 @@ class OptionScorer:
         raw_score = return_score + win_rate_score + iv_score + liquidity_score + theta_score - gamma_penalty
 
         # 应用深度虚值惩罚
-        final_score = raw_score * depth_penalty
+        score_after_depth = raw_score * depth_penalty
+
+        # ========== 7. 临期风险惩罚（新增）==========
+        # 日权和临期期权降低评分，基于用户实战经验
+        expiry_penalty, _ = self.calculate_expiry_risk_penalty(dte, moneyness_ratio)
+        score_after_expiry = score_after_depth * expiry_penalty
+
+        # ========== 8. 日权评分封顶（新增）==========
+        # 日权（0DTE/1DTE）不推荐卖Put，评分最高30分
+        if self.is_daily_option(dte):
+            final_score = min(30, score_after_expiry)
+        else:
+            final_score = score_after_expiry
 
         return round(max(0, min(100, final_score)), 2)
 
     def calculate_scrv(self, option: OptionData, stock_price: float) -> float:
         """
         Calculate Sell Call Recommendation Value (SCRV)
-        归一化到 0-100 分，包含 Theta 权重和 Gamma 风险惩罚
+        归一化到 0-100 分，包含 Theta 权重、Gamma 风险惩罚和临期风险惩罚
+
+        基于用户实战经验优化：
+        - 日权（0DTE/1DTE）评分封顶30分
+        - 临期（DTE<=3）接近平值时降低评分
         """
-        if (not option.latest_price or not option.delta or not option.theta or
-            not option.strike or option.put_call != "CALL" or
+        if (option.latest_price is None or option.delta is None or option.theta is None or
+            option.strike is None or option.put_call != "CALL" or
             option.delta <= 0 or stock_price <= 0):
             return 0.0
 
@@ -273,7 +355,21 @@ class OptionScorer:
         raw_score = return_score + win_rate_score + iv_score + liquidity_score + theta_score + upside_bonus - gamma_penalty
 
         # 应用深度虚值惩罚
-        final_score = raw_score * depth_penalty
+        score_after_depth = raw_score * depth_penalty
+
+        # ========== 8. 临期风险惩罚（新增）==========
+        # 对于 Sell Call，moneyness_ratio > 1 表示虚值
+        # 使用 1/moneyness_ratio 来统一处理与平值的距离
+        atm_ratio = 1 / moneyness_ratio if moneyness_ratio > 0 else 1
+        expiry_penalty, _ = self.calculate_expiry_risk_penalty(dte, atm_ratio)
+        score_after_expiry = score_after_depth * expiry_penalty
+
+        # ========== 9. 日权评分封顶（新增）==========
+        # 日权（0DTE/1DTE）评分最高30分
+        if self.is_daily_option(dte):
+            final_score = min(30, score_after_expiry)
+        else:
+            final_score = score_after_expiry
 
         return round(max(0, min(100, final_score)), 2)
 
@@ -282,9 +378,9 @@ class OptionScorer:
         Calculate Buy Call Recommendation Value (BCRV)
         归一化到 0-100 分，包含 Theta 权重和 Gamma 优势
         """
-        if (not option.latest_price or not option.delta or not option.gamma or
-            not option.theta or option.put_call != "CALL" or
-            abs(option.theta) <= 0 or stock_price <= 0):
+        if (option.latest_price is None or option.delta is None or option.gamma is None or
+            option.theta is None or option.put_call != "CALL" or
+            abs(option.theta or 0) <= 0 or stock_price <= 0):
             return 0.0
 
         # ========== 合理性检查：深度实值期权成本太高 ==========
@@ -334,7 +430,7 @@ class OptionScorer:
         Calculate Buy Put Recommendation Value (BPRV)
         归一化到 0-100 分，包含 Theta 权重和 Gamma 优势
         """
-        if (not option.latest_price or not option.delta or
+        if (option.latest_price is None or option.delta is None or
             option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0
 
@@ -439,6 +535,18 @@ class OptionScorer:
             scores.scrv = self.calculate_scrv(option, stock_price)
             scores.bcrv = self.calculate_bcrv(option, stock_price)
 
+        # Debug logging for first few options to diagnose zero scores
+        import logging
+        _scorer_logger = logging.getLogger(__name__)
+        if option.put_call == "PUT":
+            _scorer_logger.debug(f"[Scorer] {option.symbol} {option.strike}P: "
+                               f"delta={option.delta}, theta={option.theta}, latest_price={option.latest_price}, "
+                               f"stock_price={stock_price}, SPRV={scores.sprv}, BPRV={scores.bprv}")
+        else:
+            _scorer_logger.debug(f"[Scorer] {option.symbol} {option.strike}C: "
+                               f"delta={option.delta}, theta={option.theta}, latest_price={option.latest_price}, "
+                               f"stock_price={stock_price}, SCRV={scores.scrv}, BCRV={scores.bcrv}")
+
         premium_income, margin_req, annual_return = self.calculate_premium_and_margin(
             option, stock_price, margin_rate
         )
@@ -448,6 +556,20 @@ class OptionScorer:
 
         # 计算风险收益风格标签
         scores.risk_return_profile = self.calculate_risk_return_profile(option, stock_price)
+
+        # 计算临期风险警告（新增）
+        dte = scores.days_to_expiry
+        scores.is_daily_option = self.is_daily_option(dte)
+
+        # 计算 moneyness_ratio 用于临期警告
+        if option.strike and stock_price > 0:
+            if option.put_call == "PUT":
+                moneyness_ratio = option.strike / stock_price
+            else:  # CALL
+                moneyness_ratio = stock_price / option.strike
+            scores.expiry_warning = self.get_expiry_warning(dte, moneyness_ratio)
+        else:
+            scores.expiry_warning = None
 
         return scores
 

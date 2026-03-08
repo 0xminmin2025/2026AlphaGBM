@@ -19,9 +19,228 @@ EV = (上涨概率 × 上涨幅度) + (下跌概率 × 下跌幅度)
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ==================== 扩展EV模型（板块轮动 + 资金结构） ====================
+
+def calculate_ev_model_extended(
+    data: Dict[str, Any],
+    risk_result: Dict[str, Any],
+    style: str,
+    sector_analysis: Optional[Dict[str, Any]] = None,
+    capital_analysis: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    计算扩展EV模型，整合板块轮动和资金结构因子
+
+    扩展公式：
+    EV_extended = EV_base + sector_rotation_premium + capital_factor
+
+    Args:
+        data: 市场数据
+        risk_result: 风险分析结果
+        style: 投资风格
+        sector_analysis: 板块轮动分析结果（可选）
+        capital_analysis: 资金结构分析结果（可选）
+
+    Returns:
+        扩展EV模型结果
+    """
+    try:
+        # 1. 计算基础EV模型
+        base_result = calculate_ev_model(data, risk_result, style)
+        ev_base = base_result.get('ev_weighted', 0.0)
+
+        # 2. 获取板块轮动溢价
+        sector_rotation_premium = 0.0
+        sector_info = {}
+        if sector_analysis:
+            sector_rotation_premium = sector_analysis.get('sector_rotation_premium', 0.0)
+            sector_info = {
+                'sector': sector_analysis.get('sector', 'Unknown'),
+                'sector_zh': sector_analysis.get('sector_zh', ''),
+                'sector_strength': sector_analysis.get('sector_strength', 50),
+                'alignment_score': sector_analysis.get('alignment_score', 50),
+                'is_sector_leader': sector_analysis.get('is_sector_leader', False),
+                'sector_trend': sector_analysis.get('sector_trend', 'neutral'),
+            }
+
+        # 3. 获取资金结构因子
+        capital_factor = 0.0
+        capital_info = {}
+        if capital_analysis:
+            capital_factor = capital_analysis.get('capital_factor', 0.0)
+            capital_info = {
+                'concentration_score': capital_analysis.get('concentration_score', 50),
+                'propagation_stage': capital_analysis.get('propagation_stage', 'neutral'),
+                'stage_name': capital_analysis.get('stage_info', {}).get('name', '中性期'),
+                'signals': capital_analysis.get('signals', []),
+            }
+
+        # 4. 计算扩展EV
+        ev_extended = ev_base + sector_rotation_premium + capital_factor
+
+        # 5. 计算扩展EV评分
+        ev_extended_score = calculate_ev_score(
+            {'ev_weighted': ev_extended},
+            risk_result
+        )
+
+        # 6. 生成扩展推荐
+        extended_recommendation = generate_extended_recommendation(
+            ev_extended=ev_extended,
+            ev_base=ev_base,
+            sector_analysis=sector_analysis,
+            capital_analysis=capital_analysis,
+            base_recommendation=base_result.get('recommendation', {})
+        )
+
+        # 7. 组装结果
+        result = {
+            **base_result,  # 包含所有基础EV字段
+            'ev_base': ev_base,
+            'ev_base_pct': ev_base * 100,
+            'ev_extended': ev_extended,
+            'ev_extended_pct': ev_extended * 100,
+            'ev_extended_score': ev_extended_score,
+            'sector_rotation_premium': sector_rotation_premium,
+            'sector_rotation_premium_pct': sector_rotation_premium * 100,
+            'capital_structure_factor': capital_factor,
+            'capital_structure_factor_pct': capital_factor * 100,
+            'sector_info': sector_info,
+            'capital_info': capital_info,
+            'extended_recommendation': extended_recommendation,
+            'model_version': 'extended_v1',
+        }
+
+        logger.info(
+            f"扩展EV计算完成: "
+            f"base={ev_base:.2%}, "
+            f"sector_premium={sector_rotation_premium:.2%}, "
+            f"capital_factor={capital_factor:.2%}, "
+            f"extended={ev_extended:.2%}"
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"计算扩展EV模型失败: {e}")
+        # 回退到基础模型
+        base_result = calculate_ev_model(data, risk_result, style)
+        base_result['ev_extended'] = base_result.get('ev_weighted', 0.0)
+        base_result['ev_extended_pct'] = base_result.get('ev_weighted_pct', 0.0)
+        base_result['sector_rotation_premium'] = 0.0
+        base_result['capital_structure_factor'] = 0.0
+        base_result['model_version'] = 'base_v1_fallback'
+        return base_result
+
+
+def generate_extended_recommendation(
+    ev_extended: float,
+    ev_base: float,
+    sector_analysis: Optional[Dict[str, Any]],
+    capital_analysis: Optional[Dict[str, Any]],
+    base_recommendation: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    基于扩展EV生成交易推荐
+
+    综合考虑基础EV、板块轮动和资金结构
+    """
+    try:
+        # 基础推荐逻辑
+        if ev_extended > 0.10:  # EV > 10%
+            action = 'STRONG_BUY'
+            reason = '扩展EV强势，板块轮动和资金结构均支持'
+            confidence = 'high'
+        elif ev_extended > 0.05:  # EV > 5%
+            action = 'BUY'
+            reason = '扩展EV偏正，综合分析支持买入'
+            confidence = 'medium'
+        elif ev_extended > 0.0:  # 0% < EV < 5%
+            action = 'CAUTIOUS_BUY'
+            reason = '扩展EV略正，可少量配置'
+            confidence = 'medium'
+        elif ev_extended > -0.03:  # -3% < EV < 0%
+            action = 'HOLD'
+            reason = '扩展EV接近中性'
+            confidence = 'medium'
+        elif ev_extended > -0.08:  # -8% < EV < -3%
+            action = 'AVOID'
+            reason = '扩展EV偏负，建议回避'
+            confidence = 'medium'
+        else:  # EV < -8%
+            action = 'STRONG_AVOID'
+            reason = '扩展EV显著为负，建议规避'
+            confidence = 'high'
+
+        # 板块因素调整
+        sector_factor_description = ''
+        if sector_analysis:
+            sector_strength = sector_analysis.get('sector_strength', 50)
+            is_leader = sector_analysis.get('is_sector_leader', False)
+
+            if sector_strength >= 70:
+                sector_factor_description = '所属板块强势'
+                if action == 'HOLD':
+                    action = 'CAUTIOUS_BUY'
+                    reason = '板块轮动支持，可关注'
+            elif sector_strength <= 30:
+                sector_factor_description = '所属板块弱势'
+                if action in ['STRONG_BUY', 'BUY']:
+                    action = 'CAUTIOUS_BUY'
+                    confidence = 'low'
+                    reason = '板块整体偏弱，需谨慎'
+
+            if is_leader and sector_strength >= 60:
+                sector_factor_description += '，为板块龙头'
+                confidence = 'high' if confidence == 'medium' else confidence
+
+        # 资金因素调整
+        capital_factor_description = ''
+        if capital_analysis:
+            concentration = capital_analysis.get('concentration_score', 50)
+            stage = capital_analysis.get('propagation_stage', 'neutral')
+
+            if stage in ['leader_start', 'early_spread']:
+                capital_factor_description = '资金开始聚集'
+            elif stage == 'retreat':
+                capital_factor_description = '资金撤离中'
+                if action in ['STRONG_BUY', 'BUY']:
+                    action = 'HOLD'
+                    confidence = 'low'
+                    reason = '资金面不支持'
+
+            if concentration >= 70:
+                capital_factor_description += '，集中度高'
+            elif concentration <= 30:
+                capital_factor_description += '，集中度低'
+
+        # 组合描述
+        factors = []
+        if sector_factor_description:
+            factors.append(sector_factor_description)
+        if capital_factor_description:
+            factors.append(capital_factor_description)
+
+        additional_info = '；'.join(factors) if factors else ''
+
+        return {
+            'action': action,
+            'reason': reason,
+            'confidence': confidence,
+            'additional_info': additional_info,
+            'ev_base_action': base_recommendation.get('action', 'HOLD'),
+            'upgrade_from_base': action != base_recommendation.get('action', 'HOLD'),
+        }
+
+    except Exception as e:
+        logger.error(f"生成扩展推荐失败: {e}")
+        return base_recommendation
 
 
 def calculate_historical_volatility(hist_prices, period=30):
@@ -358,7 +577,15 @@ def calculate_ev_model(data, risk_result, style):
         
         # 计算 EV 评级（0-10 分）
         ev_score = calculate_ev_score(ev_weighted, risk_result)
-        
+
+        # 计算 EV 信心度评分
+        confidence_result = calculate_ev_confidence(
+            ev_1week['ev'],
+            ev_1month['ev'],
+            ev_3months['ev'],
+            data
+        )
+
         result = {
             'ev_1week': ev_1week,
             'ev_1month': ev_1month,
@@ -371,10 +598,11 @@ def calculate_ev_model(data, risk_result, style):
                 '3months': weight_3months
             },
             'recommendation': recommendation,
-            'ev_score': ev_score
+            'ev_score': ev_score,
+            'confidence': confidence_result
         }
-        
-        logger.info(f"EV 模型计算完成: 加权EV={ev_weighted:.2%}, 评分={ev_score:.1f}/10")
+
+        logger.info(f"EV 模型计算完成: 加权EV={ev_weighted:.2%}, 评分={ev_score:.1f}/10, 信心度={confidence_result['level']}")
         
         return result
         
@@ -506,4 +734,162 @@ def calculate_ev_score(ev_weighted, risk_result):
     except Exception as e:
         logger.error(f"计算 EV 评分失败: {e}")
         return 5.0  # 默认中性评分
+
+
+def calculate_ev_confidence(ev_1week, ev_1month, ev_3months, data=None):
+    """
+    计算 EV 模型的信心度
+
+    基于以下因素评估预测的可信度：
+    1. 时间一致性：三个时间维度的EV方向是否一致
+    2. 信号强度：EV绝对值是否足够大（弱信号信心低）
+    3. 数据质量：是否有足够的历史数据支撑
+    4. 波动率稳定性：近期波动率是否稳定
+
+    参数:
+        ev_1week: 1周EV值
+        ev_1month: 1月EV值
+        ev_3months: 3月EV值
+        data: 市场数据（可选）
+
+    返回:
+        dict: {
+            'level': 'HIGH'/'MEDIUM'/'LOW',
+            'score': 0-100,
+            'factors': [...],
+            'description': '...'
+        }
+    """
+    try:
+        score = 50  # 基础分
+        factors = []
+
+        # 定义方向阈值（绝对值小于2%视为中性）
+        neutral_threshold = 0.02
+
+        def get_direction(ev):
+            if ev > neutral_threshold:
+                return 'up'
+            elif ev < -neutral_threshold:
+                return 'down'
+            return 'neutral'
+
+        dir_1week = get_direction(ev_1week)
+        dir_1month = get_direction(ev_1month)
+        dir_3months = get_direction(ev_3months)
+
+        directions = [dir_1week, dir_1month, dir_3months]
+        non_neutral = [d for d in directions if d != 'neutral']
+
+        # 1. 时间一致性检查（权重40%）
+        if len(non_neutral) == 0:
+            # 全部中性
+            score += 0
+            factors.append('方向不明确（全部中性）')
+        elif len(set(non_neutral)) == 1:
+            # 非中性的方向完全一致
+            score += 40
+            factors.append(f'三个时间维度方向一致({non_neutral[0]})')
+        elif len(non_neutral) == 2 and len(set(non_neutral)) == 1:
+            # 两个有方向且一致
+            score += 25
+            factors.append('两个时间维度方向一致')
+        else:
+            # 方向存在分歧
+            score -= 15
+            factors.append('时间维度存在方向分歧')
+
+        # 2. 信号强度（权重30%）
+        avg_abs_ev = (abs(ev_1week) + abs(ev_1month) + abs(ev_3months)) / 3
+
+        if avg_abs_ev > 0.10:  # 平均EV > 10%
+            score += 30
+            factors.append(f'信号强度高(平均EV={avg_abs_ev:.1%})')
+        elif avg_abs_ev > 0.05:  # 平均EV 5-10%
+            score += 20
+            factors.append(f'信号强度中等(平均EV={avg_abs_ev:.1%})')
+        elif avg_abs_ev > 0.02:  # 平均EV 2-5%
+            score += 10
+            factors.append(f'信号强度偏弱(平均EV={avg_abs_ev:.1%})')
+        else:
+            score -= 10
+            factors.append(f'信号强度很弱(平均EV={avg_abs_ev:.1%})')
+
+        # 3. 数据质量检查（权重20%）
+        if data:
+            hist_prices = data.get('history_prices', [])
+            if len(hist_prices) >= 200:
+                score += 20
+                factors.append('历史数据充足(>200天)')
+            elif len(hist_prices) >= 60:
+                score += 10
+                factors.append('历史数据中等(60-200天)')
+            elif len(hist_prices) >= 20:
+                score += 5
+                factors.append('历史数据有限(20-60天)')
+            else:
+                score -= 10
+                factors.append('历史数据不足(<20天)')
+
+            # 4. 波动率稳定性（权重10%）
+            # 近期波动率与历史波动率的比较
+            if hist_prices and len(hist_prices) >= 60:
+                recent_prices = hist_prices[-20:]
+                older_prices = hist_prices[-60:-20]
+
+                if len(recent_prices) >= 2 and len(older_prices) >= 2:
+                    recent_returns = np.diff(recent_prices) / np.array(recent_prices[:-1])
+                    older_returns = np.diff(older_prices) / np.array(older_prices[:-1])
+
+                    recent_vol = np.std(recent_returns) if len(recent_returns) > 1 else 0
+                    older_vol = np.std(older_returns) if len(older_returns) > 1 else 0
+
+                    if older_vol > 0:
+                        vol_ratio = recent_vol / older_vol
+                        if 0.7 <= vol_ratio <= 1.3:
+                            score += 10
+                            factors.append('波动率稳定')
+                        elif vol_ratio > 1.5:
+                            score -= 5
+                            factors.append('近期波动率显著上升')
+                        elif vol_ratio < 0.5:
+                            score += 5
+                            factors.append('近期波动率下降')
+        else:
+            factors.append('无市场数据，无法评估数据质量')
+
+        # 限制分数范围
+        score = max(0, min(100, score))
+
+        # 确定信心度等级
+        if score >= 70:
+            level = 'HIGH'
+            description = '模型预测信心度高，三个时间维度方向一致，信号强度充足'
+        elif score >= 40:
+            level = 'MEDIUM'
+            description = '模型预测信心度中等，部分维度存在分歧或信号较弱'
+        else:
+            level = 'LOW'
+            description = '模型预测信心度低，方向不明确或数据不足'
+
+        return {
+            'level': level,
+            'score': score,
+            'factors': factors,
+            'description': description,
+            'directions': {
+                '1week': dir_1week,
+                '1month': dir_1month,
+                '3months': dir_3months
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"计算 EV 信心度失败: {e}")
+        return {
+            'level': 'LOW',
+            'score': 30,
+            'factors': ['计算过程出错'],
+            'description': '无法计算信心度'
+        }
 

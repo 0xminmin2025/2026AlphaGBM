@@ -2,10 +2,12 @@ from flask import Blueprint, request, jsonify, g
 from ..models import db, PortfolioHolding, DailyProfitLoss, StyleProfit, PortfolioRebalance
 from ..utils.serialization import convert_numpy_types
 from ..scheduler import get_exchange_rates, convert_to_usd
-import yfinance as yf
 import logging
 from datetime import datetime, timedelta, date
 from sqlalchemy import func, desc, text
+
+# Import DataProvider for unified data access
+from ..services.data_provider import DataProvider
 
 portfolio_bp = Blueprint('portfolio', __name__, url_prefix='/api/portfolio')
 logger = logging.getLogger(__name__)
@@ -89,13 +91,13 @@ def get_portfolio_holdings():
             if holding.style.lower() not in holdings_by_style:
                 continue
 
-            # Get current price from yfinance
+            # Get current price using DataProvider (unified data access with metrics)
             current_price = holding.buy_price  # Default to buy price
             try:
                 if holding.ticker not in price_cache:
-                    ticker_obj = yf.Ticker(holding.ticker)
+                    ticker_obj = DataProvider(holding.ticker)
                     info = ticker_obj.info
-                    current_price = info.get('currentPrice', info.get('regularMarketPrice', holding.buy_price))
+                    current_price = info.get('currentPrice') or info.get('regularMarketPrice') or holding.buy_price
                     price_cache[holding.ticker] = current_price
                 else:
                     current_price = price_cache[holding.ticker]

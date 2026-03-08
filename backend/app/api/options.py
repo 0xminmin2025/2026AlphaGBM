@@ -9,11 +9,30 @@ from ..services.task_queue import create_analysis_task, get_task_status
 from ..models import db, ServiceType, TaskType, OptionsAnalysisHistory
 from ..utils.decorators import check_quota, db_retry
 from ..utils.auth import require_auth, get_user_id
+from ..analysis.options_analysis.option_market_config import get_option_market_config
 import logging
 
 logger = logging.getLogger(__name__)
 
 options_bp = Blueprint('options', __name__, url_prefix='/api/options')
+
+
+def _check_option_whitelist(symbol: str):
+    """
+    检查标的是否在期权白名单中（HK/CN市场强制白名单）。
+    返回 None 表示通过，否则返回 (error_response, status_code) 元组。
+    """
+    market_config = get_option_market_config(symbol)
+    if market_config.whitelist_enforced and not market_config.is_symbol_allowed(symbol):
+        allowed = market_config.get_allowed_symbols()
+        return jsonify({
+            'success': False,
+            'error': f'标的 {symbol} 不在 {market_config.market} 市场期权白名单中',
+            'allowed_symbols': allowed,
+            'market': market_config.market
+        }), 400
+    return None
+
 
 def get_options_analysis_data(symbol: str, enhanced: bool = False, expiry_date: str = None, option_identifier: str = None) -> dict:
     """
@@ -78,6 +97,11 @@ def analyze_options_chain_async():
 
         if not symbol or not expiry_date:
             return jsonify({'error': 'symbol and expiry_date are required'}), 400
+
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
 
         user_id = get_user_id()
         if not user_id:
@@ -166,6 +190,11 @@ def analyze_options_enhanced_async():
 def get_expirations(symbol):
     """Get option expiration dates"""
     try:
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
         response = OptionsService.get_expirations(symbol)
         # response is an ExpirationResponse pydantic model
         return jsonify(response.dict()), 200
@@ -185,6 +214,11 @@ def get_option_chain(symbol, expiry_date):
     }
     """
     try:
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
         # Check if async mode is requested (POST request)
         if request.method == 'POST':
             data = request.get_json() or {}
@@ -474,3 +508,394 @@ def get_analysis_history_detail(history_id):
     except Exception as e:
         logger.error(f"Error fetching options analysis history detail {history_id} for user {g.user_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@options_bp.route('/recommendations', methods=['GET'])
+def get_recommendations():
+    """
+    获取每日热门期权推荐
+
+    Query Parameters:
+    - count: 返回推荐数量 (默认5，最大10)
+    - refresh: 是否强制刷新 (默认false)
+
+    Returns:
+    {
+        "success": true,
+        "recommendations": [...],
+        "market_summary": {...},
+        "updated_at": "2024-01-21T09:30:00Z"
+    }
+    """
+    try:
+        from ..services.recommendation_service import recommendation_service
+
+        count = request.args.get('count', 5, type=int)
+        count = min(max(1, count), 10)  # 限制1-10
+
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+
+        result = recommendation_service.get_daily_recommendations(
+            count=count,
+            force_refresh=force_refresh
+        )
+
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+
+    except Exception as e:
+        logger.error(f"获取推荐失败: {e}")
+        return jsonify({'success': False, 'error': f'获取推荐失败: {str(e)}'}), 500
+
+
+@options_bp.route('/commodity/contracts/<product>', methods=['GET'])
+@require_auth
+def get_commodity_contracts(product):
+    """
+    获取商品期权合约列表（含主力合约标识）
+
+    Args:
+        product: 品种代码 (au/ag/cu/al/m)
+
+    Returns:
+    {
+        "success": true,
+        "product": "au",
+        "product_name": "黄金",
+        "exchange": "SHFE",
+        "contracts": ["au2604", "au2605", ...],
+        "dominant_contract": "au2604",
+        "multiplier": 1000
+    }
+    """
+    try:
+        from ..services.market_data.adapters.akshare_commodity_adapter import AkShareCommodityAdapter
+
+        product_lower = product.lower().strip()
+        if product_lower not in AkShareCommodityAdapter.PRODUCT_CN_MAP:
+            return jsonify({
+                'success': False,
+                'error': f'不支持的商品品种: {product}',
+                'supported': list(AkShareCommodityAdapter.PRODUCT_CN_MAP.keys())
+            }), 400
+
+        from ..services.market_data.service import MarketDataService
+        from ..services.market_data.interfaces import Market
+
+        service = MarketDataService()
+        contracts = service.get_options_expirations(product_lower, market=Market.COMMODITY)
+
+        if not contracts:
+            return jsonify({
+                'success': False,
+                'error': f'无法获取 {product} 合约列表'
+            }), 500
+
+        return jsonify({
+            'success': True,
+            'product': product_lower,
+            'product_name': AkShareCommodityAdapter.PRODUCT_DISPLAY_NAME.get(product_lower, product),
+            'exchange': AkShareCommodityAdapter.PRODUCT_EXCHANGE.get(product_lower, ''),
+            'contracts': contracts,
+            'dominant_contract': contracts[0] if contracts else None,
+            'multiplier': AkShareCommodityAdapter.PRODUCT_MULTIPLIER.get(product_lower, 1),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"获取商品合约列表失败: {e}")
+        return jsonify({'success': False, 'error': f'获取合约列表失败: {str(e)}'}), 500
+
+
+@options_bp.route('/reverse-score', methods=['POST'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def reverse_score_option():
+    """
+    反向查分：根据用户输入的期权参数计算评分
+
+    Request Body:
+    {
+        "symbol": "AAPL",
+        "option_type": "CALL",  // or "PUT"
+        "strike": 190,
+        "expiry_date": "2024-02-16",
+        "option_price": 2.50,
+        "implied_volatility": 0.28  // 可选，留空自动估算
+    }
+
+    Returns:
+    {
+        "success": true,
+        "symbol": "AAPL",
+        "option_type": "CALL",
+        "strike": 190,
+        "expiry_date": "2024-02-16",
+        "days_to_expiry": 25,
+        "option_price": 2.50,
+        "implied_volatility": 28.0,
+        "stock_data": {...},
+        "scores": {
+            "sell_call": {"score": 72, "style_label": "稳健收益", ...},
+            "buy_call": {"score": 65, "style_label": "激进策略", ...}
+        },
+        "trend_info": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'Request body is required'}), 400
+
+        # 验证必需参数
+        required_fields = ['symbol', 'option_type', 'strike', 'expiry_date', 'option_price']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'{field} is required'}), 400
+
+        symbol = data.get('symbol', '').upper()
+        option_type = data.get('option_type', '').upper()
+        strike = float(data.get('strike', 0))
+        expiry_date = data.get('expiry_date', '')
+        option_price = float(data.get('option_price', 0))
+        implied_volatility = data.get('implied_volatility')
+
+        # 白名单校验
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
+        # 验证期权类型
+        if option_type not in ['CALL', 'PUT']:
+            return jsonify({'success': False, 'error': 'option_type must be CALL or PUT'}), 400
+
+        # 验证数值
+        if strike <= 0:
+            return jsonify({'success': False, 'error': 'strike must be positive'}), 400
+        if option_price <= 0:
+            return jsonify({'success': False, 'error': 'option_price must be positive'}), 400
+
+        # 验证日期格式
+        try:
+            from datetime import datetime
+            datetime.strptime(expiry_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({'success': False, 'error': 'expiry_date must be in YYYY-MM-DD format'}), 400
+
+        # 转换隐含波动率（如果提供的话）
+        if implied_volatility is not None:
+            implied_volatility = float(implied_volatility)
+            # 如果用户输入的是百分比（如28），转换为小数（0.28）
+            if implied_volatility > 1:
+                implied_volatility = implied_volatility / 100
+
+        # 调用服务层计算评分
+        result = OptionsService.reverse_score_option(
+            symbol=symbol,
+            option_type=option_type,
+            strike=strike,
+            expiry_date=expiry_date,
+            option_price=option_price,
+            implied_volatility=implied_volatility
+        )
+
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"反向查分失败: {e}")
+        return jsonify({'success': False, 'error': f'反向查分失败: {str(e)}'}), 500
+
+
+@options_bp.route('/chain/batch', methods=['POST'])
+@require_auth
+def get_option_chain_batch():
+    """
+    批量获取期权链 - 支持多symbol + 多expiry
+
+    Request Body:
+    {
+        "symbols": ["AAPL", "TSLA"],
+        "expiries": ["2024-02-16", "2024-02-23"],
+        "priority": 100  // optional
+    }
+
+    计费: symbols数 × expiries数
+
+    Returns:
+    {
+        "success": true,
+        "task_ids": [
+            {"symbol": "AAPL", "expiry": "2024-02-16", "task_id": "uuid1"},
+            {"symbol": "AAPL", "expiry": "2024-02-23", "task_id": "uuid2"},
+            ...
+        ],
+        "total_queries": 4
+    }
+    """
+    try:
+        from ..utils.decorators import check_and_deduct_quota
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        symbols = data.get('symbols', [])
+        expiries = data.get('expiries', [])
+        priority = data.get('priority', 100)
+
+        # Validate inputs
+        if not symbols or not isinstance(symbols, list):
+            return jsonify({'error': 'symbols array is required'}), 400
+
+        if not expiries or not isinstance(expiries, list):
+            return jsonify({'error': 'expiries array is required'}), 400
+
+        # Limit: max 2 expiry dates
+        if len(expiries) > 2:
+            return jsonify({'error': 'Maximum 2 expiry dates allowed'}), 400
+
+        # Limit: max 3 symbols (consistent with existing limit)
+        if len(symbols) > 3:
+            return jsonify({'error': 'Maximum 3 symbols allowed'}), 400
+
+        user_id = get_user_id()
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        # Calculate total queries = symbols × expiries
+        total_queries = len(symbols) * len(expiries)
+
+        # Check and deduct quota in one go
+        quota_result = check_and_deduct_quota(
+            user_id=user_id,
+            service_type=ServiceType.OPTION_ANALYSIS.value,
+            amount=total_queries,
+            ticker=','.join(symbols)
+        )
+
+        if not quota_result['success']:
+            return jsonify({
+                'error': quota_result['message'],
+                'remaining_credits': quota_result['remaining'],
+                'free_remaining': quota_result['free_remaining'],
+                'free_quota': quota_result['free_quota'],
+                'code': 'INSUFFICIENT_CREDITS'
+            }), 402
+
+        # Create async tasks for each (symbol, expiry) combination
+        task_ids = []
+        for symbol in symbols:
+            for expiry in expiries:
+                task_id = create_analysis_task(
+                    user_id=user_id,
+                    task_type=TaskType.OPTION_ANALYSIS.value,
+                    input_params={
+                        'symbol': symbol.upper(),
+                        'expiry_date': expiry
+                    },
+                    priority=priority
+                )
+                task_ids.append({
+                    'symbol': symbol.upper(),
+                    'expiry': expiry,
+                    'task_id': task_id
+                })
+
+        return jsonify({
+            'success': True,
+            'task_ids': task_ids,
+            'total_queries': total_queries,
+            'quota_info': {
+                'is_free': quota_result['is_free'],
+                'free_remaining': quota_result['free_remaining'],
+                'free_quota': quota_result['free_quota']
+            }
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Failed to create batch options analysis tasks: {e}")
+        return jsonify({'error': f'Failed to create batch tasks: {str(e)}'}), 500
+
+
+@options_bp.route('/recognize-image', methods=['POST'])
+@require_auth
+def recognize_option_image():
+    """
+    识别期权截图，提取期权参数
+
+    Request:
+    - Content-Type: multipart/form-data
+    - image: 图片文件 (PNG, JPG, JPEG, WebP)
+
+    Returns:
+    {
+        "success": true,
+        "data": {
+            "symbol": "AAPL",
+            "option_type": "CALL",
+            "strike": 230,
+            "expiry_date": "2025-02-21",
+            "option_price": 5.50,
+            "implied_volatility": 0.28,
+            "confidence": "high",
+            "notes": "识别备注"
+        }
+    }
+    """
+    try:
+        from ..services.image_recognition_service import image_recognition_service
+
+        # 检查是否有上传的文件
+        if 'image' not in request.files:
+            return jsonify({'success': False, 'error': '请上传图片文件'}), 400
+
+        file = request.files['image']
+
+        if file.filename == '':
+            return jsonify({'success': False, 'error': '未选择文件'}), 400
+
+        # 检查文件类型
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+        file_ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'success': False,
+                'error': f'不支持的文件格式。支持: {", ".join(allowed_extensions)}'
+            }), 400
+
+        # 检查文件大小 (限制 10MB)
+        file.seek(0, 2)  # 移动到文件末尾
+        file_size = file.tell()
+        file.seek(0)  # 重置到文件开头
+
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            return jsonify({'success': False, 'error': '文件大小不能超过 10MB'}), 400
+
+        # 读取文件内容
+        image_data = file.read()
+
+        # 确定 MIME 类型
+        mime_types = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'webp': 'image/webp'
+        }
+        mime_type = mime_types.get(file_ext, 'image/png')
+
+        # 调用识别服务
+        result = image_recognition_service.recognize_option_from_image(image_data, mime_type)
+
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"图片识别失败: {e}")
+        return jsonify({'success': False, 'error': f'图片识别失败: {str(e)}'}), 500

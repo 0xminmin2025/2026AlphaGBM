@@ -5,7 +5,6 @@
 
 import pandas as pd
 import numpy as np
-import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -13,12 +12,8 @@ import time
 import logging
 from typing import Dict, Any, Optional
 
-# 导入yfinance的异常类
-try:
-    from yfinance.exceptions import YFRateLimitError
-except ImportError:
-    # 如果导入失败，定义一个占位符
-    YFRateLimitError = type('YFRateLimitError', (Exception,), {})
+# Use DataProvider for unified data access with metrics tracking
+from ....services.data_provider import DataProvider
 
 # 导入配置参数
 try:
@@ -43,6 +38,11 @@ class StockDataFetcher:
     def __init__(self):
         """初始化数据获取器"""
         self.default_period = "2y"  # 默认获取2年历史数据
+
+    @staticmethod
+    def _create_ticker(symbol: str):
+        """Create a ticker object using DataProvider (unified data access)."""
+        return DataProvider(symbol)
 
     def normalize_ticker(self, ticker: str) -> str:
         """
@@ -91,7 +91,7 @@ class StockDataFetcher:
             try:
                 logger.info(f"获取 {normalized_ticker} 实时价格，尝试 {attempt + 1}/{max_retries}")
 
-                stock = yf.Ticker(normalized_ticker)
+                stock = self._create_ticker(normalized_ticker)
                 info = stock.info
 
                 if not info or 'regularMarketPrice' not in info:
@@ -171,7 +171,7 @@ class StockDataFetcher:
             try:
                 logger.info(f"获取 {normalized_ticker} 市场数据，尝试 {attempt + 1}/{max_retries}")
 
-                stock = yf.Ticker(normalized_ticker)
+                stock = self._create_ticker(normalized_ticker)
 
                 # 获取基本信息
                 info = stock.info
@@ -338,7 +338,7 @@ class StockDataFetcher:
             logger.info(f"获取 {ticker} {days}天历史数据")
 
             normalized_ticker = self.normalize_ticker(ticker)
-            stock = yf.Ticker(normalized_ticker)
+            stock = self._create_ticker(normalized_ticker)
 
             # 计算开始日期
             end_date = datetime.now()

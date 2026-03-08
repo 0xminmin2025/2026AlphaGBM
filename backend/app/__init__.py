@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 import os
 import logging
@@ -44,6 +44,10 @@ def create_app(config_class=Config):
     from .models import db
     db.init_app(app)
 
+    # Create all tables if they don't exist (safe for new databases)
+    with app.app_context():
+        db.create_all()
+
     # Initialize Task Queue (always needed for API endpoints)
     from .services.task_queue import init_task_queue, shutdown_task_queue
     with app.app_context():
@@ -70,6 +74,11 @@ def create_app(config_class=Config):
     from .api.portfolio import portfolio_bp
     from .api.tasks import tasks_bp
     from .api.feedback import feedback_bp
+    from .api.narrative_routes import narrative_bp
+    from .api.analytics import analytics_bp
+    from .api.sector import sector_bp
+    from .api.metrics import metrics_bp
+    from .api.trading import trading_bp
     from .docs import docs_bp
 
     app.register_blueprint(auth_bp)
@@ -80,21 +89,50 @@ def create_app(config_class=Config):
     app.register_blueprint(portfolio_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(feedback_bp)
+    app.register_blueprint(narrative_bp)
+    app.register_blueprint(analytics_bp)
+    app.register_blueprint(sector_bp)
+    app.register_blueprint(metrics_bp)
+    app.register_blueprint(trading_bp)
     app.register_blueprint(docs_bp)
 
     @app.route('/health')
     def health():
         return {'status': 'ok'}
 
-    # Add manual scheduler trigger endpoint for testing
+    # Add manual scheduler trigger endpoint for testing (requires auth)
     @app.route('/api/admin/trigger-profit-calculation')
     def trigger_profit_calculation():
+        # Require a secret admin key to prevent unauthorized access
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = os.environ.get('ADMIN_SECRET_KEY', '')
+        if not expected_key or admin_key != expected_key:
+            return {'error': 'Unauthorized'}, 401
         try:
             from .scheduler import calculate_daily_profit_loss
             calculate_daily_profit_loss()
             return {'success': True, 'message': 'Profit/loss calculation completed'}
         except Exception as e:
-            return {'success': False, 'error': str(e)}, 500
+            logging.getLogger(__name__).error(f"Admin trigger-profit error: {e}")
+            return {'success': False, 'error': 'Internal server error'}, 500
+
+    @app.route('/api/admin/trigger-feishu-report')
+    def trigger_feishu_report():
+        # Require a secret admin key to prevent unauthorized access
+        admin_key = request.headers.get('X-Admin-Key') or request.args.get('admin_key')
+        expected_key = os.environ.get('ADMIN_SECRET_KEY', '')
+        if not expected_key or admin_key != expected_key:
+            return {'error': 'Unauthorized'}, 401
+        try:
+            from .services.feishu_bot import send_daily_report
+            success = send_daily_report()
+            if success:
+                return {'success': True, 'message': 'Feishu report sent'}
+            else:
+                return {'success': False, 'message': 'Report not sent'}, 500
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Admin trigger-feishu error: {e}")
+            return {'success': False, 'error': 'Internal server error'}, 500
 
     # Flask CLI command to update holding dates
     @app.cli.command('update-holding-dates')

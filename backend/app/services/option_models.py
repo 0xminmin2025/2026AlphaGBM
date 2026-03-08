@@ -60,6 +60,10 @@ class OptionScores(BaseModel):
     # 风险收益风格标签
     risk_return_profile: Optional[RiskReturnProfile] = None
 
+    # 临期风险警告（新增）
+    is_daily_option: Optional[bool] = None      # 是否为日权(0DTE/1DTE)
+    expiry_warning: Optional[str] = None        # 临期风险警告标签
+
 class OptionData(BaseModel):
     """Enhanced option contract data with scoring"""
     # Basic option information

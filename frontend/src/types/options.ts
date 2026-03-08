@@ -71,3 +71,27 @@ export interface EnhancedAnalysisResponse {
     vrp_result?: VRPResult;
     available: boolean;
 }
+
+// Batch option chain request/response types for multi-date selection
+export interface BatchOptionRequest {
+    symbols: string[];
+    expiries: string[];
+    priority?: number;
+}
+
+export interface BatchTaskInfo {
+    symbol: string;
+    expiry: string;
+    task_id: string;
+}
+
+export interface BatchOptionResponse {
+    success: boolean;
+    task_ids: BatchTaskInfo[];
+    total_queries: number;
+    quota_info?: {
+        is_free: boolean;
+        free_remaining: number;
+        free_quota: number;
+    };
+}

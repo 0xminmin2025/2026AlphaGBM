@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from 'react-i18next';
+import { useToastHelpers } from '@/components/ui/toast';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -16,6 +17,7 @@ export default function Login() {
     const [resetEmailSent, setResetEmailSent] = useState(false);
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const toast = useToastHelpers();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,7 +29,7 @@ export default function Login() {
                     password,
                 });
                 if (error) throw error;
-                alert('Check your email for the confirmation link!');
+                toast.success(t('auth.signupSuccess'), t('auth.checkEmailConfirm'));
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
@@ -38,7 +40,7 @@ export default function Login() {
                 navigate('/');
             }
         } catch (error: any) {
-            alert(error.message);
+            toast.error(t('auth.authFailed'), error.message);
         } finally {
             setLoading(false);
         }
@@ -54,14 +56,14 @@ export default function Login() {
             });
             if (error) throw error;
         } catch (error: any) {
-            alert(error.message);
+            toast.error(t('auth.authFailed'), error.message);
         }
     };
 
     const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email) {
-            alert('Please enter your email address');
+            toast.error(t('auth.emailRequired'), t('auth.pleaseEnterEmail'));
             return;
         }
 
@@ -79,11 +81,27 @@ export default function Login() {
             setResetEmailSent(true);
         } catch (error: any) {
             console.error('Password reset error:', error);
-            alert(`Reset failed: ${error.message}`);
+            toast.error(t('auth.resetFailed'), error.message);
         } finally {
             setLoading(false);
         }
     };
+
+    const passwordStrength = useMemo(() => {
+        if (!password || !isSignUp) return { score: 0, label: '', color: '' };
+        let score = 0;
+        const checks = {
+            length: password.length >= 8,
+            upper: /[A-Z]/.test(password),
+            lower: /[a-z]/.test(password),
+            number: /[0-9]/.test(password),
+            special: /[^A-Za-z0-9]/.test(password),
+        };
+        score = Object.values(checks).filter(Boolean).length;
+        if (score <= 2) return { score, label: 'Weak', color: '#EF4444', checks };
+        if (score <= 3) return { score, label: 'Medium', color: '#F59E0B', checks };
+        return { score, label: 'Strong', color: '#10B981', checks };
+    }, [password, isSignUp]);
 
     const resetForm = () => {
         setIsSignUp(false);
@@ -100,6 +118,7 @@ export default function Login() {
                     {/* Brand Logo */}
                     <div className="flex justify-center mb-2">
                         <div className="flex items-center space-x-2">
+                            <img src="/logo.png" alt="AlphaGBM" className="h-10 w-10" />
                             <span className="font-bold text-2xl tracking-tight text-[#FAFAFA]">
                                 Alpha<span className="text-[#0D9B97]">GBM</span>
                             </span>
@@ -183,6 +202,49 @@ export default function Login() {
                                                 required
                                                 className="bg-[#27272a] border-white/20 text-[#FAFAFA] placeholder:text-slate-400 focus:border-[#0D9B97] focus:ring-[#0D9B97]/20"
                                             />
+                                            {isSignUp && password && (
+                                                <div className="mt-2 space-y-2">
+                                                    <div className="flex gap-1">
+                                                        {[1, 2, 3, 4, 5].map((i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="h-1.5 flex-1 rounded-full transition-colors"
+                                                                style={{
+                                                                    backgroundColor: i <= passwordStrength.score
+                                                                        ? passwordStrength.color
+                                                                        : '#27272a'
+                                                                }}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs" style={{ color: passwordStrength.color }}>
+                                                            {passwordStrength.label}
+                                                        </span>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        {[
+                                                            { key: 'length', label: t('auth.pwdReqLength') || '8+ characters' },
+                                                            { key: 'upper', label: t('auth.pwdReqUpper') || 'Uppercase letter' },
+                                                            { key: 'number', label: t('auth.pwdReqNumber') || 'Number' },
+                                                            { key: 'special', label: t('auth.pwdReqSpecial') || 'Special character' },
+                                                        ].map(({ key, label }) => (
+                                                            <div key={key} className="flex items-center gap-2 text-xs">
+                                                                <span style={{
+                                                                    color: (passwordStrength as any).checks?.[key] ? '#10B981' : '#52525B'
+                                                                }}>
+                                                                    {(passwordStrength as any).checks?.[key] ? '✓' : '○'}
+                                                                </span>
+                                                                <span style={{
+                                                                    color: (passwordStrength as any).checks?.[key] ? '#A1A1AA' : '#52525B'
+                                                                }}>
+                                                                    {label}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

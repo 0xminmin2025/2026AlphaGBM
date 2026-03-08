@@ -74,13 +74,19 @@ htmlcov/
 !*.md
 !options_module/requirements.txt
 !options_module/env_template.txt
+!frontend/public/robots.txt
 
 # Database
 data/
+!backend/app/analysis/stock_analysis/data/
 *.db
 *.sqlite
 *.sqlite3
 
+defeatbeta-api/
+
+# Research data (cached OHLCV, results, snapshots)
+papers/data/
 
 # Frontend Exceptions
-!refactor/frontend/src/lib/
+!frontend/src/lib/

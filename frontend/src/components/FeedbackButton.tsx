@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import api from '@/lib/api';
 import { MessageSquare, X, Send } from 'lucide-react';
+import { useToastHelpers } from '@/components/ui/toast';
 
 export default function FeedbackButton() {
     const [isOpen, setIsOpen] = useState(false);
@@ -10,6 +11,7 @@ export default function FeedbackButton() {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const { user } = useAuth();
+    const toast = useToastHelpers();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,7 +33,7 @@ export default function FeedbackButton() {
             }, 2000);
         } catch (error: any) {
             console.error('Failed to submit feedback:', error);
-            alert('提交失败，请稍后重试');
+            toast.error('提交失败', '请稍后重试');
         } finally {
             setSubmitting(false);
         }

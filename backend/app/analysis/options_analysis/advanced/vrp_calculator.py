@@ -10,6 +10,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import math
 
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,8 @@ class VRPCalculator:
             'negative_premium': -0.15   # 负溢价阈值 (-15%)
         }
 
-    def calculate(self, symbol: str, options_data: Dict, stock_data: Dict) -> Dict[str, Any]:
+    def calculate(self, symbol: str, options_data: Dict, stock_data: Dict,
+                  market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         计算VRP分析
 
@@ -34,12 +37,16 @@ class VRPCalculator:
             symbol: 股票代码
             options_data: 期权链数据
             stock_data: 股票历史数据
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             VRP分析结果
         """
         try:
-            logger.info(f"开始VRP计算: {symbol}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"开始VRP计算: {symbol} (市场: {market_config.market})")
 
             if not options_data.get('success') or not stock_data.get('success', True):
                 return {
@@ -48,7 +55,7 @@ class VRPCalculator:
                 }
 
             # 1. 计算历史波动率
-            historical_volatility = self._calculate_historical_volatility(stock_data)
+            historical_volatility = self._calculate_historical_volatility(stock_data, market_config)
 
             # 2. 计算隐含波动率指标
             iv_metrics = self._calculate_implied_volatility_metrics(options_data)
@@ -82,7 +89,8 @@ class VRPCalculator:
                 'error': f"VRP计算失败: {str(e)}"
             }
 
-    def _calculate_historical_volatility(self, stock_data: Dict) -> Dict[str, float]:
+    def _calculate_historical_volatility(self, stock_data: Dict,
+                                         market_config: OptionMarketConfig = None) -> Dict[str, float]:
         """计算历史波动率"""
         try:
             # 获取历史价格数据
@@ -118,10 +126,12 @@ class VRPCalculator:
             # 计算日收益率
             returns = close_prices.pct_change().dropna()
 
+            trading_days = market_config.trading_days_per_year if market_config else 252
+
             # 计算不同周期的波动率
-            vol_30d = self._calculate_period_volatility(returns, 30)
-            vol_10d = self._calculate_period_volatility(returns, 10)
-            vol_5d = self._calculate_period_volatility(returns, 5)
+            vol_30d = self._calculate_period_volatility(returns, 30, trading_days)
+            vol_10d = self._calculate_period_volatility(returns, 10, trading_days)
+            vol_5d = self._calculate_period_volatility(returns, 5, trading_days)
 
             # 计算波动率分位数
             vol_percentile = self._calculate_volatility_percentile(returns)
@@ -146,13 +156,14 @@ class VRPCalculator:
                 'data_quality': 'error_fallback'
             }
 
-    def _calculate_period_volatility(self, returns: pd.Series, period: int) -> float:
+    def _calculate_period_volatility(self, returns: pd.Series, period: int,
+                                     trading_days: int = 252) -> float:
         """计算指定周期的波动率"""
         if len(returns) < period:
-            return returns.std() * math.sqrt(252)  # 使用全部数据
+            return returns.std() * math.sqrt(trading_days)
 
         recent_returns = returns.tail(period)
-        return recent_returns.std() * math.sqrt(252)  # 年化波动率
+        return recent_returns.std() * math.sqrt(trading_days)
 
     def _calculate_volatility_percentile(self, returns: pd.Series) -> float:
         """计算当前波动率在历史中的分位数"""
@@ -160,7 +171,7 @@ class VRPCalculator:
             if len(returns) < 60:  # 数据不足
                 return 50.0
 
-            # 使用滚动窗口计算历史波动率
+            # 使用滚动窗口计算历史波动率（使用默认252，此处无需市场区分）
             rolling_vol = returns.rolling(window=20).std() * math.sqrt(252)
             rolling_vol = rolling_vol.dropna()
 

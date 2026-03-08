@@ -6,12 +6,14 @@ Based on the original app.py calculate_daily_profit_loss() function.
 """
 
 import logging
-import yfinance as yf
 import requests
 from datetime import datetime, date
 from apscheduler.schedulers.background import BackgroundScheduler
 from .models import db, PortfolioHolding, DailyProfitLoss, StyleProfit
 from .utils.serialization import convert_numpy_types
+
+# Use DataProvider for unified data access with metrics tracking
+from .services.data_provider import DataProvider
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ def get_exchange_rates():
 
     try:
         # Use cached rates if less than 1 hour old
-        if cache_timestamp and (datetime.now() - cache_timestamp).seconds < 3600:
+        if cache_timestamp and (datetime.now() - cache_timestamp).total_seconds() < 3600:
             return exchange_rates_cache
 
         # Fetch new rates from exchangerate-api.com (free tier)
@@ -55,9 +57,9 @@ def get_exchange_rates():
     return exchange_rates_cache
 
 def get_current_stock_price(ticker):
-    """Get current stock price using yfinance"""
+    """Get current stock price using DataProvider (unified data access)"""
     try:
-        stock = yf.Ticker(ticker)
+        stock = DataProvider(ticker)
         info = stock.info
 
         # Try different price fields in order of preference
@@ -213,6 +215,12 @@ def calculate_daily_profit_loss():
         db.session.rollback()
         raise
 
+def _send_feishu_report():
+    """Wrapper to send daily Feishu operations report"""
+    from .services.feishu_bot import send_daily_report
+    send_daily_report()
+
+
 # Global scheduler instance
 scheduler = None
 
@@ -237,8 +245,56 @@ def init_scheduler(app):
             replace_existing=True
         )
 
+        # Add the daily Feishu report job - runs every day at 8:00 PM
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _send_feishu_report),
+            trigger='cron',
+            hour=20,
+            minute=0,
+            id='daily_feishu_report',
+            name='Daily Feishu Operations Report',
+            replace_existing=True
+        )
+
+        # === Paper Trading Scheduled Jobs ===
+
+        # Daily paper trading performance snapshot - 6:30 PM (after P/L calc)
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _paper_daily_snapshot),
+            trigger='cron',
+            hour=18,
+            minute=30,
+            id='paper_daily_snapshot',
+            name='Paper Trading Daily Snapshot',
+            replace_existing=True
+        )
+
+        # Monthly momentum rebalance - 1st of each month at 10:00 AM
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _paper_momentum_rebalance),
+            trigger='cron',
+            day=1,
+            hour=10,
+            minute=0,
+            id='paper_momentum_rebalance',
+            name='Paper Trading Monthly Momentum Rebalance',
+            replace_existing=True
+        )
+
+        # Weekly options scan - every Monday at 10:00 AM
+        scheduler.add_job(
+            func=lambda: run_with_app_context(app, _paper_weekly_options_scan),
+            trigger='cron',
+            day_of_week='mon',
+            hour=10,
+            minute=0,
+            id='paper_weekly_options_scan',
+            name='Paper Trading Weekly Options Scan',
+            replace_existing=True
+        )
+
         scheduler.start()
-        logger.info("Scheduler initialized successfully - Daily P/L calculation will run at 6:12 PM")
+        logger.info("Scheduler initialized successfully - Daily P/L at 6:12 PM, Feishu at 8:00 PM, Paper trading: daily@6:30PM, rebalance@1st/10AM, options@Mon/10AM")
 
     except Exception as e:
         logger.error(f"Failed to initialize scheduler: {e}")
@@ -247,6 +303,42 @@ def run_with_app_context(app, func):
     """Run function within Flask app context"""
     with app.app_context():
         func()
+
+def _paper_daily_snapshot():
+    """Run daily paper trading snapshot: update prices, check stops, save performance."""
+    try:
+        from .services.paper_trading_service import paper_trading_service
+        logger.info("Running paper trading daily snapshot...")
+        paper_trading_service.update_prices()
+        paper_trading_service.check_stop_losses()
+        paper_trading_service.check_option_expiry()
+        paper_trading_service.calculate_daily_performance()
+        logger.info("Paper trading daily snapshot complete")
+    except Exception as e:
+        logger.error(f"Paper trading daily snapshot failed: {e}")
+
+
+def _paper_momentum_rebalance():
+    """Run monthly momentum portfolio rebalance."""
+    try:
+        from .services.paper_strategies import run_momentum_rebalance
+        logger.info("Running paper trading momentum rebalance...")
+        run_momentum_rebalance()
+        logger.info("Paper trading momentum rebalance complete")
+    except Exception as e:
+        logger.error(f"Paper trading momentum rebalance failed: {e}")
+
+
+def _paper_weekly_options_scan():
+    """Run weekly options selling scan."""
+    try:
+        from .services.paper_strategies import run_weekly_options_scan
+        logger.info("Running paper trading weekly options scan...")
+        run_weekly_options_scan()
+        logger.info("Paper trading weekly options scan complete")
+    except Exception as e:
+        logger.error(f"Paper trading weekly options scan failed: {e}")
+
 
 def shutdown_scheduler():
     """Shutdown the scheduler"""

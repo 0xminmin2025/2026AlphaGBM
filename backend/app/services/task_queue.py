@@ -9,10 +9,10 @@ import uuid
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, date
 from queue import Queue, Empty
 from typing import Optional, Dict, Any
-from ..models import db, AnalysisTask, TaskType, TaskStatus, StockAnalysisHistory, OptionsAnalysisHistory
+from ..models import db, AnalysisTask, TaskType, TaskStatus, StockAnalysisHistory, OptionsAnalysisHistory, DailyAnalysisCache
 from ..utils.serialization import convert_numpy_types
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,8 @@ class TaskQueue:
         self.is_running = False
         logger.info("Task queue workers stopped")
 
-    def create_task(self, user_id: str, task_type: str, input_params: Dict[str, Any], priority: int = 100) -> str:
+    def create_task(self, user_id: str, task_type: str, input_params: Dict[str, Any], priority: int = 100,
+                    cache_mode: str = None, cached_data: Dict = None, source_task_id: str = None) -> str:
         """
         Create a new analysis task
 
@@ -70,6 +71,10 @@ class TaskQueue:
             task_type: Type of analysis (stock_analysis, option_analysis, etc.)
             input_params: Parameters for the analysis
             priority: Task priority (lower = higher priority)
+            cache_mode: None for normal, 'cached' for fake progress with cached data,
+                        'waiting' for waiting on another task to finish
+            cached_data: Pre-computed analysis data (for cache_mode='cached')
+            source_task_id: Task ID to wait for (for cache_mode='waiting')
 
         Returns:
             Task ID (UUID string)
@@ -91,17 +96,23 @@ class TaskQueue:
             db.session.add(task)
             db.session.commit()
 
-            # Add to queue for processing
-            self.task_queue.put({
+            # Build task data for queue
+            task_data = {
                 'task_id': task_id,
                 'user_id': user_id,
                 'task_type': task_type,
                 'input_params': input_params,
                 'priority': priority,
-                'created_at': datetime.utcnow()
-            })
+                'created_at': datetime.utcnow(),
+                'cache_mode': cache_mode,
+                'cached_data': cached_data,
+                'source_task_id': source_task_id,
+            }
 
-            logger.info(f"Task {task_id} created for user {user_id}: {task_type}")
+            # Add to queue for processing
+            self.task_queue.put(task_data)
+
+            logger.info(f"Task {task_id} created for user {user_id}: {task_type} (cache_mode={cache_mode})")
             return task_id
 
         except Exception as e:
@@ -159,8 +170,16 @@ class TaskQueue:
 
                     logger.info(f"Worker {worker_name} processing task {task_id}")
 
-                    # Process the task based on type
-                    if task_data['task_type'] == TaskType.STOCK_ANALYSIS.value:
+                    # Check cache mode first
+                    cache_mode = task_data.get('cache_mode')
+
+                    if cache_mode == 'cached':
+                        # Fake progress with cached data
+                        self._process_cached_task(task_data)
+                    elif cache_mode == 'waiting':
+                        # Wait for another task to finish, then use cached result
+                        self._process_waiting_task(task_data)
+                    elif task_data['task_type'] == TaskType.STOCK_ANALYSIS.value:
                         self._process_stock_analysis(task_data)
                     elif task_data['task_type'] in [TaskType.OPTION_ANALYSIS.value, TaskType.ENHANCED_OPTION_ANALYSIS.value]:
                         self._process_options_analysis(task_data)
@@ -236,6 +255,179 @@ class TaskQueue:
                 logger.error(f"Failed to update task status for {task_id}: {e}")
                 db.session.rollback()
 
+    def _process_cached_task(self, task_data: Dict[str, Any]):
+        """
+        Process a task with cached data — simulate progress over ~10 seconds,
+        then deliver the pre-computed result.
+        """
+        task_id = task_data['task_id']
+        user_id = task_data['user_id']
+        cached_data = task_data['cached_data']
+        params = task_data['input_params']
+        ticker = params.get('ticker', params.get('symbol', ''))
+
+        logger.info(f"Processing cached task {task_id} for {ticker}")
+
+        # Simulate realistic progress steps over ~10 seconds
+        fake_steps = [
+            (10, "Initializing analysis...", 1.5),
+            (30, "Fetching market data...", 2.0),
+            (55, "Calculating risk metrics...", 2.0),
+            (75, "Running AI analysis...", 2.5),
+            (90, "Generating report...", 1.5),
+        ]
+
+        for progress, step_msg, delay in fake_steps:
+            self._update_task_status(task_id, TaskStatus.PROCESSING.value, progress, step_msg)
+            time.sleep(delay)
+
+        # Save history record and complete the task
+        self._update_task_status(task_id, TaskStatus.PROCESSING.value, 95, "Saving analysis results...")
+
+        with self.app.app_context():
+            session = db.session
+            try:
+                # Save user's history record from cached data
+                history_id = self._save_stock_history_from_cached(session, user_id, params, cached_data)
+
+                # Update task with results
+                task = session.query(AnalysisTask).get(task_id)
+                task.result_data = cached_data
+                task.related_history_id = history_id
+                task.related_history_type = 'stock'
+                session.commit()
+
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Failed to save cached task result: {e}")
+                raise
+
+        self._update_task_status(task_id, TaskStatus.COMPLETED.value, 100, "Analysis completed successfully")
+        logger.info(f"Cached task {task_id} completed for {ticker}")
+
+    def _process_waiting_task(self, task_data: Dict[str, Any]):
+        """
+        Wait for another in-progress task to complete, then use its cached result.
+        Creates a separate task record for this user but shares the analysis result.
+        """
+        task_id = task_data['task_id']
+        user_id = task_data['user_id']
+        source_task_id = task_data['source_task_id']
+        params = task_data['input_params']
+        ticker = params.get('ticker', '')
+        style = params.get('style', 'quality')
+
+        logger.info(f"Waiting task {task_id} waiting for source task {source_task_id}")
+
+        # Show initial progress while waiting
+        self._update_task_status(task_id, TaskStatus.PROCESSING.value, 10, "Initializing analysis...")
+        time.sleep(1.0)
+        self._update_task_status(task_id, TaskStatus.PROCESSING.value, 20, "Fetching market data...")
+
+        # Poll for the source task to complete (max 5 minutes)
+        max_wait = 300  # seconds
+        poll_interval = 2  # seconds
+        waited = 0
+        cached_data = None
+
+        while waited < max_wait:
+            with self.app.app_context():
+                # First check if cache entry exists now (source task may have completed)
+                cache_entry = DailyAnalysisCache.query.filter_by(
+                    ticker=ticker, style=style, analysis_date=date.today()
+                ).first()
+
+                if cache_entry:
+                    cached_data = cache_entry.full_analysis_data
+                    logger.info(f"Waiting task {task_id} found cache entry for {ticker}/{style}")
+                    break
+
+                # Also check if source task failed
+                source_task = AnalysisTask.query.get(source_task_id)
+                if source_task and source_task.status == TaskStatus.FAILED.value:
+                    raise Exception(f"Source task {source_task_id} failed: {source_task.error_message}")
+
+            # Simulate gradual progress while waiting
+            progress = min(20 + int(waited / max_wait * 50), 70)
+            step_msgs = ["Fetching market data...", "Calculating risk metrics...", "Running AI analysis..."]
+            step_msg = step_msgs[min(waited // 20, len(step_msgs) - 1)]
+            self._update_task_status(task_id, TaskStatus.PROCESSING.value, progress, step_msg)
+
+            time.sleep(poll_interval)
+            waited += poll_interval
+
+        if not cached_data:
+            raise Exception(f"Timed out waiting for source task {source_task_id} to complete")
+
+        # Simulate final steps
+        self._update_task_status(task_id, TaskStatus.PROCESSING.value, 80, "Generating report...")
+        time.sleep(1.5)
+        self._update_task_status(task_id, TaskStatus.PROCESSING.value, 95, "Saving analysis results...")
+
+        # Save history and complete
+        with self.app.app_context():
+            session = db.session
+            try:
+                history_id = self._save_stock_history_from_cached(session, user_id, params, cached_data)
+
+                task = session.query(AnalysisTask).get(task_id)
+                task.result_data = cached_data
+                task.related_history_id = history_id
+                task.related_history_type = 'stock'
+                session.commit()
+
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Failed to save waiting task result: {e}")
+                raise
+
+        self._update_task_status(task_id, TaskStatus.COMPLETED.value, 100, "Analysis completed successfully")
+        logger.info(f"Waiting task {task_id} completed for {ticker}")
+
+    def _save_stock_history_from_cached(self, session, user_id: str, params: Dict, cached_data: Dict) -> int:
+        """
+        Save a StockAnalysisHistory record from cached analysis data.
+        Returns the history record ID.
+        """
+        ticker = params.get('ticker', '')
+        style = params.get('style', 'quality')
+
+        # Extract fields from the cached full analysis data
+        market_data = cached_data.get('data', {})
+        risk_result = cached_data.get('risk', {})
+        ev_result = market_data.get('ev_model', {})
+        ai_report = cached_data.get('report', '')
+
+        ai_summary = None
+        if isinstance(ai_report, dict):
+            ai_summary = ai_report.get('summary', '')[:1000] if ai_report.get('summary') else None
+        elif isinstance(ai_report, str):
+            ai_summary = ai_report[:1000] if ai_report else None
+
+        history_record = StockAnalysisHistory(
+            user_id=user_id,
+            ticker=ticker,
+            style=style,
+            current_price=market_data.get('price'),
+            target_price=market_data.get('target_price'),
+            stop_loss_price=market_data.get('stop_loss_price'),
+            market_sentiment=market_data.get('market_sentiment'),
+            risk_score=risk_result.get('score'),
+            risk_level=risk_result.get('level'),
+            position_size=risk_result.get('suggested_position'),
+            ev_score=ev_result.get('ev_score'),
+            ev_weighted_pct=ev_result.get('ev_weighted_pct'),
+            recommendation_action=ev_result.get('recommendation', {}).get('action'),
+            recommendation_confidence=ev_result.get('recommendation', {}).get('confidence'),
+            ai_summary=ai_summary,
+            full_analysis_data=cached_data
+        )
+
+        session.add(history_record)
+        session.flush()
+
+        return history_record.id
+
     def _process_stock_analysis(self, task_data: Dict[str, Any]):
         """Process stock analysis task"""
         task_id = task_data['task_id']
@@ -266,47 +458,44 @@ class TaskQueue:
             if not analysis_result or 'error' in analysis_result:
                 raise Exception(f"Stock analysis failed: {analysis_result.get('error', 'Unknown error')}")
 
-            # Step 4: Save to history
+            # Step 4: Save to history and cache
             self._update_task_status(task_id, TaskStatus.PROCESSING.value, 90, "Saving analysis results...")
 
-            # Create history record (with app context and fresh session)
+            # Create history record and cache entry (with app context)
             with self.app.app_context():
-                # Create new session for this worker thread
-                from sqlalchemy.orm import scoped_session, sessionmaker
                 from ..models import db as db_instance
 
-                # Get a fresh session for this thread
                 session = db_instance.session
 
                 try:
-                    history_record = StockAnalysisHistory(
-                        user_id=user_id,
-                        ticker=ticker,
-                        style=style,
-                        current_price=analysis_result.get('current_price'),
-                        target_price=analysis_result.get('target_price'),
-                        stop_loss_price=analysis_result.get('stop_loss_price'),
-                        market_sentiment=analysis_result.get('market_sentiment'),
-                        risk_score=analysis_result.get('risk_score'),
-                        risk_level=analysis_result.get('risk_level'),
-                        position_size=analysis_result.get('position_size'),
-                        ev_score=analysis_result.get('ev_score'),
-                        ev_weighted_pct=analysis_result.get('ev_weighted_pct'),
-                        recommendation_action=analysis_result.get('recommendation_action'),
-                        recommendation_confidence=analysis_result.get('recommendation_confidence'),
-                        ai_summary=analysis_result.get('ai_summary'),
-                        full_analysis_data=convert_numpy_types(analysis_result)
-                    )
+                    # Convert numpy types for JSON storage
+                    clean_result = convert_numpy_types(analysis_result)
 
-                    session.add(history_record)
-                    session.flush()  # Get the ID
+                    # Save user's analysis history
+                    history_id = self._save_stock_history_from_cached(session, user_id, params, clean_result)
 
-                    # Store the history ID before committing
-                    history_id = history_record.id
+                    # Save to daily analysis cache (INSERT ... ON CONFLICT DO NOTHING equivalent)
+                    try:
+                        cache_entry = DailyAnalysisCache(
+                            ticker=ticker,
+                            style=style,
+                            analysis_date=date.today(),
+                            full_analysis_data=clean_result,
+                            source_task_id=task_id
+                        )
+                        session.add(cache_entry)
+                        session.flush()
+                        logger.info(f"Saved analysis to daily cache: {ticker}/{style}")
+                    except Exception as cache_err:
+                        # Unique constraint violation — another task already cached this
+                        session.rollback()
+                        logger.info(f"Cache entry already exists for {ticker}/{style} today, skipping: {cache_err}")
+                        # Re-save history since rollback cleared it
+                        history_id = self._save_stock_history_from_cached(session, user_id, params, clean_result)
 
                     # Update task with results
                     task = session.query(AnalysisTask).get(task_id)
-                    task.result_data = convert_numpy_types(analysis_result)
+                    task.result_data = clean_result
                     task.related_history_id = history_id
                     task.related_history_type = 'stock'
 
@@ -443,9 +632,12 @@ def shutdown_task_queue():
     logger.info("Global task queue shutdown")
 
 # Convenience functions for external use
-def create_analysis_task(user_id: str, task_type: str, input_params: Dict[str, Any], priority: int = 100) -> str:
+def create_analysis_task(user_id: str, task_type: str, input_params: Dict[str, Any], priority: int = 100,
+                         cache_mode: str = None, cached_data: Dict = None, source_task_id: str = None) -> str:
     """Create a new analysis task"""
-    return task_queue.create_task(user_id, task_type, input_params, priority)
+    return task_queue.create_task(user_id, task_type, input_params, priority,
+                                  cache_mode=cache_mode, cached_data=cached_data,
+                                  source_task_id=source_task_id)
 
 def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
     """Get task status"""

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import LoadingScreen from '../ui/LoadingScreen';
@@ -14,7 +14,33 @@ export default function MainLayout() {
     const { user, signOut } = useAuth();
     const { isInitialLoading } = useUserData();
     const navigate = useNavigate();
+    const location = useLocation();
     const { t } = useTranslation();
+
+    // 处理股票分析导航 - 无论当前在哪个页面，点击都重置为新分析
+    const handleStockNavigation = (e: React.MouseEvent) => {
+        e.preventDefault();
+        // 如果已经在 /stock 页面，使用 replace 强制刷新
+        if (location.pathname === '/stock') {
+            // 先导航到临时路径再导航回来，触发 location.key 变化
+            navigate('/stock', { replace: true, state: { reset: Date.now() } });
+        } else {
+            navigate('/stock');
+        }
+        setIsMobileMenuOpen(false);
+    };
+
+    // 处理期权研究导航 - 无论当前在哪个页面，点击都重置为新分析
+    const handleOptionsNavigation = (e: React.MouseEvent) => {
+        e.preventDefault();
+        // 如果已经在 /options 页面，使用 replace 强制刷新
+        if (location.pathname === '/options') {
+            navigate('/options', { replace: true, state: { reset: Date.now() } });
+        } else {
+            navigate('/options');
+        }
+        setIsMobileMenuOpen(false);
+    };
 
     const handleLogout = async () => {
         await signOut();
@@ -52,14 +78,18 @@ export default function MainLayout() {
                 <div className="container flex h-16 items-center justify-between px-4 sm:px-8 max-w-7xl mx-auto">
                     {/* Logo */}
                     <Link to="/" className="flex items-center space-x-2">
+                        <img src="/logo.png" alt="AlphaGBM" className="h-8 w-8" />
                         <span className="font-bold text-xl tracking-tight">Alpha<span className="text-[#0D9B97]">GBM</span></span>
                     </Link>
 
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center space-x-8">
                         <nav className="flex items-center space-x-6 text-sm font-medium">
-                            <Link to="/stock" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.stock')}</Link>
-                            <Link to="/options" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.options')}</Link>
+                            <a href="/options" onClick={handleOptionsNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.options')}</a>
+                            <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
+                            <a href="/stock" onClick={handleStockNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.stock')}</a>
+                            <Link to="/knowledge" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.knowledge')}</Link>
+                            <Link to="/performance" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.performance')}</Link>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>
                         </nav>
 
@@ -97,19 +127,40 @@ export default function MainLayout() {
                 {isMobileMenuOpen && (
                     <div className="md:hidden bg-[#09090B]/95 backdrop-blur-md border-t border-white/10">
                         <nav className="flex flex-col px-4 py-4 space-y-4">
-                            <Link
-                                to="/stock"
-                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
-                                onClick={closeMobileMenu}
-                            >
-                                {t('nav.stock')}
-                            </Link>
-                            <Link
-                                to="/options"
-                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
-                                onClick={closeMobileMenu}
+                            <a
+                                href="/options"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors cursor-pointer"
+                                onClick={handleOptionsNavigation}
                             >
                                 {t('nav.options')}
+                            </a>
+                            <Link
+                                to="/options/reverse"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.reverseScore')}
+                            </Link>
+                            <a
+                                href="/stock"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors cursor-pointer"
+                                onClick={handleStockNavigation}
+                            >
+                                {t('nav.stock')}
+                            </a>
+                            <Link
+                                to="/knowledge"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.knowledge')}
+                            </Link>
+                            <Link
+                                to="/performance"
+                                className="text-sm font-medium hover:text-[#0D9B97] text-slate-300 py-2 transition-colors"
+                                onClick={closeMobileMenu}
+                            >
+                                {t('nav.performance')}
                             </Link>
                             <Link
                                 to="/pricing"
@@ -155,17 +206,24 @@ export default function MainLayout() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 container py-4 px-4 sm:py-8 sm:px-8 max-w-7xl mx-auto">
+            <main className={`flex-1 ${location.pathname.startsWith('/knowledge') ? '' : 'container py-4 px-4 sm:py-8 sm:px-8 max-w-7xl mx-auto'}`}>
                 <Outlet />
             </main>
 
             {/* Footer */}
             <footer className="py-6 sm:py-8 border-t border-white/10 bg-[#09090B]">
                 <div className="container flex flex-col items-center justify-center gap-4 text-center px-4 sm:px-8 max-w-7xl mx-auto">
+                    <p className="text-xs sm:text-sm text-slate-500">
+                        FLAT 1503 15/F CARNIVAL COMMERCIAL BUILDING 18 JAVA ROAD NORTH POINT HK
+                    </p>
                     <div className="flex items-center gap-6 flex-wrap justify-center">
                         <p className="text-xs sm:text-sm text-slate-500">
                             {t('footer.copyright')}
                         </p>
+                        <span className="text-slate-600">|</span>
+                        <Link to="/knowledge" className="text-xs sm:text-sm text-slate-500 hover:text-[#0D9B97] transition-colors">
+                            {t('nav.knowledge')}
+                        </Link>
                         <span className="text-slate-600">|</span>
                         <PrivacyPolicy />
                     </div>

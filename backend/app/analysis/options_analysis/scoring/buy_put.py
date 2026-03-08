@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+from .trend_analyzer import TrendAnalyzer
+from .macro_event_calendar import calculate_event_penalty, generate_event_notes
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,27 +23,33 @@ class BuyPutScorer:
         """初始化Buy Put计分器"""
         self.strategy_name = "buy_put"
         self.weight_config = {
-            'bearish_momentum': 0.25,    # 下跌动量权重
-            'support_break': 0.20,       # 支撑位突破权重
-            'value_efficiency': 0.20,    # 价值效率权重 (Delta/价格)
-            'volatility_expansion': 0.15, # 波动率扩张权重
+            'bearish_momentum': 0.15,    # 下跌动量权重（降低：短期信号不可靠）
+            'support_break': 0.15,       # 支撑位突破权重
+            'value_efficiency': 0.30,    # 价值效率权重（提升：高delta=高盈利概率）
+            'volatility_expansion': 0.20, # 波动率扩张权重（提升：低IV买入是核心）
             'liquidity': 0.10,           # 流动性权重
             'time_value': 0.10           # 时间价值权重
         }
+        self.trend_analyzer = TrendAnalyzer()
 
-    def score_options(self, options_data: Dict, stock_data: Dict) -> Dict[str, Any]:
+    def score_options(self, options_data: Dict, stock_data: Dict,
+                      market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         为Buy Put策略计分期权
 
         Args:
             options_data: 期权链数据
             stock_data: 标的股票数据
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             计分结果
         """
         try:
-            logger.info(f"开始Buy Put策略计分: {options_data.get('symbol', 'Unknown')}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"开始Buy Put策略计分: {options_data.get('symbol', 'Unknown')} (市场: {market_config.market})")
 
             if not options_data.get('success'):
                 return {
@@ -64,11 +74,22 @@ class BuyPutScorer:
                     'error': '无法获取当前股价'
                 }
 
+            # 趋势分析：上涨趋势中买Put风险极高，施加惩罚
+            trend_penalty = self._calculate_trend_penalty(stock_data, current_price)
+
             # 筛选和计分期权
             scored_options = []
             for put_option in puts:
-                score_result = self._score_individual_put(put_option, current_price, stock_data)
+                score_result = self._score_individual_put(put_option, current_price, stock_data, market_config=market_config)
                 if score_result and score_result.get('score', 0) > 0:
+                    # 趋势惩罚
+                    if trend_penalty < 1.0:
+                        score_result['score'] = round(score_result['score'] * trend_penalty, 1)
+                        score_result['trend_penalty'] = round(trend_penalty, 2)
+                    # 价值效率门槛：value_efficiency < 60 不推荐（需要足够高的delta）
+                    value_score = score_result.get('score_breakdown', {}).get('value_efficiency', 0)
+                    if value_score < 60:
+                        continue
                     scored_options.append(score_result)
 
             # 排序并选择最佳期权
@@ -99,9 +120,16 @@ class BuyPutScorer:
             }
 
     def _score_individual_put(self, put_option: Dict, current_price: float,
-                             stock_data: Dict) -> Optional[Dict]:
+                             stock_data: Dict,
+                             market_config: OptionMarketConfig = None) -> Optional[Dict]:
         """计分单个看跌期权"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+            multiplier = market_config.get_multiplier(
+                stock_data.get('symbol', '') if isinstance(stock_data, dict) else ''
+            )
+
             strike = put_option.get('strike', 0)
             bid = put_option.get('bid', 0)
             ask = put_option.get('ask', 0)
@@ -149,11 +177,33 @@ class BuyPutScorer:
                 for factor in scores.keys()
             )
 
+            # 宏观事件风险惩罚（Buy Put：短期期权在事件日前到期时降分）
+            expiry_str = put_option.get('expiry', '')
+            event_penalty = calculate_event_penalty(expiry_str, days_to_expiry, 'buy_put')
+            if event_penalty['has_event_risk']:
+                total_score *= event_penalty['penalty_factor']
+
+            # 商品期权：交割月风险惩罚
+            delivery_risk_data = None
+            if market_config and market_config.market == 'COMMODITY':
+                contract_code = put_option.get('contract') or put_option.get('expiry', '')
+                if contract_code:
+                    from ..advanced.delivery_risk import DeliveryRiskCalculator
+                    delivery_risk_data = DeliveryRiskCalculator().assess(contract_code)
+                    total_score *= (1.0 - delivery_risk_data.delivery_penalty)
+
             # 计算盈亏平衡点
             breakeven = strike - mid_price
-            max_profit = (breakeven * 100) if breakeven > 0 else 0  # 假设1份合约
+            max_profit = (breakeven * multiplier) if breakeven > 0 else 0  # 1份合约
 
-            return {
+            # 生成策略提示（含宏观事件提示）
+            strategy_notes = self._generate_put_notes(current_price, strike, moneyness, time_value, days_to_expiry)
+            event_notes = generate_event_notes(expiry_str, days_to_expiry)
+            strategy_notes.extend(event_notes)
+            if event_penalty['warnings']:
+                strategy_notes.extend(event_penalty['warnings'])
+
+            result = {
                 'option_symbol': put_option.get('symbol', f"PUT_{strike}_{put_option.get('expiry')}"),
                 'strike': strike,
                 'expiry': put_option.get('expiry'),
@@ -171,15 +221,52 @@ class BuyPutScorer:
                 'score': round(total_score, 1),
                 'score_breakdown': {k: round(v, 1) for k, v in scores.items()},
                 'breakeven': round(breakeven, 2),
-                'max_loss': round(mid_price * 100, 0),  # 假设1份合约
+                'max_loss': round(mid_price * multiplier, 0),  # 1份合约
                 'max_profit_potential': 'unlimited' if breakeven > 0 else 'limited',
                 'profit_potential': round(max_profit, 0),
-                'strategy_notes': self._generate_put_notes(current_price, strike, moneyness, time_value, days_to_expiry)
+                'strategy_notes': strategy_notes,
+                'macro_event_risk': event_penalty['event_info'] if event_penalty['has_event_risk'] else None,
             }
+
+            if delivery_risk_data:
+                result['delivery_risk'] = delivery_risk_data.to_dict()
+
+            return result
 
         except Exception as e:
             logger.error(f"单个期权计分失败: {e}")
             return None
+
+    def _calculate_trend_penalty(self, stock_data: Dict, current_price: float) -> float:
+        """
+        计算趋势惩罚因子。上涨趋势中买Put成功率极低，需大幅降分。
+
+        Returns:
+            惩罚因子 (0.0-1.0)，1.0表示无惩罚
+        """
+        try:
+            price_history = stock_data.get('price_history', [])
+            if isinstance(price_history, list) and len(price_history) >= 6:
+                price_series = pd.Series(price_history)
+            else:
+                return 1.0  # 数据不足，不做惩罚
+
+            trend, strength = self.trend_analyzer.determine_intraday_trend(
+                price_series, current_price
+            )
+
+            if trend == 'uptrend':
+                # 上涨趋势：强上涨惩罚40%，弱上涨惩罚25%
+                return 1.0 - strength * 0.4
+            elif trend == 'sideways':
+                # 横盘：轻微惩罚15%
+                return 0.85
+            else:
+                # 下跌趋势：无惩罚
+                return 1.0
+        except Exception as e:
+            logger.error(f"趋势惩罚计算失败: {e}")
+            return 1.0
 
     def _score_bearish_momentum(self, stock_data: Dict) -> float:
         """计分下跌动量"""

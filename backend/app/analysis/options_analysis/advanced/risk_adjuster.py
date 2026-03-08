@@ -10,6 +10,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import math
 
+from ..option_market_config import OptionMarketConfig, US_OPTIONS_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,7 +94,8 @@ class RiskAdjuster:
             }
 
     def calculate_position_sizing(self, strategy_analysis: Dict, portfolio_value: float,
-                                risk_tolerance: str = 'moderate') -> Dict[str, Any]:
+                                risk_tolerance: str = 'moderate',
+                                market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """
         计算仓位大小
 
@@ -100,12 +103,16 @@ class RiskAdjuster:
             strategy_analysis: 策略分析结果
             portfolio_value: 组合总价值
             risk_tolerance: 风险承受度
+            market_config: 市场配置（可选，默认 US）
 
         Returns:
             仓位建议
         """
         try:
-            logger.info(f"计算仓位大小，风险承受度: {risk_tolerance}")
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+
+            logger.info(f"计算仓位大小，风险承受度: {risk_tolerance}, 市场: {market_config.market}")
 
             if risk_tolerance not in self.risk_tolerance_configs:
                 risk_tolerance = 'moderate'
@@ -122,7 +129,7 @@ class RiskAdjuster:
                 # 分析最佳期权
                 best_option = result['recommendations'][0]
                 position_sizing = self._calculate_individual_position_size(
-                    strategy, best_option, portfolio_value, config
+                    strategy, best_option, portfolio_value, config, market_config
                 )
 
                 position_recommendations.append({
@@ -460,9 +467,14 @@ class RiskAdjuster:
         return adjustments
 
     def _calculate_individual_position_size(self, strategy: str, option_details: Dict,
-                                          portfolio_value: float, risk_config: Dict) -> Dict[str, Any]:
+                                          portfolio_value: float, risk_config: Dict,
+                                          market_config: OptionMarketConfig = None) -> Dict[str, Any]:
         """计算单个仓位大小"""
         try:
+            if market_config is None:
+                market_config = US_OPTIONS_CONFIG
+            multiplier = market_config.contract_multiplier
+
             max_single_position = risk_config['max_single_position']
             volatility_multiplier = risk_config['volatility_multiplier']
 
@@ -473,8 +485,7 @@ class RiskAdjuster:
             max_capital = portfolio_value * max_single_position
 
             if mid_price > 0:
-                # 标准合约（100股）
-                max_contracts = int(max_capital / (mid_price * 100))
+                max_contracts = int(max_capital / (mid_price * multiplier))
             else:
                 max_contracts = 0
 
@@ -482,10 +493,10 @@ class RiskAdjuster:
             if strategy in ['buy_put', 'buy_call']:
                 # 买方策略风险有限，可以用足仓位
                 suggested_contracts = max_contracts
-                suggested_capital = suggested_contracts * mid_price * 100
+                suggested_capital = suggested_contracts * mid_price * multiplier
             else:
                 # 卖方策略需要考虑保证金和潜在损失
-                margin_requirement = self._estimate_margin_requirement(strategy, option_details)
+                margin_requirement = self._estimate_margin_requirement(strategy, option_details, market_config)
                 available_contracts = int(max_capital / margin_requirement) if margin_requirement > 0 else 0
                 suggested_contracts = min(max_contracts, available_contracts)
                 suggested_capital = max_capital
@@ -498,7 +509,7 @@ class RiskAdjuster:
                 'suggested_contracts': max(1, suggested_contracts),  # 至少1份合约
                 'suggested_capital': suggested_capital,
                 'capital_utilization_pct': (suggested_capital / portfolio_value) * 100,
-                'risk_per_contract': mid_price * 100,
+                'risk_per_contract': mid_price * multiplier,
                 'estimated_margin': margin_requirement if strategy.startswith('sell') else 0
             }
 
@@ -513,26 +524,29 @@ class RiskAdjuster:
                 'estimated_margin': 0
             }
 
-    def _estimate_margin_requirement(self, strategy: str, option_details: Dict) -> float:
+    def _estimate_margin_requirement(self, strategy: str, option_details: Dict,
+                                     market_config: OptionMarketConfig = None) -> float:
         """估算保证金需求"""
         if not strategy.startswith('sell'):
             return 0
 
-        # 简化的保证金计算
+        if market_config is None:
+            market_config = US_OPTIONS_CONFIG
+        multiplier = market_config.contract_multiplier
+        margin_rate = market_config.default_margin_rate
+
         strike = option_details.get('strike', 100)
         mid_price = option_details.get('mid_price', 1)
 
         if strategy == 'sell_put':
-            # 看跌期权保证金约为执行价的20%
-            margin = strike * 100 * 0.2
+            margin = strike * multiplier * margin_rate
         elif strategy == 'sell_call':
-            # 看涨期权保证金约为股价的20%（假设没有股票）
-            margin = strike * 100 * 0.2
+            margin = strike * multiplier * margin_rate
         else:
-            margin = strike * 100 * 0.15
+            margin = strike * multiplier * margin_rate * 0.75
 
         # 减去收到的期权费
-        return max(0, margin - mid_price * 100)
+        return max(0, margin - mid_price * multiplier)
 
     def _calculate_portfolio_adjustments(self, position_recommendations: List,
                                        portfolio_value: float, risk_config: Dict) -> Dict[str, Any]:
