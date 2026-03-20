@@ -852,14 +852,14 @@ export default function Home() {
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ color: 'var(--foreground)' }}>
             <Helmet>
-                <title>{isZh ? '股票分析 - AlphaGBM | AI智能选股工具' : 'Stock Analysis - AlphaGBM | AI Smart Stock Picker'}</title>
+                <title>{isZh ? '标的研究 - AlphaGBM | AI智能标的筛选' : 'Underlying Research - AlphaGBM | AI Smart Screening'}</title>
                 <meta name="description" content={isZh
-                    ? '使用 AlphaGBM AI 智能股票分析工具，获取基本面评分、情绪分析、目标价格预测。支持多种投资风格，帮助您做出明智的投资决策。'
-                    : 'Use AlphaGBM AI stock analysis tool to get fundamental scoring, sentiment analysis, and price target predictions. Supports multiple investment styles.'}
+                    ? '使用 AlphaGBM AI 标的研究工具，获取基本面评分、情绪分析、目标价格预测。为期权交易筛选最佳标的。'
+                    : 'Use AlphaGBM AI underlying research tool to get fundamental scoring, sentiment analysis, and price target predictions. Find the best underlyings for options trading.'}
                 />
                 <link rel="canonical" href="https://alphagbm.com/stock" />
                 <meta property="og:url" content="https://alphagbm.com/stock" />
-                <meta property="og:title" content={isZh ? '股票分析 - AlphaGBM' : 'Stock Analysis - AlphaGBM'} />
+                <meta property="og:title" content={isZh ? '标的研究 - AlphaGBM' : 'Underlying Research - AlphaGBM'} />
             </Helmet>
             <style>{styles}</style>
 

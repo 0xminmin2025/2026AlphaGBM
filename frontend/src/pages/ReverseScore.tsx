@@ -1332,7 +1332,7 @@ export default function ReverseScore() {
                                         {isZh ? '分析股票' : 'Analyze Stock'}
                                     </div>
                                     <div className="text-xs text-[#71717A]">
-                                        {isZh ? `查看 ${result.symbol} 的详细股票分析报告` : `View detailed stock analysis report for ${result.symbol}`}
+                                        {isZh ? `查看 ${result.symbol} 的详细标的研究报告` : `View detailed research report for ${result.symbol}`}
                                     </div>
                                 </button>
                                 <button

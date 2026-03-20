@@ -87,7 +87,7 @@ export default function MainLayout() {
                         <nav className="flex items-center space-x-6 text-sm font-medium">
                             <a href="/options" onClick={handleOptionsNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.options')}</a>
                             <Link to="/options/reverse" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.reverseScore')}</Link>
-                            <Link to="/options/tools" className="transition-colors hover:text-[#0D9B97] text-slate-300">工具集</Link>
+                            <Link to="/options/tools" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.tools')}</Link>
                             <a href="/stock" onClick={handleStockNavigation} className="transition-colors hover:text-[#0D9B97] text-slate-300 cursor-pointer">{t('nav.stock')}</a>
                             <Link to="/knowledge" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.knowledge')}</Link>
                             <Link to="/pricing" className="transition-colors hover:text-[#0D9B97] text-slate-300">{t('nav.pricing')}</Link>

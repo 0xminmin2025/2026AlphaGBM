@@ -245,9 +245,17 @@ export default function NewLanding() {
         {
             icon: BarChart3,
             iconClass: 'purple',
-            title: isZh ? '股票分析' : 'Stock Analysis',
-            desc: isZh ? '基本面 + 情绪深度分析' : 'Fundamentals + Sentiment',
+            title: isZh ? '标的研究' : 'Underlying Research',
+            desc: isZh ? '为期权交易筛选最佳标的' : 'Find the best underlyings for options',
             link: '/stock',
+            featured: false,
+        },
+        {
+            icon: Sparkles,
+            iconClass: 'primary',
+            title: isZh ? '期权工具集' : 'Options Tools',
+            desc: isZh ? '波动率 · 策略 · 模拟 · 扫描' : 'Volatility · Strategy · Simulator · Scanner',
+            link: '/options/tools',
             featured: false,
         },
     ];
@@ -338,8 +346,11 @@ export default function NewLanding() {
                                 <Link to="/options/reverse" className="hover:text-[#0D9B97] transition-colors text-sm text-[var(--text-secondary)]">
                                     {isZh ? '反向查分' : 'Reverse Score'}
                                 </Link>
+                                <Link to="/options/tools" className="hover:text-[#0D9B97] transition-colors text-sm text-[var(--text-secondary)]">
+                                    {isZh ? '工具集' : 'Tools'}
+                                </Link>
                                 <Link to="/stock" className="hover:text-[#0D9B97] transition-colors text-sm text-[var(--text-secondary)]">
-                                    {isZh ? '股票分析' : 'Stock'}
+                                    {isZh ? '标的研究' : 'Research'}
                                 </Link>
                                 <Link to="/pricing" className="hover:text-[#0D9B97] transition-colors text-sm text-[var(--text-secondary)]">
                                     {isZh ? '定价' : 'Pricing'}
@@ -385,8 +396,11 @@ export default function NewLanding() {
                                 <Link to="/options/reverse" className="block text-sm text-[var(--text-secondary)] hover:text-[#0D9B97] py-2" onClick={closeMobileMenu}>
                                     {isZh ? '反向查分' : 'Reverse Score'}
                                 </Link>
+                                <Link to="/options/tools" className="block text-sm text-[var(--text-secondary)] hover:text-[#0D9B97] py-2" onClick={closeMobileMenu}>
+                                    {isZh ? '工具集' : 'Tools'}
+                                </Link>
                                 <Link to="/stock" className="block text-sm text-[var(--text-secondary)] hover:text-[#0D9B97] py-2" onClick={closeMobileMenu}>
-                                    {isZh ? '股票分析' : 'Stock'}
+                                    {isZh ? '标的研究' : 'Research'}
                                 </Link>
                                 <Link to="/pricing" className="block text-sm text-[var(--text-secondary)] hover:text-[#0D9B97] py-2" onClick={closeMobileMenu}>
                                     {isZh ? '定价' : 'Pricing'}
@@ -689,8 +703,11 @@ export default function NewLanding() {
                             <Link to="/options/reverse" className="text-[var(--text-muted)] hover:text-[#0D9B97] text-sm">
                                 {isZh ? '反向查分' : 'Reverse Score'}
                             </Link>
+                            <Link to="/options/tools" className="text-[var(--text-muted)] hover:text-[#0D9B97] text-sm">
+                                {isZh ? '工具集' : 'Tools'}
+                            </Link>
                             <Link to="/stock" className="text-[var(--text-muted)] hover:text-[#0D9B97] text-sm">
-                                {isZh ? '股票分析' : 'Stock'}
+                                {isZh ? '标的研究' : 'Research'}
                             </Link>
                             <Link to="/pricing" className="text-[var(--text-muted)] hover:text-[#0D9B97] text-sm">
                                 {isZh ? '定价' : 'Pricing'}

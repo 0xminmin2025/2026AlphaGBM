@@ -216,7 +216,7 @@ export default function Pricing() {
         // Map backend feature text to translation keys
         const featureMap: Record<string, string> = {
             '每日2次': 'pricing.feature.daily2',
-            '股票分析': 'pricing.feature.stockAnalysis',
+            '标的研究': 'pricing.feature.stockAnalysis',
             '行业报告': 'pricing.feature.industryReport',
             '1000次查询/月': 'pricing.feature.queries1000',
             '期权分析': 'pricing.feature.optionsAnalysis',
@@ -230,10 +230,10 @@ export default function Pricing() {
             // 新增期权优先版本的功能
             '每日2次期权分析': 'pricing.feature.dailyOptionsAnalysis',
             '热门推荐': 'pricing.feature.hotRecommendations',
-            '股票分析摘要': 'pricing.feature.stockSummary',
+            '标的研究摘要': 'pricing.feature.stockSummary',
             '期权智能评分': 'pricing.feature.optionsSmartScore',
             '反向查分': 'pricing.feature.reverseScore',
-            '股票深度分析': 'pricing.feature.stockDeepAnalysis',
+            '标的深度研究': 'pricing.feature.stockDeepAnalysis',
             '趋势分析': 'pricing.feature.trendAnalysis',
             'AI策略报告': 'pricing.feature.aiStrategyReport',
             'VIP客服支持': 'pricing.feature.vipSupport',
