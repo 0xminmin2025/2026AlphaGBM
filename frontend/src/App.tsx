@@ -11,6 +11,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import NewLanding from '@/pages/NewLanding';
 import Landing from '@/pages/Landing';
 import KnowledgeBasePage from '@/pages/knowledge-base/KnowledgeBasePage';
+import OptionsToolsLayout from '@/pages/options-tools/OptionsToolsLayout';
 import { AnalyticsProvider } from '@/components/analytics/AnalyticsProvider';
 import { ToastProvider } from '@/components/ui/toast';
 
@@ -29,6 +30,7 @@ function App() {
               <Route path="/stock" element={<Home />} />
               <Route path="/options" element={<Options />} />
               <Route path="/options/reverse" element={<ReverseScore />} />
+              <Route path="/options/tools" element={<OptionsToolsLayout />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/knowledge" element={<KnowledgeBasePage />} />
