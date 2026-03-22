@@ -3,7 +3,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Check, Loader2, Sparkles, Zap, Crown, Building2 } from 'lucide-react';
+import { Check, Loader2, Sparkles, Zap, Crown, Bot } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
@@ -304,10 +304,6 @@ export default function Pricing() {
         );
     }
 
-    // Debug: Log pricing data
-    console.log('Pricing data:', pricing);
-    console.log('Enterprise plan exists:', !!pricing?.plans?.enterprise);
-
     return (
         <div className="animate-in fade-in">
             <style>{styles}</style>
@@ -505,47 +501,63 @@ export default function Pricing() {
                     )}
                 </div>
 
-                {/* Enterprise Plan */}
-                {pricing.plans.enterprise && (
-                    <div className={`pricing-card ${currentPlan === 'enterprise' ? 'current' : ''}`}>
-                        {currentPlan === 'enterprise' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
-                        <div className="flex items-center gap-3 mb-6 mt-2">
-                            <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                                <Building2 className="w-6 h-6 text-purple-500" />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold">{translatePlanName('enterprise', pricing.plans.enterprise.name)}</h3>
-                                <p className="text-sm text-slate-500">{t('pricing.enterprise.customSolution')}</p>
-                            </div>
+                {/* API & AI Agent Plan */}
+                <div className="pricing-card">
+                    <div className="flex items-center gap-3 mb-6 mt-2">
+                        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                            <Bot className="w-6 h-6 text-purple-500" />
                         </div>
-
-                        <div className="mb-6">
-                            <span className="text-2xl font-bold text-slate-300">{t('pricing.enterprise.customPricing')}</span>
-                            <span className="text-slate-500 ml-2 text-sm">{t('pricing.enterprise.contactConsult')}</span>
+                        <div>
+                            <h3 className="text-xl font-bold">API & AI Agent</h3>
+                            <p className="text-sm text-slate-500">
+                                {i18n.language === 'zh' ? '在你的AI助手中使用AlphaGBM' : 'Use AlphaGBM in your AI assistant'}
+                            </p>
                         </div>
-
-                        <div className="space-y-1 mb-8">
-                            {pricing.plans.enterprise.features.map((f: string) => (
-                                <div key={f} className="feature-item">
-                                    <div className="feature-icon">
-                                        <Check className="w-3 h-3 text-green-500" />
-                                    </div>
-                                    <span>{translateFeature(f)}</span>
-                                </div>
-                            ))}
-                        </div>
-
-                        <Button
-                            className="subscribe-btn outline"
-                            onClick={() => {
-                                // 滚动到页面底部，让用户看到右下角的反馈按钮
-                                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-                            }}
-                        >
-                            {t('pricing.enterprise.contactService')}
-                        </Button>
                     </div>
-                )}
+
+                    <div className="mb-6">
+                        <span className="text-2xl font-bold text-slate-300">
+                            {i18n.language === 'zh' ? '与套餐共享额度' : 'Shared Quota'}
+                        </span>
+                        <span className="text-slate-500 ml-2 text-sm">
+                            {i18n.language === 'zh' ? '不额外收费' : 'No extra cost'}
+                        </span>
+                    </div>
+
+                    <div className="space-y-1 mb-8">
+                        {[
+                            i18n.language === 'zh' ? 'RESTful API 接入' : 'RESTful API Access',
+                            i18n.language === 'zh' ? '支持 OpenClaw / Claude Desktop / Cursor' : 'OpenClaw / Claude Desktop / Cursor',
+                            i18n.language === 'zh' ? '股票分析 + 期权分析全部能力' : 'Full Stock & Options Analysis',
+                            i18n.language === 'zh' ? 'API Key 管理（最多5个）' : 'API Key Management (up to 5)',
+                            i18n.language === 'zh' ? '调用统计与监控' : 'Usage Stats & Monitoring',
+                            i18n.language === 'zh' ? '开发者文档' : 'Developer Docs',
+                        ].map((f) => (
+                            <div key={f} className="feature-item">
+                                <div className="feature-icon">
+                                    <Check className="w-3 h-3 text-green-500" />
+                                </div>
+                                <span>{f}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <Button
+                        className="subscribe-btn outline"
+                        onClick={() => {
+                            if (!user) { navigate('/login'); return; }
+                            navigate('/api-keys');
+                        }}
+                    >
+                        {i18n.language === 'zh' ? '获取 API Key →' : 'Get API Key →'}
+                    </Button>
+
+                    <p className="text-xs text-slate-600 mt-4 leading-relaxed">
+                        {i18n.language === 'zh'
+                            ? 'API调用与网站共享同一额度。免费用户每日2次股票+1次期权分析，升级Plus/Pro获取更多额度。'
+                            : 'API calls share the same quota as the website. Free users get 2 stock + 1 options analysis daily. Upgrade for more.'}
+                    </p>
+                </div>
             </div>
 
             {/* Top-up Section */}

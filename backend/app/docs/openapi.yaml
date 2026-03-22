@@ -5,10 +5,20 @@ info:
     股票智能分析平台 API 文档
 
     ## 认证方式
-    所有需要认证的接口都需要在 HTTP Header 中携带 Supabase JWT Token:
+    支持两种认证方式，通过 `Authorization` Header 传入：
+
+    ### 方式一：API Key（推荐 API / AI Agent 用户使用）
     ```
-    Authorization: Bearer <your_access_token>
+    Authorization: Bearer agbm_your_api_key
     ```
+    在 [API Key 管理页面](https://alphagbm.com/api-keys) 创建，以 `agbm_` 开头。每用户最多5个。
+
+    ### 方式二：Supabase JWT Token（网站前端使用）
+    ```
+    Authorization: Bearer <your_jwt_token>
+    ```
+
+    两种认证方式共享同一账户额度，系统通过 token 前缀自动区分。
 
     ## 服务类型
     | 服务类型 | 描述 |
@@ -44,12 +54,16 @@ tags:
     description: 健康检查
   - name: Auth
     description: 认证相关
+  - name: API Keys
+    description: API Key 管理（创建、列出、删除、启停）
   - name: User
     description: 用户相关
   - name: Stock
     description: 股票分析
   - name: Options
     description: 期权分析
+  - name: Tasks
+    description: 异步任务查询
   - name: Payment
     description: 支付与订阅
 
@@ -90,6 +104,135 @@ paths:
                   status:
                     type: string
                     example: ok
+
+  # ==================== API Key Endpoints ====================
+  /keys:
+    get:
+      tags: [API Keys]
+      summary: 列出所有 API Key
+      description: 返回当前用户的所有 API Key（仅返回前缀，不返回完整 key）
+      operationId: listApiKeys
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: API Key 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKeyInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [API Keys]
+      summary: 创建 API Key
+      description: |
+        创建新的 API Key。每用户最多 5 个。
+
+        **重要：** 完整 key 仅在创建时返回一次，请立即保存。
+      operationId: createApiKey
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Key 名称（便于识别）
+                  example: My Laptop
+            examples:
+              basic:
+                value:
+                  name: "Production Server"
+      responses:
+        '201':
+          description: 创建成功（完整 key 仅此一次返回）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  key:
+                    type: string
+                    description: 完整 API Key（仅返回一次）
+                    example: agbm_3f8a2b1c9e4d7a6b0f1e2d3c4b5a6978...
+                  name:
+                    type: string
+                  prefix:
+                    type: string
+                    example: agbm_3f8a2b1c
+                  message:
+                    type: string
+        '400':
+          description: 已达上限（最多 5 个）
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /keys/{key_id}:
+    delete:
+      tags: [API Keys]
+      summary: 删除 API Key
+      description: 永久删除指定的 API Key，使用该 key 的应用将立即失去访问权限
+      operationId: deleteApiKey
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+        '404':
+          description: Key 不存在
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /keys/{key_id}/toggle:
+    post:
+      tags: [API Keys]
+      summary: 启用/停用 API Key
+      description: 切换 API Key 的启用状态，停用后该 key 将无法认证
+      operationId: toggleApiKey
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 切换成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  is_active:
+                    type: boolean
+                  message:
+                    type: string
+        '404':
+          description: Key 不存在
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   # ==================== User Endpoints ====================
   /user/profile:
@@ -160,6 +303,72 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /stock/analyze-async:
+    post:
+      tags: [Stock]
+      summary: 股票智能分析（异步）
+      description: |
+        提交异步分析任务，立即返回 task_id。通过 `/tasks/{task_id}` 轮询获取结果。
+
+        **推荐 API 用户使用此接口**，避免长时间等待。
+      operationId: analyzeStockAsync
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAnalyzeRequest'
+            examples:
+              basic:
+                value:
+                  ticker: TSLA
+                  style: balanced
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==================== Task Endpoints ====================
+  /tasks/{task_id}:
+    get:
+      tags: [Tasks]
+      summary: 查询异步任务状态与结果
+      description: |
+        查询异步分析任务的进度和结果。
+
+        **轮询建议：** 每 2-3 秒查询一次，任务通常在 10-30 秒内完成。
+
+        状态流转：`pending` → `processing` → `completed` / `failed`
+      operationId: getTaskStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 任务ID（由异步接口返回）
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 任务状态与结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 任务不存在
 
   # ==================== Options Endpoints ====================
   /options/expirations/{symbol}:
@@ -325,6 +534,74 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /options/chain-async:
+    post:
+      tags: [Options]
+      summary: 期权链分析（异步）
+      description: |
+        提交异步期权链分析任务。通过 `/tasks/{task_id}` 轮询获取结果。
+      operationId: analyzeOptionChainAsync
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, expiry_date]
+              properties:
+                symbol:
+                  type: string
+                  example: TSLA
+                expiry_date:
+                  type: string
+                  format: date
+                  example: "2026-04-17"
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /options/enhanced-async:
+    post:
+      tags: [Options]
+      summary: 深度期权分析（异步）
+      description: |
+        提交异步深度期权分析任务（含 VRP、风险评估、Greeks）。
+        通过 `/tasks/{task_id}` 轮询获取结果。
+      operationId: analyzeEnhancedOptionAsync
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, option_identifier]
+              properties:
+                symbol:
+                  type: string
+                  example: TSLA
+                option_identifier:
+                  type: string
+                  example: TSLA260417C00250000
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   # ==================== Payment Endpoints ====================
   /payment/pricing:
     get:
@@ -451,8 +728,10 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
-      description: Supabase JWT Token
+      description: |
+        支持两种 Token 格式：
+        - **API Key**: `agbm_` 开头（如 `agbm_3f8a2b1c...`），在 alphagbm.com/api-keys 创建
+        - **JWT**: Supabase 登录后的 access_token（网站前端自动使用）
 
   responses:
     Unauthorized:
@@ -886,6 +1165,83 @@ components:
           type: object
         risk_analysis:
           type: object
+
+    # ==================== API Key Schemas ====================
+    ApiKeyInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: My Laptop
+        prefix:
+          type: string
+          description: Key 前缀（agbm_ + 前8位），用于识别
+          example: agbm_3f8a2b1c
+        is_active:
+          type: boolean
+          example: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ==================== Task Schemas ====================
+    AsyncTaskCreated:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          description: 任务ID，用于查询结果
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        status:
+          type: string
+          example: pending
+        message:
+          type: string
+          example: 分析任务已提交
+
+    TaskStatusResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_type:
+          type: string
+          enum: [stock_analysis, option_analysis, enhanced_option_analysis]
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        progress_percent:
+          type: integer
+          description: 进度百分比 (0-100)
+          example: 75
+        current_step:
+          type: string
+          description: 当前步骤描述
+          example: 正在生成AI分析报告...
+        result_data:
+          type: object
+          nullable: true
+          description: 分析结果（仅 completed 状态有值）
+        error_message:
+          type: string
+          nullable: true
+          description: 错误信息（仅 failed 状态有值）
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
 
     # ==================== Payment Schemas ====================
     PricingResponse:

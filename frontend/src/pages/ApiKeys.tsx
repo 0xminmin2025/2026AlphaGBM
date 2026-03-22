@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
-import { Key, Plus, Trash2, Power, Copy, Check, AlertTriangle, Terminal, Code2 } from 'lucide-react';
+import { Key, Plus, Trash2, Power, Copy, Check, AlertTriangle, Terminal, Code2, ExternalLink } from 'lucide-react';
 import api from '@/lib/api';
 import { useToastHelpers } from '@/components/ui/toast';
 
@@ -220,6 +220,16 @@ export default function ApiKeys() {
                 <div className="pl-4">{`-d '{"ticker":"TSLA","style":"balanced"}'`}</div>
               </div>
             </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-white/5 text-center">
+            <a
+              href="/api/docs/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-[#0D9B97] hover:text-[#0D9B97]/80 inline-flex items-center gap-1"
+            >
+              Full API Documentation <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
         </CardContent>
       </Card>
