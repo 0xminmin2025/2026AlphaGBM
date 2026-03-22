@@ -3,14 +3,14 @@
  * 设计参考：stitch/p_l_simulator
  */
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import api from '@/lib/api';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Area, ComposedChart, Legend
 } from 'recharts';
 import {
-  TrendingUp, Loader2, Plus, Trash2, Sliders, Lock,
+  TrendingUp, Loader2, Plus, Trash2, Sliders,
   ArrowUp, ArrowDown, Minus
 } from 'lucide-react';
 
@@ -194,13 +194,13 @@ export default function PnLSimulatorPage({ userTier }: PnLSimulatorPageProps) {
                         fontSize: '11px',
                         fontFamily: 'ui-monospace',
                       }}
-                      formatter={(v: any, name: string) => {
+                      formatter={(v: any, name: any) => {
                         const labels: Record<string, string> = { expiry: '到期P/L', today: '当前P/L', future: `第${futureDay}天P/L` };
-                        return [`$${v?.toFixed(2)}`, labels[name] || name];
+                        return [`$${Number(v)?.toFixed(2)}`, labels[name] || name];
                       }}
                     />
                     <Legend
-                      formatter={(value) => {
+                      formatter={(value: string) => {
                         const labels: Record<string, string> = { expiry: '到期', today: '当前', future: `第${futureDay}天` };
                         return <span className="text-xs text-[#bcc9c8]">{labels[value] || value}</span>;
                       }}

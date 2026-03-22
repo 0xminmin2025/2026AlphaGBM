@@ -3,15 +3,15 @@
  * 设计参考：stitch/options_calculator_greeks
  */
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import api from '@/lib/api';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Area, ComposedChart
 } from 'recharts';
 import {
   Calculator, Plus, Trash2, Loader2, ArrowUpDown,
-  TrendingUp, TrendingDown, Clock, Waves, Lock
+  TrendingUp, Clock, Waves
 } from 'lucide-react';
 
 interface StrategyBuilderPageProps {
@@ -54,7 +54,7 @@ function createLeg(overrides?: Partial<LegInput>): LegInput {
   };
 }
 
-export default function StrategyBuilderPage({ userTier }: StrategyBuilderPageProps) {
+export default function StrategyBuilderPage({ userTier: _userTier }: StrategyBuilderPageProps) {
   const [spot, setSpot] = useState('');
   const [legs, setLegs] = useState<LegInput[]>([
     createLeg({ action: 'buy', option_type: 'call' }),
@@ -106,7 +106,7 @@ export default function StrategyBuilderPage({ userTier }: StrategyBuilderPagePro
         setResult(res.data.data);
         // 更新 legs UI
         const apiLegs = res.data.data.legs || [];
-        setLegs(apiLegs.map((l: any, i: number) => createLeg({
+        setLegs(apiLegs.map((l: any) => createLeg({
           action: l.action,
           option_type: l.option_type,
           strike: String(l.strike),
@@ -370,7 +370,7 @@ export default function StrategyBuilderPage({ userTier }: StrategyBuilderPagePro
                         fontSize: '11px',
                         fontFamily: 'ui-monospace',
                       }}
-                      formatter={(v: any, name: string) => [
+                      formatter={(v: any, name: any) => [
                         `$${v?.toFixed(2)}`,
                         name === 'pnl' ? '到期P/L' : '当前P/L'
                       ]}

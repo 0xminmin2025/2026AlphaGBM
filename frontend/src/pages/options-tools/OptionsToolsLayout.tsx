@@ -3,13 +3,11 @@
  * 遵循 alpha_quantum 设计规范：深色主题、无边框、层级背景
  */
 
-import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Activity, Calculator, TrendingUp, BarChart3, Search,
+  Activity, Calculator, TrendingUp, Search,
   Lock
 } from 'lucide-react';
-import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 
 import VolatilityPage from './VolatilityPage';
@@ -59,7 +57,6 @@ function canAccessTab(userTier: string, tabTier: string): boolean {
 export default function OptionsToolsLayout() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') as TabId) || 'volatility';
-  const { user } = useAuth();
   const { credits } = useUserData();
 
   const userTier = credits?.subscription?.plan_tier || 'free';

@@ -6,8 +6,8 @@
 import { useState } from 'react';
 import api from '@/lib/api';
 import {
-  Search, Loader2, Filter, Lock, ChevronRight, BarChart3,
-  TrendingUp, Activity
+  Search, Loader2, Lock, ChevronRight, BarChart3,
+  Activity
 } from 'lucide-react';
 
 interface OptionScannerPageProps {

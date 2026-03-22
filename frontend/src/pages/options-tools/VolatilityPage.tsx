@@ -5,12 +5,11 @@
 
 import { useState, useCallback } from 'react';
 import api from '@/lib/api';
-import { useAuth } from '@/components/auth/AuthProvider';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Area, ComposedChart, Legend
+  Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine, Area, ComposedChart
 } from 'recharts';
-import { Activity, TrendingUp, BarChart3, Loader2, Search, Lock } from 'lucide-react';
+import { Activity, Loader2, Search, Lock } from 'lucide-react';
 
 interface VolatilityPageProps {
   userTier: string;
@@ -30,7 +29,6 @@ interface SmileData {
 }
 
 export default function VolatilityPage({ userTier }: VolatilityPageProps) {
-  const { user } = useAuth();
   const [symbol, setSymbol] = useState('AAPL');
   const [expiry, setExpiry] = useState('');
   const [loading, setLoading] = useState(false);
@@ -203,11 +201,11 @@ export default function VolatilityPage({ userTier }: VolatilityPageProps) {
                       fontSize: '12px',
                       fontFamily: 'ui-monospace',
                     }}
-                    formatter={(value: any, name: string) => {
+                    formatter={(value: any, name: any) => {
                       const label = name === 'callIV' ? 'Call IV' : 'Put IV';
-                      return [value ? `${value.toFixed(2)}%` : '-', label];
+                      return [value ? `${Number(value).toFixed(2)}%` : '-', label];
                     }}
-                    labelFormatter={(label) => `行权价: $${label}`}
+                    labelFormatter={(label: any) => `行权价: $${label}`}
                   />
                   {smileData.underlying_price > 0 && (
                     <ReferenceLine
