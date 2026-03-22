@@ -77,9 +77,6 @@ def invalidate_token_cache(token=None):
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not supabase:
-             return jsonify({'error': 'Supabase client not initialized'}), 500
-
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             return jsonify({'error': 'Missing Authorization header'}), 401
@@ -90,6 +87,35 @@ def require_auth(f):
                 return jsonify({'error': 'Invalid Authorization header format'}), 401
 
             token = auth_header.split(' ')[1]
+
+            # ===== API Key认证: agbm_ 前缀 =====
+            if token.startswith('agbm_'):
+                import hashlib
+                from ..models import db, ApiKey, User
+
+                key_hash = hashlib.sha256(token.encode()).hexdigest()
+                api_key = ApiKey.query.filter_by(key_hash=key_hash, is_active=True).first()
+
+                if not api_key:
+                    return jsonify({'error': 'Invalid API key'}), 401
+
+                user = User.query.get(api_key.user_id)
+                if not user:
+                    return jsonify({'error': 'User not found'}), 401
+
+                # 更新最后使用时间
+                from datetime import datetime
+                api_key.last_used_at = datetime.utcnow()
+                db.session.commit()
+
+                g.user_id = user.id
+                g.user_email = user.email
+                g.auth_method = 'api_key'
+                return f(*args, **kwargs)
+
+            # ===== Supabase JWT认证 =====
+            if not supabase:
+                return jsonify({'error': 'Supabase client not initialized'}), 500
 
             # Try to get user from cache first
             cached_user = get_cached_user(token)

@@ -12,6 +12,7 @@ import NewLanding from '@/pages/NewLanding';
 import Landing from '@/pages/Landing';
 import KnowledgeBasePage from '@/pages/knowledge-base/KnowledgeBasePage';
 import OptionsToolsLayout from '@/pages/options-tools/OptionsToolsLayout';
+import ApiKeys from '@/pages/ApiKeys';
 import { AnalyticsProvider } from '@/components/analytics/AnalyticsProvider';
 import { ToastProvider } from '@/components/ui/toast';
 
@@ -33,6 +34,7 @@ function App() {
               <Route path="/options/tools" element={<OptionsToolsLayout />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/api-keys" element={<ApiKeys />} />
               <Route path="/knowledge" element={<KnowledgeBasePage />} />
               <Route path="/knowledge/:chapterSlug" element={<KnowledgeBasePage />} />
             </Route>

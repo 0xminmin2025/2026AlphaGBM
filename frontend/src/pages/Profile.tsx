@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings, ArrowUpRight, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CreditCard, User, Activity, History, RefreshCcw, Settings, ArrowUpRight, AlertTriangle, Key } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '@/lib/api';
 import i18n from '@/lib/i18n';
@@ -211,6 +211,28 @@ export default function Profile() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* API Access Card */}
+            <Card className="bg-[#0f0f11] border-white/10">
+                <CardContent className="flex items-center justify-between py-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#0D9B97]/20 flex items-center justify-center">
+                            <Key className="w-5 h-5 text-[#0D9B97]" />
+                        </div>
+                        <div>
+                            <div className="font-medium">API Access</div>
+                            <p className="text-sm text-slate-500">Manage API keys for OpenClaw, MCP, and programmatic access</p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate('/api-keys')}
+                    >
+                        Manage Keys <ArrowUpRight className="w-4 h-4 ml-1" />
+                    </Button>
+                </CardContent>
+            </Card>
 
             {/* Usage History */}
             <Card className="bg-[#0f0f11] border-white/10">

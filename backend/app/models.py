@@ -1,6 +1,8 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 import enum
+import secrets
+import hashlib
 
 db = SQLAlchemy()
 
@@ -64,6 +66,7 @@ class User(db.Model):
     analysis_requests = db.relationship('AnalysisRequest', backref='user', lazy=True)
     feedbacks = db.relationship('Feedback', backref='user', lazy=True)
     daily_queries = db.relationship('DailyQueryCount', backref='user', lazy=True)
+    api_keys = db.relationship('ApiKey', backref='user', lazy=True)
 
 class AnalysisRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -425,3 +428,28 @@ class AnalyticsEvent(db.Model):
         db.Index('idx_analytics_type_date', 'event_type', 'created_at'),
         db.Index('idx_analytics_user_date', 'user_id', 'created_at'),
     )
+
+
+class ApiKey(db.Model):
+    """用户API密钥"""
+    __tablename__ = 'api_keys'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
+    key_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    key_prefix = db.Column(db.String(13), nullable=False)  # "agbm_" + 前8位hex
+    name = db.Column(db.String(100), nullable=False, default='Default')
+    is_active = db.Column(db.Boolean, default=True)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @staticmethod
+    def generate_key():
+        """生成 agbm_ 开头的API Key"""
+        raw = secrets.token_hex(24)
+        return f"agbm_{raw}"
+
+    @staticmethod
+    def hash_key(key):
+        """SHA-256 hash"""
+        return hashlib.sha256(key.encode()).hexdigest()
