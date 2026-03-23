@@ -51,5 +51,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5002/api/health || exit 1
 
 # Command to run the application
-# For production, use gunicorn with config file (ensures only 1 worker runs the scheduler)
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "run:app"]
+# For production, use gunicorn. Only 1 worker to avoid duplicate scheduler jobs.
+CMD ["gunicorn", "--bind", "0.0.0.0:5002", "--workers", "1", "--threads", "4", "--timeout", "120", "run:app"]

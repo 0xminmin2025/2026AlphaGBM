@@ -226,25 +226,11 @@ def _send_feishu_report():
 scheduler = None
 
 def init_scheduler(app):
-    """Initialize the scheduler with Flask app context.
-
-    In gunicorn multi-worker deployments, only ONE worker should run the
-    scheduler.  We use the SCHEDULER_ENABLED env-var as an opt-in flag:
-      - Set SCHEDULER_ENABLED=1 on exactly one worker (or use a gunicorn
-        post_fork hook to enable it only for worker 0).
-      - If SCHEDULER_ENABLED is not set at all, we default to enabling it
-        so that single-process / flask-run deployments keep working.
-    """
+    """Initialize the scheduler with Flask app context."""
     global scheduler
 
     if scheduler is not None:
-        return  # Already initialized in this process
-
-    # Allow disabling via env var for multi-worker setups
-    scheduler_enabled = os.environ.get('SCHEDULER_ENABLED', '1')
-    if scheduler_enabled == '0':
-        logger.info("Scheduler disabled via SCHEDULER_ENABLED=0, skipping init")
-        return
+        return  # Already initialized
 
     try:
         scheduler = BackgroundScheduler(daemon=True)
