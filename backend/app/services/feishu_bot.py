@@ -41,18 +41,22 @@ def get_daily_stats():
         func.count(func.distinct(Subscription.user_id))
     ).filter(Subscription.status == 'active').scalar() or 0
 
-    # 收入数据（amount 存储为分，除以 100 转为元/美元）
+    # 收入数据（只统计 USD 交易，amount 存储为分，除以 100 转为美元）
     today_revenue_cents = db.session.query(
         func.coalesce(func.sum(Transaction.amount), 0)
     ).filter(
         Transaction.status == 'succeeded',
+        Transaction.currency == 'usd',
         Transaction.created_at >= today_start,
         Transaction.created_at <= today_end,
     ).scalar()
 
     total_revenue_cents = db.session.query(
         func.coalesce(func.sum(Transaction.amount), 0)
-    ).filter(Transaction.status == 'succeeded').scalar()
+    ).filter(
+        Transaction.status == 'succeeded',
+        Transaction.currency == 'usd',
+    ).scalar()
 
     return {
         'date': today.isoformat(),

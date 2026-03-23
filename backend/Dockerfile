@@ -51,5 +51,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5002/api/health || exit 1
 
 # Command to run the application
-# For production, use gunicorn instead of Flask dev server
-CMD ["gunicorn", "--bind", "0.0.0.0:5002", "--workers", "4", "--timeout", "120", "--worker-class", "sync", "run:app"]
+# For production, use gunicorn with config file (ensures only 1 worker runs the scheduler)
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "run:app"]

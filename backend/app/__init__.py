@@ -54,8 +54,14 @@ def create_app(config_class=Config):
         init_task_queue(app)
     atexit.register(shutdown_task_queue)
 
-    # Initialize Scheduler (only in production/normal mode, not in debug reloader)
-    if not os.environ.get('WERKZEUG_RUN_MAIN'):
+    # Initialize Scheduler
+    # In debug mode: Flask reloader spawns a child process with WERKZEUG_RUN_MAIN=true.
+    # We only want the scheduler in the child (the one that actually serves requests),
+    # not the parent (which just watches files and restarts the child).
+    # In production (gunicorn): WERKZEUG_RUN_MAIN is never set, so always init.
+    # The init_scheduler() function has its own guard to prevent double-init.
+    _is_debug_parent = app.debug and not os.environ.get('WERKZEUG_RUN_MAIN')
+    if not _is_debug_parent:
         from .scheduler import init_scheduler, shutdown_scheduler
 
         # Initialize scheduler immediately during app creation

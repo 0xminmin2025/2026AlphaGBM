@@ -6,6 +6,7 @@ Based on the original app.py calculate_daily_profit_loss() function.
 """
 
 import logging
+import os
 import requests
 from datetime import datetime, date
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -225,11 +226,25 @@ def _send_feishu_report():
 scheduler = None
 
 def init_scheduler(app):
-    """Initialize the scheduler with Flask app context"""
+    """Initialize the scheduler with Flask app context.
+
+    In gunicorn multi-worker deployments, only ONE worker should run the
+    scheduler.  We use the SCHEDULER_ENABLED env-var as an opt-in flag:
+      - Set SCHEDULER_ENABLED=1 on exactly one worker (or use a gunicorn
+        post_fork hook to enable it only for worker 0).
+      - If SCHEDULER_ENABLED is not set at all, we default to enabling it
+        so that single-process / flask-run deployments keep working.
+    """
     global scheduler
 
     if scheduler is not None:
-        return  # Already initialized
+        return  # Already initialized in this process
+
+    # Allow disabling via env var for multi-worker setups
+    scheduler_enabled = os.environ.get('SCHEDULER_ENABLED', '1')
+    if scheduler_enabled == '0':
+        logger.info("Scheduler disabled via SCHEDULER_ENABLED=0, skipping init")
+        return
 
     try:
         scheduler = BackgroundScheduler(daemon=True)
@@ -257,7 +272,7 @@ def init_scheduler(app):
         )
 
         scheduler.start()
-        logger.info("Scheduler initialized successfully - Daily P/L calculation will run at 6:12 PM, Feishu report at 8:00 PM")
+        logger.info("Scheduler initialized successfully (pid=%s) - Daily P/L at 18:12, Feishu report at 20:00", os.getpid())
 
     except Exception as e:
         logger.error(f"Failed to initialize scheduler: {e}")
