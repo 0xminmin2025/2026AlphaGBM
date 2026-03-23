@@ -104,14 +104,11 @@ def db_retry(max_retries=3, retry_delay=0.5):
 def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
     """
     额度检查装饰器 - 同时处理认证和额度检查
+    支持 API Key (agbm_) 和 Supabase JWT 双认证
     """
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-
-            # 1. 首先验证token（与require_auth相同逻辑）
-            if not supabase:
-                return jsonify({'error': 'Supabase client not initialized'}), 500
 
             auth_header = request.headers.get('Authorization')
             if not auth_header:
@@ -123,59 +120,82 @@ def check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1):
 
                 token = auth_header.split(' ')[1]
 
-                # Add timeout and retry for Supabase auth calls
-                import time
-                max_retries = 2
-                retry_delay = 0.5
-                user_response = None
-                
-                for attempt in range(max_retries + 1):
-                    try:
-                        user_response = supabase.auth.get_user(token)
-                        break  # Success, exit retry loop
-                    except Exception as e:
-                        if attempt < max_retries:
-                            logger.warning(f"Supabase auth attempt {attempt + 1} failed, retrying: {e}")
-                            time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
-                        else:
-                            logger.error(f"Supabase auth failed after {max_retries + 1} attempts: {e}")
-                            # Check if it's a network/SSL error
-                            error_str = str(e).lower()
-                            if 'ssl' in error_str or 'timeout' in error_str or 'connection' in error_str:
-                                return jsonify({
-                                    'error': 'Authentication service temporarily unavailable. Please try again.',
-                                    'details': 'Network connection error during authentication'
-                                }), 503  # Service Unavailable
-                            else:
-                                return jsonify({'error': 'Authentication failed'}), 401
-                
-                if not user_response or not user_response.user:
-                    return jsonify({'error': 'Invalid token'}), 401
-                
-                # Store user info in flask global
-                user_id = user_response.user.id
-                g.user_id = user_id
-                if hasattr(user_response.user, 'email'):
-                    g.user_email = user_response.user.email
-
-                # Ensure user exists in local database
-                from ..models import db, User
-                existing_user = User.query.filter_by(id=user_id).first()
-                if not existing_user:
-                    # Create user record if it doesn't exist
-                    new_user = User(
-                        id=user_id,
-                        email=user_response.user.email if hasattr(user_response.user, 'email') else f"{user_id}@unknown.com"
-                    )
-                    db.session.add(new_user)
-                    db.session.commit()
-                    logger.info(f"Created new user record for {user_id}")
-                else:
-                    # Update last login
+                # ===== API Key认证: agbm_ 前缀 =====
+                if token.startswith('agbm_'):
+                    import hashlib
+                    from ..models import db, ApiKey, User
                     from datetime import datetime
-                    existing_user.last_login = datetime.utcnow()
+
+                    key_hash = hashlib.sha256(token.encode()).hexdigest()
+                    api_key = ApiKey.query.filter_by(key_hash=key_hash, is_active=True).first()
+
+                    if not api_key:
+                        return jsonify({'error': 'Invalid API key'}), 401
+
+                    user = User.query.get(api_key.user_id)
+                    if not user:
+                        return jsonify({'error': 'User not found'}), 401
+
+                    api_key.last_used_at = datetime.utcnow()
                     db.session.commit()
-                    
+
+                    user_id = user.id
+                    g.user_id = user_id
+                    g.user_email = user.email
+                    g.auth_method = 'api_key'
+
+                # ===== Supabase JWT认证 =====
+                else:
+                    if not supabase:
+                        return jsonify({'error': 'Supabase client not initialized'}), 500
+
+                    import time
+                    max_retries = 2
+                    retry_delay = 0.5
+                    user_response = None
+
+                    for attempt in range(max_retries + 1):
+                        try:
+                            user_response = supabase.auth.get_user(token)
+                            break
+                        except Exception as e:
+                            if attempt < max_retries:
+                                logger.warning(f"Supabase auth attempt {attempt + 1} failed, retrying: {e}")
+                                time.sleep(retry_delay * (attempt + 1))
+                            else:
+                                logger.error(f"Supabase auth failed after {max_retries + 1} attempts: {e}")
+                                error_str = str(e).lower()
+                                if 'ssl' in error_str or 'timeout' in error_str or 'connection' in error_str:
+                                    return jsonify({
+                                        'error': 'Authentication service temporarily unavailable. Please try again.',
+                                        'details': 'Network connection error during authentication'
+                                    }), 503
+                                else:
+                                    return jsonify({'error': 'Authentication failed'}), 401
+
+                    if not user_response or not user_response.user:
+                        return jsonify({'error': 'Invalid token'}), 401
+
+                    user_id = user_response.user.id
+                    g.user_id = user_id
+                    if hasattr(user_response.user, 'email'):
+                        g.user_email = user_response.user.email
+
+                    from ..models import db, User
+                    existing_user = User.query.filter_by(id=user_id).first()
+                    if not existing_user:
+                        new_user = User(
+                            id=user_id,
+                            email=user_response.user.email if hasattr(user_response.user, 'email') else f"{user_id}@unknown.com"
+                        )
+                        db.session.add(new_user)
+                        db.session.commit()
+                        logger.info(f"Created new user record for {user_id}")
+                    else:
+                        from datetime import datetime
+                        existing_user.last_login = datetime.utcnow()
+                        db.session.commit()
+
             except Exception as e:
                 logger.error(f"Auth error in check_quota: {e}")
                 return jsonify({'error': 'Unauthorized'}), 401
