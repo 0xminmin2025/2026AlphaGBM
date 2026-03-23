@@ -222,7 +222,7 @@ export default function ApiKeys() {
           </div>
           <div className="mt-4 pt-4 border-t border-white/5 text-center">
             <a
-              href="/api/docs/"
+              href="https://alphagbm.zeabur.app/api/docs/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-[#0D9B97] hover:text-[#0D9B97]/80 inline-flex items-center gap-1"
