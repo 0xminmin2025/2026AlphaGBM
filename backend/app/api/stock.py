@@ -1071,3 +1071,111 @@ def get_stock_summary(ticker):
         import traceback
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': f'获取摘要失败: {str(e)}'}), 500
+
+
+# ==================== Agent-Friendly Sync Endpoints ====================
+
+@stock_bp.route('/analyze-sync', methods=['POST'])
+@require_auth
+@check_quota(service_type=ServiceType.STOCK_ANALYSIS.value, amount=1)
+def analyze_stock_sync():
+    """
+    Synchronous stock analysis — blocks until result is ready (10-30s).
+    Designed for AI agents (OpenClaw, Claude Desktop, etc.).
+
+    Returns cached result instantly if available for today.
+    Supports ?compact=true for condensed agent-friendly response.
+
+    Request Body: {"ticker": "AAPL", "style": "balanced"}
+    Style options: quality, value, growth, momentum, balanced
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+        ticker = data.get('ticker', '').upper()
+        if not ticker:
+            return jsonify({'success': False, 'error': 'ticker is required'}), 400
+
+        style = data.get('style', 'quality')
+        compact = request.args.get('compact', '').lower() == 'true'
+
+        # Check daily cache first — instant return
+        cache_entry = get_cached_analysis(ticker, style)
+        if cache_entry and cache_entry.full_analysis_data:
+            logger.info(f"[analyze-sync] Cache HIT for {ticker}/{style}")
+            result = cache_entry.full_analysis_data
+        else:
+            # Run full analysis synchronously (10-30s)
+            logger.info(f"[analyze-sync] Cache MISS, running analysis for {ticker}/{style}")
+            result = get_stock_analysis_data(ticker, style)
+
+            if 'error' in result:
+                return jsonify({'success': False, 'error': result['error']}), 400
+
+            # Save to daily cache for future requests
+            try:
+                new_cache = DailyAnalysisCache(
+                    ticker=ticker,
+                    style=style,
+                    analysis_date=date.today(),
+                    full_analysis_data=convert_numpy_types(result)
+                )
+                db.session.merge(new_cache)
+                db.session.commit()
+            except Exception as e:
+                logger.warning(f"Failed to save daily cache: {e}")
+                db.session.rollback()
+
+        if compact:
+            from ..utils.compact_response import compact_stock_result
+            return jsonify(compact_stock_result(result)), 200
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"[analyze-sync] Error for {data.get('ticker') if data else 'unknown'}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@stock_bp.route('/quick-quote/<ticker>', methods=['GET'])
+@require_auth
+def quick_quote(ticker):
+    """
+    Lightweight stock quote — instant, no quota cost.
+    Returns price, change, PE, 52w range. For AI agents answering simple questions.
+    """
+    try:
+        ticker = ticker.upper()
+        provider = DataProvider(ticker)
+
+        info = provider.info
+        if not info or not info.get('currentPrice') and not info.get('regularMarketPrice'):
+            return jsonify({'success': False, 'error': f'No data found for {ticker}'}), 404
+
+        price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+        prev_close = info.get('previousClose') or info.get('regularMarketPreviousClose', 0)
+        change = price - prev_close if price and prev_close else None
+        change_pct = (change / prev_close * 100) if change and prev_close else None
+
+        return jsonify({
+            'success': True,
+            'ticker': ticker,
+            'price': price,
+            'currency': info.get('currency', 'USD'),
+            'change': round(change, 2) if change is not None else None,
+            'change_pct': round(change_pct, 2) if change_pct is not None else None,
+            'volume': info.get('volume'),
+            'market_cap': info.get('marketCap'),
+            'pe_ratio': info.get('trailingPE'),
+            'forward_pe': info.get('forwardPE'),
+            '52w_high': info.get('fiftyTwoWeekHigh'),
+            '52w_low': info.get('fiftyTwoWeekLow'),
+            'sector': info.get('sector'),
+            'name': info.get('shortName') or info.get('longName', ticker),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"[quick-quote] Error for {ticker}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

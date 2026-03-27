@@ -821,6 +821,168 @@ def get_option_chain_batch():
         return jsonify({'error': f'Failed to create batch tasks: {str(e)}'}), 500
 
 
+# ==================== Agent-Friendly Sync Endpoints ====================
+
+@options_bp.route('/chain-sync', methods=['POST'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def analyze_chain_sync():
+    """
+    Synchronous options chain analysis — blocks until result is ready.
+    Designed for AI agents. Supports ?compact=true.
+
+    Request Body: {"symbol": "AAPL", "expiry_date": "2026-04-17"}
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        symbol = data.get('symbol', '').upper()
+        expiry_date = data.get('expiry_date')
+
+        if not symbol or not expiry_date:
+            return jsonify({'error': 'symbol and expiry_date are required'}), 400
+
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
+        result = get_options_analysis_data(symbol, enhanced=False, expiry_date=expiry_date)
+
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+
+        compact = request.args.get('compact', '').lower() == 'true'
+        if compact:
+            from ..utils.compact_response import compact_chain_result
+            return jsonify(compact_chain_result(result)), 200
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"[chain-sync] Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@options_bp.route('/enhanced-sync', methods=['POST'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def analyze_enhanced_sync():
+    """
+    Synchronous enhanced single-option analysis — blocks until result is ready.
+    Designed for AI agents. Supports ?compact=true.
+
+    Request Body: {"symbol": "AAPL", "option_identifier": "AAPL260417C00190000"}
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        symbol = data.get('symbol', '').upper()
+        option_identifier = data.get('option_identifier')
+
+        if not symbol or not option_identifier:
+            return jsonify({'error': 'symbol and option_identifier are required'}), 400
+
+        result = get_options_analysis_data(symbol, enhanced=True, option_identifier=option_identifier)
+
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+
+        compact = request.args.get('compact', '').lower() == 'true'
+        if compact:
+            from ..utils.compact_response import compact_enhanced_result
+            return jsonify(compact_enhanced_result(result)), 200
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"[enhanced-sync] Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@options_bp.route('/snapshot/<symbol>', methods=['GET'])
+@require_auth
+def get_iv_snapshot(symbol):
+    """
+    Lightweight IV/volatility snapshot — instant, no quota cost.
+    Returns ATM IV, IV Rank, HV, VRP for AI agents answering simple questions.
+    """
+    try:
+        symbol = symbol.upper()
+
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
+        # Get nearest expiry
+        exp_response = OptionsService.get_expirations(symbol)
+        expirations = exp_response.expirations if hasattr(exp_response, 'expirations') else []
+        if not expirations:
+            return jsonify({'success': False, 'error': f'No options expirations found for {symbol}'}), 404
+
+        nearest_expiry = expirations[0]
+
+        # Get chain for nearest expiry (lightweight — just need IV metrics)
+        chain = OptionsService.get_option_chain(symbol, nearest_expiry)
+        chain_dict = chain.dict() if hasattr(chain, 'dict') else {}
+
+        # Get stock quote for price
+        try:
+            quote = OptionsService.get_stock_quote(symbol)
+            price = quote.current_price if hasattr(quote, 'current_price') else None
+        except Exception:
+            price = chain_dict.get('real_stock_price')
+
+        # Extract IV metrics from chain response
+        iv_rank = chain_dict.get('iv_rank_30d')
+        iv_percentile = chain_dict.get('iv_percentile_30d')
+        hv_30d = chain_dict.get('historical_volatility')
+
+        # Find ATM IV from calls
+        calls = chain_dict.get('calls', [])
+        atm_iv = None
+        if calls and price:
+            closest = min(calls, key=lambda c: abs(c.get('strike', 0) - price))
+            atm_iv = closest.get('impliedVolatility') or closest.get('iv')
+
+        # Compute VRP
+        vrp = None
+        if atm_iv is not None and hv_30d is not None:
+            vrp = round(atm_iv - hv_30d, 4)
+
+        # VRP level classification
+        vrp_level = None
+        if vrp is not None:
+            if vrp > 0.15:
+                vrp_level = 'high_premium'
+            elif vrp > 0.05:
+                vrp_level = 'moderate_premium'
+            elif vrp > -0.05:
+                vrp_level = 'low_premium'
+            else:
+                vrp_level = 'negative_premium'
+
+        return jsonify({
+            'success': True,
+            'symbol': symbol,
+            'price': price,
+            'nearest_expiry': nearest_expiry,
+            'atm_iv': round(atm_iv, 4) if atm_iv is not None else None,
+            'iv_rank': round(iv_rank, 1) if iv_rank is not None else None,
+            'iv_percentile': round(iv_percentile, 1) if iv_percentile is not None else None,
+            'hv_30d': round(hv_30d, 4) if hv_30d is not None else None,
+            'vrp': vrp,
+            'vrp_level': vrp_level,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"[snapshot] Error for {symbol}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @options_bp.route('/recognize-image', methods=['POST'])
 @require_auth
 def recognize_option_image():
