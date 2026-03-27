@@ -37,8 +37,13 @@ def create_app(config_class=Config):
         handlers=[file_handler, console_handler]
     )
 
-    # CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # CORS — 明确支持 preflight (OPTIONS) 和常用 headers
+    CORS(app, resources={r"/api/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": False,
+    }})
 
     # Initialize Extensions
     from .models import db
