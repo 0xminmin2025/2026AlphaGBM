@@ -41,8 +41,10 @@ export default function VolatilityPage({ userTier }: VolatilityPageProps) {
     if (!symbol.trim()) return;
     setError('');
     try {
-      const res = await api.get(`/options/expiries/${symbol.trim().toUpperCase()}`);
-      const expiries = res.data?.expiries || res.data?.data?.expiries || [];
+      const res = await api.get(`/options/expirations/${symbol.trim().toUpperCase()}`);
+      // Backend returns { expirations: [{date, timestamp, period_tag}, ...] }
+      const rawExpirations = res.data?.expirations || [];
+      const expiries = rawExpirations.map((e: any) => typeof e === 'string' ? e : e.date);
       setAvailableExpiries(expiries);
       if (expiries.length > 0 && !expiry) {
         setExpiry(expiries[0]);
