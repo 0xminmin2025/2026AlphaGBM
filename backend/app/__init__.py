@@ -91,6 +91,7 @@ def create_app(config_class=Config):
     from .api.metrics import metrics_bp
     from .api.options_tools import options_tools_bp
     from .api.api_key import apikey_bp
+    from .api.options_score import options_score_bp
     from .docs import docs_bp
 
     app.register_blueprint(auth_bp)
@@ -107,6 +108,7 @@ def create_app(config_class=Config):
     app.register_blueprint(metrics_bp)
     app.register_blueprint(options_tools_bp)
     app.register_blueprint(apikey_bp)
+    app.register_blueprint(options_score_bp)
     app.register_blueprint(docs_bp)
 
     @app.route('/health')
