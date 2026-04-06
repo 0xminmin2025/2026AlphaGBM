@@ -111,7 +111,7 @@ const MOCK_PRICING: PricingData = {
         plus: { name: 'Plus', features: ['50 daily analyses', 'Real-time data', 'Full options chain', 'Email support'], monthly: { price: 9.8, credits: 50, currency: 'USD', period: 'month' }, yearly: { price: 58.8, credits: 50, currency: 'USD', period: 'year', savings: '50%' } },
         pro: { name: 'Pro', features: ['Unlimited analyses', 'Real-time data', 'Full options chain', 'Priority support', 'API access'], monthly: { price: 16.6, credits: 999, currency: 'USD', period: 'month' }, yearly: { price: 99.8, credits: 999, currency: 'USD', period: 'year', savings: '50%' } },
     },
-    topups: { '100': { name: '100 Credits', price: 4.99, validity: '永不过期', currency: 'USD' } },
+    topups: { '100': { name: '100 Credits', price: 6.99, validity: '永不过期', currency: 'USD' } },
 };
 
 export function UserDataProvider({ children }: { children: React.ReactNode }) {

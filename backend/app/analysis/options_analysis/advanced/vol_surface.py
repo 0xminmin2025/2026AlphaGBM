@@ -138,8 +138,8 @@ class VolatilitySurfaceAnalyzer:
             smile.put_ivs.append(put_iv)
             smile.call_volumes.append(int(call.get('volume', 0) or 0))
             smile.put_volumes.append(int(put.get('volume', 0) or 0))
-            smile.call_oi.append(int(call.get('openInterest', 0) or 0))
-            smile.put_oi.append(int(put.get('openInterest', 0) or 0))
+            smile.call_oi.append(int(call.get('openInterest', call.get('open_interest', 0)) or 0))
+            smile.put_oi.append(int(put.get('openInterest', put.get('open_interest', 0)) or 0))
 
             # Delta
             smile.call_deltas.append(self._safe_float(call.get('delta')))
@@ -301,7 +301,7 @@ class VolatilitySurfaceAnalyzer:
 
     def _extract_iv(self, option_data: Dict[str, Any]) -> Optional[float]:
         """从期权数据中提取 IV"""
-        for key in ['impliedVolatility', 'iv', 'implied_volatility']:
+        for key in ['impliedVolatility', 'iv', 'implied_volatility', 'implied_vol']:
             val = option_data.get(key)
             if val is not None:
                 try:
@@ -412,11 +412,11 @@ class VolatilitySurfaceAnalyzer:
 
     def _calc_mid(self, option: Dict) -> Optional[float]:
         """计算中间价"""
-        bid = self._safe_float(option.get('bid'))
-        ask = self._safe_float(option.get('ask'))
+        bid = self._safe_float(option.get('bid', option.get('bid_price')))
+        ask = self._safe_float(option.get('ask', option.get('ask_price')))
         if bid is not None and ask is not None and bid > 0 and ask > 0:
             return (bid + ask) / 2
-        last = self._safe_float(option.get('lastPrice', option.get('last')))
+        last = self._safe_float(option.get('lastPrice', option.get('last', option.get('latest_price'))))
         return last
 
     def _calculate_iv_stats(

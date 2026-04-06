@@ -328,7 +328,7 @@ def get_pricing():
         'topups': {
             '100': {
                 'name': '额度加油包（100次）',
-                'price': 4.99,
+                'price': 6.99,
                 'currency': 'usd',
                 'credits': 100,
                 'validity': '3个月有效'

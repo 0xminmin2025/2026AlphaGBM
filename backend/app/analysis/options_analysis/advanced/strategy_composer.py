@@ -371,9 +371,9 @@ class StrategyComposer:
         num_buys = sum(1 for leg in legs if leg.action == 'buy')
         num_sells = sum(1 for leg in legs if leg.action == 'sell')
 
-        chars['limited_risk'] = num_buys >= num_sells
-        chars['limited_profit'] = num_sells > 0
-        chars['is_debit'] = pnl.get('net_cost', 0) > 0
-        chars['is_credit'] = pnl.get('net_cost', 0) < 0
+        chars['limited_risk'] = bool(num_buys >= num_sells)
+        chars['limited_profit'] = bool(num_sells > 0)
+        chars['is_debit'] = bool(pnl.get('net_cost', 0) > 0)
+        chars['is_credit'] = bool(pnl.get('net_cost', 0) < 0)
 
         return chars

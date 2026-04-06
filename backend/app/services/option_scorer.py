@@ -14,6 +14,45 @@ class OptionScorer:
 
     def __init__(self, params: Optional[ScoringParams] = None):
         self.params = params or ScoringParams()
+        self._bs = None  # Lazy-init BlackScholesCalculator
+
+    def _get_bs(self):
+        """Lazy-load BlackScholesCalculator to avoid circular imports."""
+        if self._bs is None:
+            from ..analysis.options_analysis.core.greeks_calculator import BlackScholesCalculator
+            self._bs = BlackScholesCalculator()
+        return self._bs
+
+    def _ensure_greeks(self, option: OptionData, stock_price: float) -> OptionData:
+        """
+        Fill in missing Greeks (delta, gamma, theta) using Black-Scholes
+        when implied_vol is available. Modifies option in-place and returns it.
+        """
+        if not option.implied_vol or option.implied_vol <= 0 or stock_price <= 0:
+            return option
+        if not option.strike or option.strike <= 0:
+            return option
+
+        # Only estimate if at least one greek is missing
+        if option.delta is not None and option.gamma is not None and option.theta is not None:
+            return option
+
+        bs = self._get_bs()
+        dte = self.calculate_days_to_expiry(option.expiry_date)
+        T = dte / 365.0
+        sigma = option.implied_vol
+        S = stock_price
+        K = option.strike
+        opt_type = 'put' if option.put_call == 'PUT' else 'call'
+
+        if option.delta is None:
+            option.delta = round(bs.delta(S, K, T, sigma, opt_type), 6)
+        if option.gamma is None:
+            option.gamma = round(bs.gamma(S, K, T, sigma), 6)
+        if option.theta is None:
+            option.theta = round(bs.theta(S, K, T, sigma, opt_type), 6)
+
+        return option
 
     def calculate_days_to_expiry(self, expiry_date: str) -> int:
         """Calculate days to expiration"""
@@ -194,6 +233,13 @@ class OptionScorer:
         except (ValueError, ZeroDivisionError):
             return None
 
+    def _ensure_price(self, option: OptionData) -> OptionData:
+        """Fill in latest_price from bid/ask mid if missing."""
+        if option.latest_price is None or option.latest_price <= 0:
+            if option.bid_price and option.ask_price and option.bid_price > 0 and option.ask_price > 0:
+                option.latest_price = (option.bid_price + option.ask_price) / 2
+        return option
+
     def calculate_sprv(self, option: OptionData, stock_price: float) -> float:
         """
         Calculate Sell Put Recommendation Value (SPRV)
@@ -203,6 +249,9 @@ class OptionScorer:
         - 日权（0DTE/1DTE）评分封顶30分，不推荐卖Put
         - 临期（DTE<=3）接近平值时降低评分
         """
+        self._ensure_price(option)
+        self._ensure_greeks(option, stock_price)
+
         if (option.latest_price is None or option.delta is None or option.strike is None or
             option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0
@@ -293,6 +342,9 @@ class OptionScorer:
         - 日权（0DTE/1DTE）评分封顶30分
         - 临期（DTE<=3）接近平值时降低评分
         """
+        self._ensure_price(option)
+        self._ensure_greeks(option, stock_price)
+
         if (option.latest_price is None or option.delta is None or option.theta is None or
             option.strike is None or option.put_call != "CALL" or
             option.delta <= 0 or stock_price <= 0):
@@ -378,6 +430,9 @@ class OptionScorer:
         Calculate Buy Call Recommendation Value (BCRV)
         归一化到 0-100 分，包含 Theta 权重和 Gamma 优势
         """
+        self._ensure_price(option)
+        self._ensure_greeks(option, stock_price)
+
         if (option.latest_price is None or option.delta is None or option.gamma is None or
             option.theta is None or option.put_call != "CALL" or
             abs(option.theta or 0) <= 0 or stock_price <= 0):
@@ -430,6 +485,9 @@ class OptionScorer:
         Calculate Buy Put Recommendation Value (BPRV)
         归一化到 0-100 分，包含 Theta 权重和 Gamma 优势
         """
+        self._ensure_price(option)
+        self._ensure_greeks(option, stock_price)
+
         if (option.latest_price is None or option.delta is None or
             option.put_call != "PUT" or option.latest_price <= 0 or stock_price <= 0):
             return 0.0

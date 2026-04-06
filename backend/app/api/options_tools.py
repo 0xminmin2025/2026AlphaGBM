@@ -156,19 +156,25 @@ def get_vol_smile(symbol: str):
         expiry: 到期日 YYYY-MM-DD（必填）
     """
     try:
+        from ..services.options_service import OptionsService
+
         expiry = request.args.get('expiry')
         if not expiry:
-            return jsonify({'error': '缺少 expiry 参数'}), 400
+            # Auto-detect nearest monthly expiry
+            exp_response = OptionsService.get_expirations(symbol)
+            if not exp_response.expirations:
+                return jsonify({'error': f'No expirations found for {symbol}'}), 404
+            monthly = [e for e in exp_response.expirations if e.period_tag == 'm']
+            expiry = monthly[0].date if monthly else exp_response.expirations[0].date
 
         # 获取期权链数据
-        from ..services.options_service import OptionsService
         chain_response = OptionsService.get_option_chain(symbol, expiry)
 
-        if not chain_response or not chain_response.success:
+        if not chain_response or not (chain_response.calls or chain_response.puts):
             return jsonify({'error': f'无法获取 {symbol} 期权链数据'}), 404
 
         chain_data = chain_response.dict() if hasattr(chain_response, 'dict') else {}
-        underlying_price = chain_data.get('underlying_price', 0)
+        underlying_price = chain_data.get('real_stock_price') or chain_data.get('stock_price', 0)
 
         calls = chain_data.get('calls', [])
         puts = chain_data.get('puts', [])
@@ -206,7 +212,8 @@ def get_vol_surface(symbol: str):
 
         # 获取多个到期日的期权链
         from ..services.options_service import OptionsService
-        expiries = OptionsService.get_available_expiries(symbol)
+        exp_response = OptionsService.get_expirations(symbol)
+        expiries = [e.date for e in exp_response.expirations] if exp_response.expirations else []
 
         if not expiries:
             return jsonify({'error': f'无法获取 {symbol} 到期日列表'}), 404
@@ -217,10 +224,10 @@ def get_vol_surface(symbol: str):
         for expiry in expiries[:8]:  # 限制最多 8 个到期日
             try:
                 chain_response = OptionsService.get_option_chain(symbol, expiry)
-                if chain_response and chain_response.success:
+                if chain_response and (chain_response.calls or chain_response.puts):
                     data = chain_response.dict() if hasattr(chain_response, 'dict') else {}
                     if not underlying_price:
-                        underlying_price = data.get('underlying_price', 0)
+                        underlying_price = data.get('real_stock_price') or data.get('stock_price', 0)
                     chain_by_expiry[expiry] = {
                         'calls': data.get('calls', []),
                         'puts': data.get('puts', []),
@@ -464,7 +471,8 @@ def scan_options():
         def chain_provider(ticker: str):
             try:
                 from ..services.options_service import OptionsService
-                expiries = OptionsService.get_available_expiries(ticker)
+                exp_response = OptionsService.get_expirations(ticker)
+                expiries = [e.date for e in exp_response.expirations] if exp_response.expirations else []
                 if not expiries:
                     return None
 
@@ -474,10 +482,10 @@ def scan_options():
                 for expiry in expiries[:3]:  # 限制每个标的最多 3 个到期日
                     try:
                         response = OptionsService.get_option_chain(ticker, expiry)
-                        if response and response.success:
+                        if response and (response.calls or response.puts):
                             data = response.dict() if hasattr(response, 'dict') else {}
                             if not underlying_price:
-                                underlying_price = data.get('underlying_price', 0)
+                                underlying_price = data.get('real_stock_price') or data.get('stock_price', 0)
 
                             # 计算到期天数
                             from datetime import datetime

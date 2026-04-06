@@ -453,3 +453,55 @@ class ApiKey(db.Model):
     def hash_key(key):
         """SHA-256 hash"""
         return hashlib.sha256(key.encode()).hexdigest()
+
+
+class Watchlist(db.Model):
+    __tablename__ = 'watchlists'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
+    symbol = db.Column(db.String(20), nullable=False)
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+    notes = db.Column(db.String(255), nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'symbol', name='uq_watchlist_user_symbol'),
+    )
+
+    def to_dict(self):
+        return {
+            'symbol': self.symbol,
+            'added_at': self.added_at.isoformat() if self.added_at else None,
+            'notes': self.notes,
+        }
+
+
+class Alert(db.Model):
+    __tablename__ = 'alerts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False, index=True)
+    symbol = db.Column(db.String(20), nullable=False, index=True)
+    alert_type = db.Column(db.String(30), nullable=False)  # 'price_above', 'price_below', 'iv_rank_above', etc.
+    condition = db.Column(db.String(20), nullable=False)    # 'above', 'below', 'crosses'
+    threshold = db.Column(db.Float, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    recurring = db.Column(db.Boolean, default=False)
+    triggered_at = db.Column(db.DateTime, nullable=True)
+    triggered_price = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'symbol': self.symbol,
+            'alert_type': self.alert_type,
+            'condition': self.condition,
+            'threshold': self.threshold,
+            'is_active': self.is_active,
+            'recurring': self.recurring,
+            'triggered_at': self.triggered_at.isoformat() if self.triggered_at else None,
+            'triggered_price': self.triggered_price,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }

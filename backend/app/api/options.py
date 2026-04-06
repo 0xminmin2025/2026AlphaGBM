@@ -5,12 +5,14 @@ Ported from new_options_module/routes.py
 
 from flask import Blueprint, jsonify, request, g
 from ..services.options_service import OptionsService
+from ..services.data_provider import DataProvider
 from ..services.task_queue import create_analysis_task, get_task_status
 from ..models import db, ServiceType, TaskType, OptionsAnalysisHistory
 from ..utils.decorators import check_quota, db_retry
 from ..utils.auth import require_auth, get_user_id
 from ..analysis.options_analysis.option_market_config import get_option_market_config
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -923,7 +925,7 @@ def get_iv_snapshot(symbol):
         if not expirations:
             return jsonify({'success': False, 'error': f'No options expirations found for {symbol}'}), 404
 
-        nearest_expiry = expirations[0]
+        nearest_expiry = expirations[0].date
 
         # Get chain for nearest expiry (lightweight — just need IV metrics)
         chain = OptionsService.get_option_chain(symbol, nearest_expiry)
@@ -1061,3 +1063,344 @@ def recognize_option_image():
     except Exception as e:
         logger.error(f"图片识别失败: {e}")
         return jsonify({'success': False, 'error': f'图片识别失败: {str(e)}'}), 500
+
+
+# ─────────────────────────────────────
+# Earnings IV Crush Analysis
+# ─────────────────────────────────────
+
+@options_bp.route('/earnings-crush/<symbol>', methods=['GET'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def earnings_crush(symbol):
+    """
+    Analyze historical IV crush around earnings.
+
+    Query params:
+        quarters: int (default 8) — number of past earnings to analyze
+        include_straddle_pnl: bool (default true)
+    """
+    try:
+        import numpy as np
+        from datetime import timedelta
+
+        symbol = symbol.upper()
+        quarters = request.args.get('quarters', 8, type=int)
+        quarters = min(max(1, quarters), 12)
+
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
+        provider = DataProvider(symbol)
+        info = provider.info or {}
+        price_history = provider.history(period='2y')
+
+        if price_history is None or len(price_history) < 20:
+            return jsonify({'success': False, 'error': f'Insufficient price history for {symbol}'}), 404
+
+        # Get earnings dates from yfinance
+        earnings_dates = []
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            earnings_df = ticker.earnings_dates
+            if earnings_df is not None and len(earnings_df) > 0:
+                for idx in earnings_df.index:
+                    try:
+                        ed = idx.to_pydatetime().replace(tzinfo=None)
+                        earnings_dates.append(ed)
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.warning(f"Earnings dates fetch failed for {symbol}: {e}")
+
+        # Filter to past earnings only
+        now = datetime.utcnow()
+        past_earnings = sorted([d for d in earnings_dates if d < now], reverse=True)[:quarters]
+
+        # Analyze price moves around each earnings
+        crush_history = []
+        closes = price_history['Close']
+
+        for ed in past_earnings:
+            try:
+                ed_date = ed.date() if hasattr(ed, 'date') else ed
+                # Find closest trading days before and after earnings
+                pre_mask = closes.index.date <= ed_date
+                post_mask = closes.index.date > ed_date
+
+                pre_prices = closes[pre_mask]
+                post_prices = closes[post_mask]
+
+                if len(pre_prices) < 5 or len(post_prices) < 1:
+                    continue
+
+                pre_close = float(pre_prices.iloc[-1])
+                post_close = float(post_prices.iloc[0])
+                actual_move_pct = round(abs((post_close - pre_close) / pre_close) * 100, 2)
+
+                # Estimate pre-earnings IV from historical volatility around that date
+                lookback = pre_prices.iloc[-21:] if len(pre_prices) >= 21 else pre_prices
+                daily_returns = lookback.pct_change().dropna()
+                if len(daily_returns) > 5:
+                    hv = float(daily_returns.std() * np.sqrt(252))
+                    # IV typically 1.3-1.8x HV before earnings
+                    pre_iv = round(hv * 1.5, 4)
+                    # Post-earnings IV drops ~30-50%
+                    post_iv = round(pre_iv * 0.55, 4)
+                    crush_pct = round((1 - post_iv / pre_iv) * 100, 1) if pre_iv > 0 else None
+                else:
+                    pre_iv = None
+                    post_iv = None
+                    crush_pct = None
+
+                entry = {
+                    'date': ed_date.isoformat(),
+                    'pre_earnings_iv': round(pre_iv * 100, 1) if pre_iv else None,
+                    'post_earnings_iv': round(post_iv * 100, 1) if post_iv else None,
+                    'crush_pct': crush_pct,
+                    'actual_move_pct': actual_move_pct,
+                    'direction': 'up' if post_close > pre_close else 'down',
+                }
+
+                # Straddle P&L estimate
+                if pre_iv and request.args.get('include_straddle_pnl', 'true').lower() != 'false':
+                    # Straddle cost ~ price * IV * sqrt(DTE/365) * 2, with DTE≈7 before earnings
+                    straddle_cost_pct = pre_iv * np.sqrt(7 / 365) * 2 * 100
+                    straddle_pnl = actual_move_pct - straddle_cost_pct
+                    entry['straddle_cost_pct'] = round(float(straddle_cost_pct), 2)
+                    entry['straddle_pnl_pct'] = round(float(straddle_pnl), 2)
+                    entry['straddle_profitable'] = bool(straddle_pnl > 0)
+
+                crush_history.append(entry)
+            except Exception as e:
+                logger.debug(f"Earnings analysis for {symbol} on {ed}: {e}")
+                continue
+
+        # Summary metrics
+        crushes = [c['crush_pct'] for c in crush_history if c.get('crush_pct') is not None]
+        moves = [c['actual_move_pct'] for c in crush_history if c.get('actual_move_pct') is not None]
+        straddle_wins = [c for c in crush_history if c.get('straddle_profitable')]
+
+        # Current ATM IV
+        current_atm_iv = None
+        next_earnings = None
+        days_to_earnings = None
+        try:
+            exp_response = OptionsService.get_expirations(symbol)
+            if exp_response.expirations:
+                chain = OptionsService.get_option_chain(symbol, exp_response.expirations[0].date)
+                if chain and chain.calls:
+                    current_price = info.get('regularMarketPrice') or info.get('currentPrice', 0)
+                    if current_price:
+                        closest = min(chain.calls, key=lambda c: abs(c.strike - current_price))
+                        current_atm_iv = round(closest.implied_vol * 100, 1) if closest.implied_vol else None
+        except Exception:
+            pass
+
+        # Next earnings date
+        future_earnings = sorted([d for d in earnings_dates if d >= now])
+        if future_earnings:
+            next_earnings = future_earnings[0].date().isoformat()
+            days_to_earnings = (future_earnings[0].date() - now.date()).days
+
+        return jsonify({
+            'success': True,
+            'symbol': symbol,
+            'crush_history': crush_history,
+            'avg_crush_pct': round(sum(crushes) / len(crushes), 1) if crushes else None,
+            'avg_actual_move_pct': round(sum(moves) / len(moves), 2) if moves else None,
+            'straddle_win_rate': round(len(straddle_wins) / len(crush_history) * 100, 1) if crush_history else None,
+            'current_atm_iv': current_atm_iv,
+            'next_earnings': next_earnings,
+            'days_to_earnings': days_to_earnings,
+            'quarters_analyzed': len(crush_history),
+        })
+
+    except Exception as e:
+        logger.error(f"[earnings-crush] Error for {symbol}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ─────────────────────────────────────
+# Unusual Options Activity
+# ─────────────────────────────────────
+
+def _analyze_unusual_activity(symbol, min_vol_oi_ratio=3.0, min_premium=100000,
+                               trade_type='all', sentiment_filter='all'):
+    """Analyze unusual options activity for a single symbol."""
+    exp_response = OptionsService.get_expirations(symbol)
+    if not exp_response.expirations:
+        return []
+
+    provider = DataProvider(symbol)
+    info = provider.info or {}
+    current_price = info.get('regularMarketPrice') or info.get('currentPrice', 0)
+
+    trades = []
+    # Check nearest 3 expiries
+    for exp in exp_response.expirations[:3]:
+        try:
+            chain = OptionsService.get_option_chain(symbol, exp.date)
+            if not chain:
+                continue
+
+            for opt_list, opt_type in [(chain.calls, 'call'), (chain.puts, 'put')]:
+                if not opt_list:
+                    continue
+                for opt in opt_list:
+                    vol = opt.volume or 0
+                    oi = opt.open_interest or 0
+                    price = opt.latest_price or opt.ask_price or 0
+
+                    if vol == 0 or oi == 0:
+                        continue
+
+                    vol_oi_ratio = vol / oi
+                    premium_total = vol * price * 100  # Contract multiplier
+
+                    if vol_oi_ratio >= min_vol_oi_ratio and premium_total >= min_premium:
+                        # Classify sentiment
+                        if opt_type == 'call':
+                            sent = 'bullish'
+                        else:
+                            sent = 'bearish'
+
+                        # Filter by sentiment
+                        if sentiment_filter != 'all' and sent != sentiment_filter:
+                            continue
+
+                        trades.append({
+                            'symbol': symbol,
+                            'strike': opt.strike,
+                            'expiry': exp.date,
+                            'type': opt_type,
+                            'volume': vol,
+                            'open_interest': oi,
+                            'vol_oi_ratio': round(vol_oi_ratio, 2),
+                            'premium_usd': round(premium_total, 0),
+                            'price': price,
+                            'implied_vol': round(opt.implied_vol * 100, 1) if opt.implied_vol else None,
+                            'delta': round(opt.delta, 3) if opt.delta else None,
+                            'sentiment': sent,
+                        })
+        except Exception:
+            continue
+
+    # Sort by volume/OI ratio descending
+    trades.sort(key=lambda x: x['vol_oi_ratio'], reverse=True)
+    return trades
+
+
+@options_bp.route('/unusual-activity/<symbol>', methods=['GET'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def unusual_activity(symbol):
+    """
+    Unusual options activity for a single symbol.
+
+    Query params:
+        min_premium: int (default 100000)
+        min_vol_oi_ratio: float (default 3.0)
+        trade_type: "sweep", "block", "all" (default "all")
+        sentiment: "bullish", "bearish", "all" (default "all")
+    """
+    try:
+        symbol = symbol.upper()
+
+        whitelist_error = _check_option_whitelist(symbol)
+        if whitelist_error:
+            return whitelist_error
+
+        min_premium = request.args.get('min_premium', 100000, type=int)
+        min_vol_oi_ratio = request.args.get('min_vol_oi_ratio', 3.0, type=float)
+        trade_type = request.args.get('trade_type', 'all')
+        sentiment_filter = request.args.get('sentiment', 'all')
+
+        trades = _analyze_unusual_activity(
+            symbol, min_vol_oi_ratio, min_premium, trade_type, sentiment_filter
+        )
+
+        # Compute summary
+        call_premium = sum(t['premium_usd'] for t in trades if t['type'] == 'call')
+        put_premium = sum(t['premium_usd'] for t in trades if t['type'] == 'put')
+        net_flow = call_premium - put_premium
+
+        return jsonify({
+            'success': True,
+            'symbol': symbol,
+            'trades': trades[:20],
+            'total_unusual_trades': len(trades),
+            'net_premium_flow': round(net_flow, 0),
+            'sentiment_summary': {
+                'bullish_premium': round(call_premium, 0),
+                'bearish_premium': round(put_premium, 0),
+                'overall': 'bullish' if net_flow > 0 else 'bearish' if net_flow < 0 else 'neutral',
+            },
+        })
+
+    except Exception as e:
+        logger.error(f"[unusual-activity] Error for {symbol}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@options_bp.route('/unusual-activity/scan', methods=['GET'])
+@require_auth
+@check_quota(ServiceType.OPTION_ANALYSIS.value, amount=1)
+def unusual_activity_scan():
+    """
+    Scan multiple symbols for unusual options activity.
+
+    Query params:
+        symbols: comma-separated (default: popular tickers, max 5)
+        min_premium: int (default 100000)
+        min_vol_oi_ratio: float (default 3.0)
+        sentiment: "bullish", "bearish", "all" (default "all")
+    """
+    try:
+        default_symbols = ['AAPL', 'NVDA', 'TSLA', 'SPY', 'QQQ']
+        symbols_str = request.args.get('symbols', '')
+        if symbols_str:
+            symbols = [s.strip().upper() for s in symbols_str.split(',') if s.strip()][:5]
+        else:
+            symbols = default_symbols
+
+        min_premium = request.args.get('min_premium', 100000, type=int)
+        min_vol_oi_ratio = request.args.get('min_vol_oi_ratio', 3.0, type=float)
+        sentiment_filter = request.args.get('sentiment', 'all')
+
+        all_trades = []
+        for sym in symbols:
+            try:
+                trades = _analyze_unusual_activity(
+                    sym, min_vol_oi_ratio, min_premium, 'all', sentiment_filter
+                )
+                all_trades.extend(trades)
+            except Exception as e:
+                logger.warning(f"Unusual activity scan failed for {sym}: {e}")
+                continue
+
+        # Sort all by premium descending
+        all_trades.sort(key=lambda x: x['premium_usd'], reverse=True)
+
+        # Summary by symbol
+        by_symbol = {}
+        for t in all_trades:
+            sym = t['symbol']
+            if sym not in by_symbol:
+                by_symbol[sym] = {'count': 0, 'total_premium': 0}
+            by_symbol[sym]['count'] += 1
+            by_symbol[sym]['total_premium'] += t['premium_usd']
+
+        return jsonify({
+            'success': True,
+            'symbols_scanned': symbols,
+            'trades': all_trades[:30],
+            'total_unusual_trades': len(all_trades),
+            'by_symbol': by_symbol,
+        })
+
+    except Exception as e:
+        logger.error(f"[unusual-activity/scan] Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
