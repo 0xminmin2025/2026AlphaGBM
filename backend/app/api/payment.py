@@ -119,8 +119,36 @@ def webhook():
             logger.info(f"[Webhook] Subscription created: {event['data']['object'].get('id')}")
 
         elif event_type == 'customer.subscription.updated':
-            # 订阅更新 - 只记录日志
-            logger.info(f"[Webhook] Subscription updated: {event['data']['object'].get('id')}")
+            # 订阅更新 - 同步状态（含取消、恢复、周期变更等）
+            sub_data = event['data']['object']
+            sub_id = sub_data.get('id')
+            logger.info(f"[Webhook] Processing customer.subscription.updated for {sub_id}")
+            from ..models import Subscription
+            from datetime import datetime as dt
+            subscription = Subscription.query.filter_by(
+                stripe_subscription_id=sub_id
+            ).first()
+            if subscription:
+                new_status = sub_data.get('status', subscription.status)
+                cancel_at_end = sub_data.get('cancel_at_period_end', False)
+                cancel_at = sub_data.get('cancel_at')  # Unix timestamp or None
+
+                subscription.status = new_status
+                # Stripe Portal 可能用 cancel_at 而非 cancel_at_period_end
+                subscription.cancel_at_period_end = cancel_at_end or (cancel_at is not None)
+
+                # 如果有 cancel_at，用它作为到期时间
+                if cancel_at:
+                    subscription.current_period_end = dt.fromtimestamp(cancel_at)
+                else:
+                    if sub_data.get('current_period_end'):
+                        subscription.current_period_end = dt.fromtimestamp(sub_data['current_period_end'])
+                if sub_data.get('current_period_start'):
+                    subscription.current_period_start = dt.fromtimestamp(sub_data['current_period_start'])
+
+                db.session.commit()
+                logger.info(f"[Webhook] Subscription {sub_id} updated: status={new_status}, "
+                           f"cancel_at_period_end={cancel_at_end}, cancel_at={cancel_at}")
 
         else:
             logger.info(f"[Webhook] Unhandled event type: {event_type}")
@@ -130,6 +158,42 @@ def webhook():
     except Exception as e:
         logger.error(f"[Webhook] Error processing {event_type}: {str(e)}", exc_info=True)
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@payment_bp.route('/verify-session', methods=['POST'])
+@require_auth
+def verify_session():
+    """
+    支付完成后主动验证 checkout session，同步订阅/交易到本地 DB。
+    当 webhook 丢失时作为保底机制。
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'session_id is required'}), 400
+
+    try:
+        # 从 Stripe 获取 session 详情
+        session = stripe.checkout.Session.retrieve(session_id)
+
+        if session.get('payment_status') != 'paid':
+            return jsonify({'success': False, 'message': '支付未完成'}), 200
+
+        # 复用 handle_checkout_completed 处理（内置幂等检查）
+        success, message = PaymentService.handle_checkout_completed(session)
+        logger.info(f"[VerifySession] session={session_id}, success={success}, message={message}")
+
+        return jsonify({'success': success, 'message': message}), 200
+
+    except stripe.error.StripeError as e:
+        logger.error(f"[VerifySession] Stripe error: {e}")
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"[VerifySession] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 

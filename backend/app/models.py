@@ -195,7 +195,7 @@ class Transaction(db.Model):
     stripe_checkout_session_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_invoice_id = db.Column(db.String(255), unique=True, nullable=True, index=True)  # 用于幂等性检查
     amount = db.Column(db.Integer, nullable=False) # In cents
-    currency = db.Column(db.String(10), nullable=False, default='cny')
+    currency = db.Column(db.String(10), nullable=False, default='usd')
     status = db.Column(db.String(50), nullable=False) # succeeded, pending, failed
     description = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

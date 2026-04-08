@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import api from '@/lib/api';
@@ -7,6 +7,7 @@ import { Check, Loader2, Sparkles, Zap, Crown, Bot } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
+import { useToastHelpers } from '@/components/ui/toast';
 
 // Modern pricing page styles
 const styles = `
@@ -175,10 +176,12 @@ export default function Pricing() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const toast = useToastHelpers();
     const { t } = useTranslation();
-    const { pricing, credits, pricingLoading, creditsLoading } = useUserData();
+    const { pricing, credits, pricingLoading, creditsLoading, refreshCredits } = useUserData();
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [currentPlan, setCurrentPlan] = useState<string>('free');
+    const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
 
     // Helper function to translate plan name
     const translatePlanName = (planKey: string, backendName: string): string => {
@@ -250,16 +253,27 @@ export default function Pricing() {
     };
 
     // Helper function to get currency symbol and convert price
-    const getCurrencyAndPrice = (price: number, currency: string = 'cny'): { symbol: string, price: number } => {
+    const getCurrencyAndPrice = (price: number, currency: string = 'cny'): { symbol: string, price: string } => {
         const isEnglish = i18n.language === 'en';
         if (isEnglish && currency === 'cny') {
-            // Convert CNY to USD (approximate rate: 7 CNY = 1 USD)
-            return { symbol: t('pricing.currencyUSD'), price: Math.round(price / 7) };
+            return { symbol: t('pricing.currencyUSD'), price: (price / 7).toFixed(2) };
         }
-        return { symbol: currency === 'cny' ? t('pricing.currencyCNY') : t('pricing.currencyUSD'), price };
+        return { symbol: currency === 'cny' ? t('pricing.currencyCNY') : t('pricing.currencyUSD'), price: Number(price).toFixed(2) };
     };
 
     const success = searchParams.get('success');
+    const sessionId = searchParams.get('session_id');
+
+    // 支付成功回调：主动验证 session 同步订阅（防止 webhook 丢失）
+    const verifiedRef = useRef(false);
+    useEffect(() => {
+        if (success && sessionId && !verifiedRef.current) {
+            verifiedRef.current = true;
+            api.post('/payment/verify-session', { session_id: sessionId })
+                .then(() => refreshCredits?.())
+                .catch((err: any) => console.warn('Verify session failed:', err));
+        }
+    }, [success, sessionId]);
 
     // Update current plan based on credits data
     useEffect(() => {
@@ -283,15 +297,30 @@ export default function Pricing() {
 
         setCheckoutLoading(priceKey);
         try {
-            const response = await api.post('/payment/create-checkout-session', {
-                price_key: priceKey,
-                success_url: window.location.origin + '/pricing?success=true',
-                cancel_url: window.location.origin + '/pricing?canceled=true'
-            });
-            window.location.href = response.data.checkout_url;
-        } catch (err) {
+            // 已有订阅 → 走升级流程，否则走新建 checkout
+            if (credits?.subscription?.has_subscription) {
+                const response = await api.post('/payment/upgrade', { price_key: priceKey });
+                if (response.data.success) {
+                    toast.success(
+                        i18n.language === 'zh' ? '升级成功' : 'Upgrade Successful',
+                        i18n.language === 'zh'
+                            ? `已升级至 ${response.data.new_plan.toUpperCase()}，获得 ${response.data.credits_added} 额度`
+                            : `Upgraded to ${response.data.new_plan.toUpperCase()} with ${response.data.credits_added} credits`
+                    );
+                    window.location.reload();
+                }
+            } else {
+                const response = await api.post('/payment/create-checkout-session', {
+                    price_key: priceKey,
+                    success_url: window.location.origin + '/pricing?success=true&session_id={CHECKOUT_SESSION_ID}',
+                    cancel_url: window.location.origin + '/pricing?canceled=true'
+                });
+                window.location.href = response.data.checkout_url;
+            }
+        } catch (err: any) {
             console.error(err);
-            alert(t('pricing.checkoutFailed'));
+            const errorMsg = err.response?.data?.error || t('pricing.checkoutFailed');
+            toast.error(t('pricing.checkoutFailed'), errorMsg);
             setCheckoutLoading(null);
         }
     };
@@ -318,6 +347,27 @@ export default function Pricing() {
                 </p>
             </div>
 
+            {/* Billing Cycle Toggle */}
+            <div className="flex items-center justify-center gap-3 mb-8 sm:mb-12">
+                <span className={`text-sm font-medium transition-colors ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-500'}`}>
+                    {i18n.language === 'zh' ? '月付' : 'Monthly'}
+                </span>
+                <button
+                    onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
+                    className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === 'yearly' ? 'bg-[#0D9B97]' : 'bg-slate-700'}`}
+                >
+                    <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${billingCycle === 'yearly' ? 'translate-x-7' : 'translate-x-0.5'}`} />
+                </button>
+                <span className={`text-sm font-medium transition-colors ${billingCycle === 'yearly' ? 'text-white' : 'text-slate-500'}`}>
+                    {i18n.language === 'zh' ? '年付' : 'Yearly'}
+                </span>
+                {billingCycle === 'yearly' && (
+                    <span className="text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded-full">
+                        {i18n.language === 'zh' ? '省17%' : 'Save 17%'}
+                    </span>
+                )}
+            </div>
+
             {/* Success Message */}
             {success && (
                 <div className="success-banner max-w-4xl mx-4 sm:mx-auto">
@@ -334,7 +384,7 @@ export default function Pricing() {
             {/* Pricing Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 max-w-7xl mx-4 sm:mx-auto mb-8 sm:mb-16">
                 {/* Free Plan */}
-                <div className={`pricing-card ${currentPlan === 'free' ? 'current' : ''}`}>
+                <div className={`pricing-card flex flex-col ${currentPlan === 'free' ? 'current' : ''}`}>
                     {currentPlan === 'free' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
                     <div className="flex items-center gap-3 mb-6 mt-2">
                         <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center">
@@ -362,13 +412,13 @@ export default function Pricing() {
                         ))}
                     </div>
 
-                    <button className="subscribe-btn outline" disabled>
+                    <button className="subscribe-btn outline mt-auto" disabled>
                         {currentPlan === 'free' ? t('pricing.currentPlan') : t('pricing.free.name')}
                     </button>
                 </div>
 
                 {/* Plus Plan - Featured */}
-                <div className={`pricing-card featured ${currentPlan === 'plus' ? 'current' : ''}`}>
+                <div className={`pricing-card featured flex flex-col ${currentPlan === 'plus' ? 'current' : ''}`}>
                     {currentPlan === 'plus' ? (
                         <div className="current-badge">{t('pricing.currentPlan')}</div>
                     ) : (
@@ -386,29 +436,30 @@ export default function Pricing() {
 
                     <div className="mb-6">
                         {(() => {
-                            const plusMonthly = getCurrencyAndPrice(pricing.plans.plus.monthly.price, pricing.plans.plus.monthly.currency);
+                            const plan = billingCycle === 'yearly' && pricing.plans.plus.yearly
+                                ? pricing.plans.plus.yearly
+                                : pricing.plans.plus.monthly;
+                            const display = getCurrencyAndPrice(
+                                billingCycle === 'yearly' ? plan.price / 12 : plan.price,
+                                plan.currency
+                            );
                             return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="price-tag">{plusMonthly.symbol}{plusMonthly.price}</span>
-                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                <div>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="price-tag">{display.symbol}{display.price}</span>
+                                        <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                    </div>
+                                    {billingCycle === 'yearly' && (
+                                        <div className="text-sm text-slate-400 mt-1">
+                                            {(() => {
+                                                const yearly = getCurrencyAndPrice(plan.price, plan.currency);
+                                                return <span>{i18n.language === 'zh' ? `按年付 ${yearly.symbol}${yearly.price}/年` : `Billed ${yearly.symbol}${yearly.price}/year`}</span>;
+                                            })()}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })()}
-                        {pricing.plans.plus.yearly && (
-                            <div className="text-sm text-slate-400 mt-2">
-                                {(() => {
-                                    const plusYearly = getCurrencyAndPrice(pricing.plans.plus.yearly.price, pricing.plans.plus.yearly.currency);
-                                    return (
-                                        <>
-                                            <span>{t('pricing.yearly', { price: plusYearly.price }).replace(/¥|\$/, plusYearly.symbol)}</span>
-                                            {pricing.plans.plus.yearly.savings && (
-                                                <span className="text-green-500 ml-2">（{pricing.plans.plus.yearly.savings.match(/\d+/)?.[0] ? t('pricing.savings', { percent: pricing.plans.plus.yearly.savings.match(/\d+/)?.[0] || '17' }) : pricing.plans.plus.yearly.savings}）</span>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        )}
                     </div>
 
                     <div className="space-y-1 mb-8">
@@ -423,21 +474,21 @@ export default function Pricing() {
                     </div>
 
                     {currentPlan === 'plus' ? (
-                        <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
+                        <button className="subscribe-btn outline mt-auto" disabled>{t('pricing.currentPlan')}</button>
                     ) : (
                         <Button
-                            className="subscribe-btn primary"
-                            onClick={() => handleSubscribe('plus_monthly')}
+                            className="subscribe-btn primary mt-auto"
+                            onClick={() => handleSubscribe(billingCycle === 'yearly' ? 'plus_yearly' : 'plus_monthly')}
                             disabled={!!checkoutLoading}
                         >
-                            {checkoutLoading === 'plus_monthly' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {(checkoutLoading === 'plus_monthly' || checkoutLoading === 'plus_yearly') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {t('pricing.subscribe')}
                         </Button>
                     )}
                 </div>
 
                 {/* Pro Plan */}
-                <div className={`pricing-card ${currentPlan === 'pro' ? 'current' : ''}`}>
+                <div className={`pricing-card flex flex-col ${currentPlan === 'pro' ? 'current' : ''}`}>
                     {currentPlan === 'pro' && <div className="current-badge">{t('pricing.currentPlan')}</div>}
                     <div className="flex items-center gap-3 mb-6 mt-2">
                         <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
@@ -451,29 +502,30 @@ export default function Pricing() {
 
                     <div className="mb-6">
                         {(() => {
-                            const proMonthly = getCurrencyAndPrice(pricing.plans.pro.monthly.price, pricing.plans.pro.monthly.currency);
+                            const plan = billingCycle === 'yearly' && pricing.plans.pro.yearly
+                                ? pricing.plans.pro.yearly
+                                : pricing.plans.pro.monthly;
+                            const display = getCurrencyAndPrice(
+                                billingCycle === 'yearly' ? plan.price / 12 : plan.price,
+                                plan.currency
+                            );
                             return (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="price-tag">{proMonthly.symbol}{proMonthly.price}</span>
-                                    <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                <div>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="price-tag">{display.symbol}{display.price}</span>
+                                        <span className="text-slate-500">{t('pricing.perMonth')}</span>
+                                    </div>
+                                    {billingCycle === 'yearly' && (
+                                        <div className="text-sm text-slate-400 mt-1">
+                                            {(() => {
+                                                const yearly = getCurrencyAndPrice(plan.price, plan.currency);
+                                                return <span>{i18n.language === 'zh' ? `按年付 ${yearly.symbol}${yearly.price}/年` : `Billed ${yearly.symbol}${yearly.price}/year`}</span>;
+                                            })()}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })()}
-                        {pricing.plans.pro.yearly && (
-                            <div className="text-sm text-slate-400 mt-2">
-                                {(() => {
-                                    const proYearly = getCurrencyAndPrice(pricing.plans.pro.yearly.price, pricing.plans.pro.yearly.currency);
-                                    return (
-                                        <>
-                                            <span>{t('pricing.yearly', { price: proYearly.price }).replace(/¥|\$/, proYearly.symbol)}</span>
-                                            {pricing.plans.pro.yearly.savings && (
-                                                <span className="text-green-500 ml-2">（{pricing.plans.pro.yearly.savings.match(/\d+/)?.[0] ? t('pricing.savings', { percent: pricing.plans.pro.yearly.savings.match(/\d+/)?.[0] || '17' }) : pricing.plans.pro.yearly.savings}）</span>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        )}
                     </div>
 
                     <div className="space-y-1 mb-8">
@@ -488,21 +540,21 @@ export default function Pricing() {
                     </div>
 
                     {currentPlan === 'pro' ? (
-                        <button className="subscribe-btn outline" disabled>{t('pricing.currentPlan')}</button>
+                        <button className="subscribe-btn outline mt-auto" disabled>{t('pricing.currentPlan')}</button>
                     ) : (
                         <Button
-                            className="subscribe-btn primary"
-                            onClick={() => handleSubscribe('pro_monthly')}
+                            className="subscribe-btn primary mt-auto"
+                            onClick={() => handleSubscribe(billingCycle === 'yearly' ? 'pro_yearly' : 'pro_monthly')}
                             disabled={!!checkoutLoading}
                         >
-                            {checkoutLoading === 'pro_monthly' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {(checkoutLoading === 'pro_monthly' || checkoutLoading === 'pro_yearly') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {t('pricing.subscribe')}
                         </Button>
                     )}
                 </div>
 
                 {/* API & AI Agent Plan */}
-                <div className="pricing-card">
+                <div className="pricing-card flex flex-col">
                     <div className="flex items-center gap-3 mb-6 mt-2">
                         <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
                             <Bot className="w-6 h-6 text-purple-500" />
@@ -543,7 +595,7 @@ export default function Pricing() {
                     </div>
 
                     <Button
-                        className="subscribe-btn outline"
+                        className="subscribe-btn outline mt-auto"
                         onClick={() => {
                             if (!user) { navigate('/login'); return; }
                             navigate('/api-keys');

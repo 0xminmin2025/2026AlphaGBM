@@ -46,8 +46,39 @@ class PaymentService:
     # 免费用户每日总查询次数（所有服务共享）
     FREE_USER_DAILY_QUOTA = 2
     
-    # Remove __init__ dependency injection, use imported models directly
-    
+    @classmethod
+    def _ensure_subscription_credits(cls, subscription, plan_tier, is_yearly):
+        """
+        确保订阅额度只发放一次。所有路径（webhook、verify-session、recovery）
+        统一通过此方法发放额度，用 CreditLedger.subscription_id 做唯一检查。
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if not subscription or not subscription.id:
+            return False
+
+        # 核心幂等检查：该订阅是否已有额度记录
+        existing = CreditLedger.query.filter_by(
+            subscription_id=subscription.id
+        ).first()
+        if existing:
+            logger.info(f"[EnsureCredits] Subscription {subscription.id} already has credits, skipping")
+            return False
+
+        credits = cls.PLAN_CONFIG[plan_tier]['yearly_credits' if is_yearly else 'monthly_credits']
+        days_valid = 365 if is_yearly else 30
+        cls.add_credits(
+            user_id=subscription.user_id,
+            amount=credits,
+            source=CreditSource.SUBSCRIPTION.value,
+            service_type=ServiceType.STOCK_ANALYSIS.value,
+            days_valid=days_valid,
+            subscription_id=subscription.id
+        )
+        logger.info(f"[EnsureCredits] Issued {credits} credits for subscription {subscription.id} (plan={plan_tier}, yearly={is_yearly})")
+        return True
+
     @classmethod
     def create_checkout_session(cls, user_id, price_key, success_url, cancel_url, email=None):
         """创建Stripe Checkout Session"""
@@ -94,7 +125,8 @@ class PaymentService:
                     email=user.email,
                     metadata={'user_id': user.id}
                 )
-                user.stripe_customer_id = customer.id
+                stripe_customer_id = customer.id
+                user.stripe_customer_id = stripe_customer_id
                 db.session.commit()
             except Exception as e:
                 return None, f"创建Stripe客户失败: {str(e)}"
@@ -133,11 +165,12 @@ class PaymentService:
         处理 checkout.session.completed 事件
 
         订阅类型：
-        - 不在这里创建 Transaction（会在 invoice.payment_succeeded 中创建）
-        - 只创建 Subscription 记录
+        - 创建 Subscription 记录
+        - 创建 Transaction 记录（保底，防止 invoice.payment_succeeded webhook 丢失）
+        - 发放额度
 
         Top-up 类型：
-        - 创建 Transaction 和发放额度（因为不会触发 invoice.payment_succeeded）
+        - 创建 Transaction 和发放额度
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -150,7 +183,7 @@ class PaymentService:
         logger.info(f"[CheckoutCompleted] Processing session {session['id']}, price_key={price_key}, subscription_id={subscription_id}")
 
         try:
-            # 订阅类型：只创建订阅记录，Transaction 和额度在 invoice.payment_succeeded 中处理
+            # 订阅类型：创建订阅记录 + Transaction + 发放额度
             if 'topup' not in price_key and subscription_id:
                 plan_tier = 'plus' if 'plus' in price_key else 'pro'
                 is_yearly = 'yearly' in price_key
@@ -164,6 +197,15 @@ class PaymentService:
                     current_period_end = datetime.utcnow() + timedelta(days=days_valid)
                     current_period_start = datetime.utcnow()
 
+                # 幂等：先检查 Transaction 是否已存在（用 checkout_session_id）
+                existing_txn = Transaction.query.filter_by(
+                    stripe_checkout_session_id=session['id']
+                ).first()
+                if existing_txn:
+                    logger.info(f"[CheckoutCompleted] Already processed session {session['id']}, skipping")
+                    return True, "已处理过此会话（幂等）"
+
+                # 创建或获取 Subscription
                 subscription = Subscription.query.filter_by(
                     stripe_subscription_id=subscription_id
                 ).first()
@@ -178,10 +220,29 @@ class PaymentService:
                         current_period_end=current_period_end
                     )
                     db.session.add(subscription)
+                    db.session.flush()
                     logger.info(f"[CheckoutCompleted] Created subscription record for {subscription_id}")
 
+                # 创建 Transaction
+                amount = session.get('amount_total', 0)
+                currency = session.get('currency', 'usd')
+                transaction = Transaction(
+                    user_id=user_id,
+                    stripe_payment_intent_id=payment_intent_id,
+                    stripe_checkout_session_id=session['id'],
+                    amount=amount,
+                    currency=currency,
+                    status=TransactionStatus.SUCCEEDED.value,
+                    description=f"订阅首次 - {plan_tier}"
+                )
+                db.session.add(transaction)
+                db.session.flush()
+
+                # 发放额度（集中式幂等检查）
+                cls._ensure_subscription_credits(subscription, plan_tier, is_yearly)
+
                 db.session.commit()
-                return True, "订阅记录创建成功，额度将在付款确认后发放"
+                return True, "订阅创建成功，交易已记录，额度已发放"
 
             # Top-up 类型：创建 Transaction 并发放额度
             if 'topup' in price_key:
@@ -230,8 +291,9 @@ class PaymentService:
     def handle_invoice_payment_succeeded(cls, invoice):
         """
         处理 invoice.payment_succeeded 事件
-        这是发放订阅额度的唯一入口！
-        包括首次订阅和续费都在这里处理
+        处理订阅续费的额度发放。
+        首次订阅的 Transaction 和额度已在 checkout.session.completed 中处理，
+        此方法通过幂等检查避免重复。续费仍在此处理。
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -254,7 +316,6 @@ class PaymentService:
             return True, "升级发票，由升级方法处理"
 
         # 幂等性检查：按 invoice_id 检查是否已经处理过
-        # 每个发票只能处理一次，防止重复发放额度
         existing_transaction = Transaction.query.filter_by(
             stripe_invoice_id=invoice_id
         ).first()
@@ -262,6 +323,28 @@ class PaymentService:
         if existing_transaction:
             logger.info(f"[InvoicePayment] Idempotency check: invoice {invoice_id} already processed")
             return True, "已处理过此发票（幂等性检查）"
+
+        # 首次订阅：checkout.session.completed 可能已处理 Transaction + 额度
+        # 检查该订阅是否已有额度发放记录（CreditLedger）
+        if billing_reason == 'subscription_create':
+            from ..models import CreditLedger
+            existing_sub = Subscription.query.filter_by(
+                stripe_subscription_id=subscription_id
+            ).first()
+            if existing_sub:
+                existing_credit = CreditLedger.query.filter_by(
+                    subscription_id=existing_sub.id
+                ).first()
+                if existing_credit:
+                    # checkout 已处理过额度，补填 invoice_id 到 Transaction
+                    existing_txn = Transaction.query.filter_by(
+                        user_id=existing_sub.user_id
+                    ).order_by(Transaction.created_at.desc()).first()
+                    if existing_txn and not existing_txn.stripe_invoice_id:
+                        existing_txn.stripe_invoice_id = invoice_id
+                        db.session.commit()
+                    logger.info(f"[InvoicePayment] subscription_create already has credits, skipping (sub={subscription_id})")
+                    return True, "首次订阅已由 checkout 处理"
 
         subscription = Subscription.query.filter_by(
             stripe_subscription_id=subscription_id
@@ -304,21 +387,34 @@ class PaymentService:
                 period_end = stripe_sub.get('current_period_end')
                 logger.info(f"[InvoicePayment] Period: {period_start} - {period_end}")
 
-                subscription = Subscription(
-                    user_id=user.id,
-                    stripe_subscription_id=subscription_id,
-                    plan_tier=plan_tier,
-                    status=SubscriptionStatus.ACTIVE.value,
-                    current_period_start=datetime.fromtimestamp(period_start) if period_start else datetime.utcnow(),
-                    current_period_end=datetime.fromtimestamp(period_end) if period_end else datetime.utcnow() + timedelta(days=30)
-                )
-                db.session.add(subscription)
-                db.session.flush()
-                logger.info(f"[InvoicePayment] Created subscription record with id={subscription.id}")
+                # 再次检查（防止并发创建导致 UniqueViolation）
+                subscription = Subscription.query.filter_by(
+                    stripe_subscription_id=subscription_id
+                ).first()
+
+                if not subscription:
+                    subscription = Subscription(
+                        user_id=user.id,
+                        stripe_subscription_id=subscription_id,
+                        plan_tier=plan_tier,
+                        status=SubscriptionStatus.ACTIVE.value,
+                        current_period_start=datetime.fromtimestamp(period_start) if period_start else datetime.utcnow(),
+                        current_period_end=datetime.fromtimestamp(period_end) if period_end else datetime.utcnow() + timedelta(days=30)
+                    )
+                    db.session.add(subscription)
+                    db.session.flush()
+                    logger.info(f"[InvoicePayment] Created subscription record with id={subscription.id}")
 
             except Exception as e:
-                logger.error(f"[InvoicePayment] Failed to create subscription: {str(e)}", exc_info=True)
-                return False, f"订阅不存在且无法创建: {str(e)}"
+                db.session.rollback()
+                # 可能是并发 UniqueViolation，再查一次
+                subscription = Subscription.query.filter_by(
+                    stripe_subscription_id=subscription_id
+                ).first()
+                if not subscription:
+                    logger.error(f"[InvoicePayment] Failed to create subscription: {str(e)}", exc_info=True)
+                    return False, f"订阅不存在且无法创建: {str(e)}"
+                logger.info(f"[InvoicePayment] Subscription found after retry (concurrent creation)")
 
         try:
             # 更新订阅周期信息
@@ -364,16 +460,9 @@ class PaymentService:
             db.session.flush()  # 先提交 transaction，确保幂等性
             logger.info(f"[InvoicePayment] Transaction record created for invoice {invoice_id}")
 
-            # 发放额度
-            cls.add_credits(
-                user_id=subscription.user_id,
-                amount=credits,
-                source=CreditSource.SUBSCRIPTION.value,
-                service_type=ServiceType.STOCK_ANALYSIS.value,
-                days_valid=days_valid,
-                subscription_id=subscription.id
-            )
-            logger.info(f"[InvoicePayment] Credits added successfully for user {subscription.user_id}")
+            # 发放额度（集中式幂等检查）
+            cls._ensure_subscription_credits(subscription, plan_tier, is_yearly)
+            logger.info(f"[InvoicePayment] Credits ensured for user {subscription.user_id}")
 
             # 首次订阅时检查邀请奖励
             if billing_reason == 'subscription_create':
@@ -630,14 +719,206 @@ class PaymentService:
         return int(total) if total else 0
     
     @classmethod
+    def _sync_subscription_from_stripe(cls, subscription):
+        """从 Stripe 同步订阅最新状态到本地 DB"""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if not stripe.api_key or not subscription.stripe_subscription_id:
+            return
+
+        try:
+            stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+            changed = False
+
+            # 同步状态
+            new_status = stripe_sub.get('status')
+            if new_status and new_status != subscription.status:
+                subscription.status = new_status
+                changed = True
+
+            # 同步取消状态：Stripe 有两种取消方式
+            # 1. cancel_at_period_end=true（到期后取消）
+            # 2. cancel_at=timestamp（指定日期取消，Portal 常用）
+            cancel_at_end = stripe_sub.get('cancel_at_period_end', False)
+            cancel_at = stripe_sub.get('cancel_at')  # Unix timestamp or None
+
+            # 任一方式都视为"已取消"
+            is_canceling = cancel_at_end or (cancel_at is not None)
+            if is_canceling != (subscription.cancel_at_period_end or False):
+                subscription.cancel_at_period_end = is_canceling
+                changed = True
+
+            # 如果有 cancel_at，用它作为到期时间（更准确）
+            if cancel_at:
+                cancel_date = datetime.fromtimestamp(cancel_at)
+                if subscription.current_period_end != cancel_date:
+                    subscription.current_period_end = cancel_date
+                    changed = True
+            else:
+                # 同步周期
+                period_end = stripe_sub.get('current_period_end')
+                if period_end:
+                    new_end = datetime.fromtimestamp(period_end)
+                    if subscription.current_period_end != new_end:
+                        subscription.current_period_end = new_end
+                        changed = True
+
+            period_start = stripe_sub.get('current_period_start')
+            if period_start:
+                new_start = datetime.fromtimestamp(period_start)
+                if subscription.current_period_start != new_start:
+                    subscription.current_period_start = new_start
+                    changed = True
+
+            if changed:
+                db.session.commit()
+                logger.info(f"[SyncStripe] Subscription {subscription.stripe_subscription_id} synced: "
+                           f"status={new_status}, cancel_at_period_end={cancel_at_end}, cancel_at={cancel_at}")
+
+        except Exception as e:
+            logger.warning(f"[SyncStripe] Failed to sync from Stripe: {e}")
+
+    @classmethod
+    def _recover_subscription_from_stripe(cls, user_id):
+        """
+        本地无 active 订阅时，从 Stripe 查找并恢复。
+        兜底机制：覆盖 webhook 丢失 + 跳转失败的场景。
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if not stripe.api_key:
+            return None
+
+        user = User.query.get(user_id)
+        if not user or not getattr(user, 'stripe_customer_id', None):
+            return None
+
+        try:
+            # 查询该 customer 的所有活跃订阅
+            stripe_subs = stripe.Subscription.list(
+                customer=user.stripe_customer_id,
+                status='active',
+                limit=1
+            )
+
+            if not stripe_subs.data:
+                return None
+
+            stripe_sub = stripe_subs.data[0]
+            sub_id = stripe_sub['id']
+
+            # 检查本地是否有这个订阅（可能是非 active 状态）
+            subscription = Subscription.query.filter_by(
+                stripe_subscription_id=sub_id
+            ).first()
+
+            # 推断 plan_tier
+            price_id = stripe_sub['items']['data'][0]['price']['id']
+            plan_tier = 'plus'
+            for key, pid in cls.PRICES.items():
+                if pid == price_id:
+                    plan_tier = 'plus' if 'plus' in key else 'pro'
+                    break
+
+            period_start = stripe_sub.get('current_period_start')
+            period_end = stripe_sub.get('current_period_end')
+            cancel_at = stripe_sub.get('cancel_at')
+            cancel_at_end = stripe_sub.get('cancel_at_period_end', False)
+
+            if subscription:
+                # 更新已有记录
+                subscription.status = SubscriptionStatus.ACTIVE.value
+                subscription.plan_tier = plan_tier
+                subscription.cancel_at_period_end = cancel_at_end or (cancel_at is not None)
+                if period_start:
+                    subscription.current_period_start = datetime.fromtimestamp(period_start)
+                if cancel_at:
+                    subscription.current_period_end = datetime.fromtimestamp(cancel_at)
+                elif period_end:
+                    subscription.current_period_end = datetime.fromtimestamp(period_end)
+            else:
+                # 创建新记录
+                subscription = Subscription(
+                    user_id=user_id,
+                    stripe_subscription_id=sub_id,
+                    plan_tier=plan_tier,
+                    status=SubscriptionStatus.ACTIVE.value,
+                    current_period_start=datetime.fromtimestamp(period_start) if period_start else datetime.utcnow(),
+                    current_period_end=datetime.fromtimestamp(cancel_at or period_end) if (cancel_at or period_end) else datetime.utcnow() + timedelta(days=30),
+                    cancel_at_period_end=cancel_at_end or (cancel_at is not None)
+                )
+                db.session.add(subscription)
+
+                # 同时补创建 Transaction + 额度（如果缺失）
+                is_yearly = False
+                if period_start and period_end:
+                    is_yearly = (period_end - period_start) > 60 * 86400
+
+                existing_txn = Transaction.query.filter_by(
+                    stripe_checkout_session_id=None,
+                    user_id=user_id,
+                    description=f"订阅首次 - {plan_tier}"
+                ).first()
+
+                if not existing_txn:
+                    # 查最近的 invoice 获取金额
+                    amount = 0
+                    try:
+                        invoices = stripe.Invoice.list(subscription=sub_id, limit=1)
+                        if invoices.data:
+                            amount = invoices.data[0].get('amount_paid', 0)
+                    except Exception:
+                        pass
+
+                    txn = Transaction(
+                        user_id=user_id,
+                        amount=amount,
+                        currency='usd',
+                        status='succeeded',
+                        description=f"订阅恢复 - {plan_tier}"
+                    )
+                    db.session.add(txn)
+
+                    # 发放额度（集中式幂等检查）
+                    db.session.flush()
+                    cls._ensure_subscription_credits(subscription, plan_tier, is_yearly)
+
+            db.session.commit()
+            logger.info(f"[RecoverStripe] Recovered subscription {sub_id} for user {user_id}, plan={plan_tier}")
+            return subscription
+
+        except Exception as e:
+            logger.warning(f"[RecoverStripe] Failed: {e}")
+            db.session.rollback()
+            return None
+
+    @classmethod
     def get_user_subscription_info(cls, user_id):
-        """获取用户订阅信息"""
+        """获取用户订阅信息（每次从 Stripe 同步最新状态）"""
         subscription = Subscription.query.filter_by(
             user_id=user_id,
             status=SubscriptionStatus.ACTIVE.value
         ).first()
 
+        # 本地无记录 → 从 Stripe 恢复（兜底 webhook 丢失 + 跳转失败）
         if not subscription:
+            subscription = cls._recover_subscription_from_stripe(user_id)
+
+        if not subscription:
+            return {
+                'has_subscription': False,
+                'plan_tier': 'free',
+                'billing_cycle': None,
+                'status': 'free'
+            }
+
+        # 从 Stripe 同步最新状态（防止 webhook 丢失或延迟）
+        cls._sync_subscription_from_stripe(subscription)
+
+        # 同步后状态可能变了（如 canceled），重新检查
+        if subscription.status != SubscriptionStatus.ACTIVE.value:
             return {
                 'has_subscription': False,
                 'plan_tier': 'free',
@@ -655,7 +936,7 @@ class PaymentService:
             'billing_cycle': billing_cycle,
             'status': subscription.status,
             'current_period_end': subscription.current_period_end.isoformat() if subscription.current_period_end else None,
-            'cancel_at_period_end': subscription.cancel_at_period_end if hasattr(subscription, 'cancel_at_period_end') else False
+            'cancel_at_period_end': subscription.cancel_at_period_end or False
         }
 
     # ============ 升级订阅相关方法 ============

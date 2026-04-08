@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import { useToastHelpers } from '@/components/ui/toast';
 
 export default function Login() {
@@ -15,6 +16,7 @@ export default function Login() {
     const [isSignUp, setIsSignUp] = useState(false);
     const [isResetPassword, setIsResetPassword] = useState(false);
     const [resetEmailSent, setResetEmailSent] = useState(false);
+    const [signupEmailSent, setSignupEmailSent] = useState(false);
     const navigate = useNavigate();
     const { t } = useTranslation();
     const toast = useToastHelpers();
@@ -29,18 +31,30 @@ export default function Login() {
                     password,
                 });
                 if (error) throw error;
-                toast.success(t('auth.signupSuccess'), t('auth.checkEmailConfirm'));
+                setSignupEmailSent(true);
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
                     password,
                 });
                 if (error) throw error;
-                // Wait a moment for the auth state listener to propagate
                 navigate('/');
             }
         } catch (error: any) {
-            toast.error(t('auth.authFailed'), error.message);
+            // 友好化 Supabase 错误信息
+            const msg = error.message || '';
+            let title = t('auth.authFailed');
+            let desc = msg;
+            if (msg.toLowerCase().includes('email not confirmed')) {
+                title = i18n.language === 'zh' ? '邮箱未验证' : 'Email Not Verified';
+                desc = i18n.language === 'zh'
+                    ? '请先前往邮箱查收确认邮件并点击验证链接，验证后即可登录。'
+                    : 'Please check your inbox for a confirmation email and click the verification link before logging in.';
+            } else if (msg.toLowerCase().includes('invalid login credentials')) {
+                title = i18n.language === 'zh' ? '登录失败' : 'Login Failed';
+                desc = i18n.language === 'zh' ? '邮箱或密码错误，请重试。' : 'Invalid email or password. Please try again.';
+            }
+            toast.error(title, desc);
         } finally {
             setLoading(false);
         }
@@ -107,6 +121,7 @@ export default function Login() {
         setIsSignUp(false);
         setIsResetPassword(false);
         setResetEmailSent(false);
+        setSignupEmailSent(false);
         setEmail('');
         setPassword('');
     };
@@ -141,14 +156,45 @@ export default function Login() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {resetEmailSent ? (
+                    {signupEmailSent ? (
                         <div className="text-center py-6">
                             <div className="w-16 h-16 bg-[#0D9B97]/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <div className="text-[#0D9B97] text-2xl">✓</div>
+                                <div className="text-[#0D9B97] text-3xl">&#9993;</div>
                             </div>
-                            <h3 className="text-[#FAFAFA] font-semibold mb-2">邮件已发送</h3>
+                            <h3 className="text-[#FAFAFA] font-semibold mb-2">
+                                {i18n.language === 'zh' ? '确认邮件已发送' : 'Confirmation Email Sent'}
+                            </h3>
+                            <p className="text-slate-400 text-sm mb-2">
+                                {i18n.language === 'zh'
+                                    ? '我们已向以下邮箱发送了一封确认邮件：'
+                                    : 'We\'ve sent a confirmation email to:'}
+                            </p>
+                            <p className="text-[#0D9B97] font-medium mb-4">{email}</p>
+                            <p className="text-slate-500 text-xs mb-6">
+                                {i18n.language === 'zh'
+                                    ? '请点击邮件中的验证链接完成注册，验证后即可登录。如未收到邮件，请检查垃圾邮件文件夹。'
+                                    : 'Please click the verification link in the email to complete registration. Check your spam folder if you don\'t see it.'}
+                            </p>
+                            <Button
+                                variant="outline"
+                                onClick={resetForm}
+                                className="w-full bg-transparent border-white/20 text-[#FAFAFA] hover:bg-white/10"
+                            >
+                                {i18n.language === 'zh' ? '返回登录' : 'Back to Login'}
+                            </Button>
+                        </div>
+                    ) : resetEmailSent ? (
+                        <div className="text-center py-6">
+                            <div className="w-16 h-16 bg-[#0D9B97]/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <div className="text-[#0D9B97] text-2xl">&#10003;</div>
+                            </div>
+                            <h3 className="text-[#FAFAFA] font-semibold mb-2">
+                                {i18n.language === 'zh' ? '邮件已发送' : 'Email Sent'}
+                            </h3>
                             <p className="text-slate-400 text-sm mb-6">
-                                重置密码链接已发送至您的邮箱，请查收。链接将在1小时后过期。
+                                {i18n.language === 'zh'
+                                    ? '重置密码链接已发送至您的邮箱，请查收。链接将在1小时后过期。'
+                                    : 'A password reset link has been sent to your email. The link expires in 1 hour.'}
                             </p>
                             <Button
                                 variant="outline"
@@ -279,7 +325,7 @@ export default function Login() {
                     )}
                 </CardContent>
                 <CardFooter className="flex flex-col gap-3 pt-6">
-                    {!resetEmailSent && (
+                    {!resetEmailSent && !signupEmailSent && (
                         <>
                             <Button
                                 className="w-full bg-[#0D9B97] hover:bg-[#0D9B97]/80 text-white font-medium py-2.5 transition-all duration-200"

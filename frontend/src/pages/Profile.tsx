@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useUserData } from '@/components/auth/UserDataProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +54,18 @@ export default function Profile() {
     } = useUserData();
 
     const [manageSubscriptionLoading, setManageSubscriptionLoading] = useState(false);
+    const [portalOpen, setPortalOpen] = useState(false);
+
+    // 从 Stripe Portal 切回时自动刷新订阅状态
+    useEffect(() => {
+        if (!portalOpen) return;
+        const onFocus = () => {
+            refreshCredits();
+            setPortalOpen(false);
+        };
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [portalOpen, refreshCredits]);
 
     const handleManageSubscription = async () => {
         setManageSubscriptionLoading(true);
@@ -63,7 +75,7 @@ export default function Profile() {
             });
 
             if (response.data.portal_url) {
-                // 在新窗口中打开Stripe客户门户
+                setPortalOpen(true);
                 window.open(response.data.portal_url, '_blank');
             }
         } catch (error: any) {
@@ -124,13 +136,45 @@ export default function Profile() {
                             <>
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
                                     <span className="text-slate-500">{t('profile.currentPlan')}</span>
-                                    <Badge
-                                        variant={credits.subscription.has_subscription ? 'default' : 'secondary'}
-                                        className={credits.subscription.has_subscription ? 'bg-[#0D9B97]' : ''}
-                                    >
-                                        {credits.subscription.plan_tier.toUpperCase()}
-                                    </Badge>
+                                    <div className="flex items-center gap-2">
+                                        <Badge
+                                            variant={credits.subscription.has_subscription ? 'default' : 'secondary'}
+                                            className={credits.subscription.has_subscription ? 'bg-[#0D9B97]' : ''}
+                                        >
+                                            {credits.subscription.plan_tier.toUpperCase()}
+                                        </Badge>
+                                        {credits.subscription.cancel_at_period_end && (
+                                            <Badge variant="outline" className="border-amber-500/50 text-amber-400 text-xs">
+                                                {i18n.language === 'zh' ? '已取消' : 'Canceling'}
+                                            </Badge>
+                                        )}
+                                    </div>
                                 </div>
+                                {credits.subscription.has_subscription && credits.subscription.current_period_end && (
+                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
+                                        <span className="text-slate-500">
+                                            {credits.subscription.cancel_at_period_end
+                                                ? (i18n.language === 'zh' ? '到期时间' : 'Expires on')
+                                                : (i18n.language === 'zh' ? '下次续订' : 'Next renewal')}
+                                        </span>
+                                        <span className={`font-medium ${credits.subscription.cancel_at_period_end ? 'text-amber-400' : 'text-slate-300'}`}>
+                                            {new Date(credits.subscription.current_period_end).toLocaleDateString(
+                                                i18n.language === 'zh' ? 'zh-CN' : 'en-US',
+                                                { year: 'numeric', month: 'long', day: 'numeric' }
+                                            )}
+                                        </span>
+                                    </div>
+                                )}
+                                {credits.subscription.cancel_at_period_end && (
+                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                                        <span className="text-xs text-amber-400">
+                                            {i18n.language === 'zh'
+                                                ? '订阅已取消，到期后将自动降级为免费版'
+                                                : 'Subscription canceled. Will downgrade to Free after expiration.'}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between items-center py-2 border-b border-white/5">
                                     <span className="text-slate-500">{t('profile.remainingCredits')}</span>
                                     <span className="font-bold text-2xl text-[#0D9B97] font-mono">{credits.total_credits}</span>
